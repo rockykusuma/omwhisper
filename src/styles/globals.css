@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'DM Sans', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+}
+
+@layer base {
+  html, body {
+    font-family: var(--font-sans);
+    background: #0a0f0d;
+    color: white;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-white/[0.06] bg-white/[0.02];
+  }
+  .btn-primary {
+    @apply px-4 py-2 rounded-xl bg-emerald-500 text-black font-semibold text-sm
+           hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed
+           transition-colors cursor-pointer;
+  }
+  .btn-ghost {
+    @apply px-3 py-1.5 rounded-lg bg-white/[0.06] text-white/50
+           hover:bg-white/[0.1] hover:text-white/80 transition-colors cursor-pointer text-sm;
+  }
+}
