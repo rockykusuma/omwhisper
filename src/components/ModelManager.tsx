@@ -93,7 +93,7 @@ export default function ModelManager({ activeModel, onModelChange }: Props) {
       {/* Header */}
       <div className="mb-6">
         <h2 className="text-xl font-bold text-white/90">Models</h2>
-        <p className="text-white/30 text-xs mt-1 font-mono">{formatBytes(diskUsage)} used on disk</p>
+        <p className="text-white/50 text-xs mt-1 font-mono">{formatBytes(diskUsage)} used on disk</p>
       </div>
 
       {/* Model list */}
@@ -126,7 +126,7 @@ export default function ModelManager({ activeModel, onModelChange }: Props) {
                       {model.name}
                     </span>
                     {model.is_english_only && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.06] text-white/30" style={{ fontFamily: "'DM Mono', monospace" }}>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.06] text-white/50" style={{ fontFamily: "'DM Mono', monospace" }}>
                         EN
                       </span>
                     )}
@@ -139,7 +139,7 @@ export default function ModelManager({ activeModel, onModelChange }: Props) {
                   <p className="text-white/40 text-sm leading-relaxed" style={{ fontFamily: "'DM Sans', sans-serif" }}>
                     {model.description}
                   </p>
-                  <p className="text-white/20 text-xs mt-1" style={{ fontFamily: "'DM Mono', monospace" }}>
+                  <p className="text-white/35 text-xs mt-1" style={{ fontFamily: "'DM Mono', monospace" }}>
                     {model.size_label}
                   </p>
                 </div>
@@ -148,7 +148,7 @@ export default function ModelManager({ activeModel, onModelChange }: Props) {
                 <div className="flex flex-col items-end gap-2 shrink-0">
                   {isLocked ? (
                     <span
-                      className="text-[10px] px-2 py-1 rounded-lg bg-white/[0.04] text-white/25"
+                      className="text-[10px] px-2 py-1 rounded-lg bg-white/[0.04] text-white/40"
                       style={{ fontFamily: "'DM Mono', monospace" }}
                     >
                       🔒 Upgrade to unlock
@@ -167,7 +167,7 @@ export default function ModelManager({ activeModel, onModelChange }: Props) {
                       {!isActive && (
                         <button
                           onClick={() => handleDelete(model.name)}
-                          className="px-3 py-1.5 rounded-lg bg-white/[0.04] text-white/30 text-xs hover:bg-red-500/10 hover:text-red-400 transition-colors cursor-pointer"
+                          className="px-3 py-1.5 rounded-lg bg-white/[0.04] text-white/50 text-xs hover:bg-red-500/10 hover:text-red-400 transition-colors cursor-pointer"
                           style={{ fontFamily: "'DM Sans', sans-serif" }}
                         >
                           Delete

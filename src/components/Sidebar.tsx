@@ -96,7 +96,7 @@ export default function Sidebar({ activeView, onNavigate, appVersion }: Props) {
       <div className="px-3 pb-4 pt-3 border-t border-white/[0.05] space-y-2.5">
         {isFreeTier && remaining !== null && (
           <div>
-            <div className="flex justify-between text-[10px] text-white/25 mb-1 font-mono">
+            <div className="flex justify-between text-[10px] text-white/40 mb-1 font-mono">
               <span>Free today</span>
               <span>{Math.floor(remaining / 60)}m {remaining % 60}s left</span>
             </div>
@@ -111,7 +111,7 @@ export default function Sidebar({ activeView, onNavigate, appVersion }: Props) {
           </div>
         )}
         {appVersion && (
-          <p className="text-white/15 text-[10px] font-mono">v{appVersion}</p>
+          <p className="text-white/50 text-[10px] font-mono">v{appVersion}</p>
         )}
       </div>
     </div>

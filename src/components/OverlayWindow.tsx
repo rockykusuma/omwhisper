@@ -89,7 +89,7 @@ export default function OverlayWindow() {
             {displayText}
           </p>
         ) : (
-          <p className="text-white/25 text-xs" style={{ fontFamily: "'DM Mono', monospace" }}>
+          <p className="text-white/40 text-xs" style={{ fontFamily: "'DM Mono', monospace" }}>
             {isRecording ? "Listening…" : "Done"}
           </p>
         )}
@@ -98,7 +98,7 @@ export default function OverlayWindow() {
       {/* Stop button */}
       <button
         onClick={handleStop}
-        className="shrink-0 w-6 h-6 rounded-full bg-white/[0.06] hover:bg-red-500/20 text-white/30 hover:text-red-400 transition-all duration-200 cursor-pointer flex items-center justify-center text-xs"
+        className="shrink-0 w-6 h-6 rounded-full bg-white/[0.06] hover:bg-red-500/20 text-white/50 hover:text-red-400 transition-all duration-200 cursor-pointer flex items-center justify-center text-xs"
         title="Stop recording"
       >
         ■
