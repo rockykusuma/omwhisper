@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
@@ -30,13 +31,26 @@ impl WhisperEngine {
         })
     }
 
-    pub fn transcribe(&self, audio: &[f32]) -> Result<Vec<Segment>> {
+    pub fn transcribe(
+        &self,
+        audio: &[f32],
+        language: &str,
+        initial_prompt: Option<&str>,
+        word_replacements: &HashMap<String, String>,
+    ) -> Result<Vec<Segment>> {
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-        params.set_language(Some("en"));
+        let lang = if language == "auto" { None } else { Some(language) };
+        params.set_language(lang);
         params.set_print_special(false);
         params.set_print_progress(false);
         params.set_print_realtime(false);
         params.set_print_timestamps(false);
+
+        if let Some(prompt) = initial_prompt {
+            if !prompt.is_empty() {
+                params.set_initial_prompt(prompt);
+            }
+        }
 
         let mut state = self.ctx.create_state().context("failed to create whisper state")?;
         state.full(params, audio).context("whisper inference failed")?;
@@ -49,8 +63,9 @@ impl WhisperEngine {
             let start_ms = state.full_get_segment_t0(i).context("failed to get t0")? * 10;
             let end_ms = state.full_get_segment_t1(i).context("failed to get t1")? * 10;
 
+            let text = apply_replacements(text.trim(), word_replacements);
             segments.push(Segment {
-                text: text.trim().to_string(),
+                text,
                 start_ms,
                 end_ms,
                 is_final: true,
@@ -59,6 +74,31 @@ impl WhisperEngine {
 
         Ok(segments)
     }
+}
+
+fn apply_replacements(text: &str, replacements: &HashMap<String, String>) -> String {
+    if replacements.is_empty() {
+        return text.to_string();
+    }
+    let mut result = text.to_string();
+    for (from, to) in replacements {
+        // Case-insensitive whole-word replacement
+        let pattern = format!("(?i)\\b{}\\b", regex_escape(from));
+        if let Ok(re) = regex::Regex::new(&pattern) {
+            result = re.replace_all(&result, to.as_str()).to_string();
+        }
+    }
+    result
+}
+
+fn regex_escape(s: &str) -> String {
+    s.chars().fold(String::new(), |mut acc, c| {
+        if "\\^$.|?*+()[]{}".contains(c) {
+            acc.push('\\');
+        }
+        acc.push(c);
+        acc
+    })
 }
 
 /// Read a WAV file and return 16kHz mono f32 samples.

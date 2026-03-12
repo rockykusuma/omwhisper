@@ -12,6 +12,8 @@ pub struct TranscriptionState {
     pub capture: Option<AudioCapture>,
     /// Signals the usage-tracking timer thread to stop.
     pub usage_running: Arc<AtomicBool>,
+    /// True when the current recording was started via the Smart Dictation hotkey.
+    pub is_smart_dictation: bool,
 }
 
 impl TranscriptionState {
@@ -19,6 +21,7 @@ impl TranscriptionState {
         TranscriptionState {
             capture: None,
             usage_running: Arc::new(AtomicBool::new(false)),
+            is_smart_dictation: false,
         }
     }
 }
@@ -48,11 +51,16 @@ fn resolve_model_path(model_path: &str) -> PathBuf {
 
 #[tauri::command]
 pub async fn transcribe_file(path: String, model_path: String) -> Result<Vec<Segment>, String> {
+    let settings = crate::settings::load_settings().await;
+    let initial_prompt = build_initial_prompt(&settings.custom_vocabulary);
+    let replacements = settings.word_replacements.clone();
+
     tokio::task::spawn_blocking(move || {
         let resolved = resolve_model_path(&model_path);
         let engine = WhisperEngine::new(&resolved).map_err(|e| e.to_string())?;
         let audio = load_wav_as_f32(Path::new(&path)).map_err(|e| e.to_string())?;
-        engine.transcribe(&audio).map_err(|e| e.to_string())
+        let prompt = if initial_prompt.is_empty() { None } else { Some(initial_prompt.as_str()) };
+        engine.transcribe(&audio, "en", prompt, &replacements).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -99,6 +107,17 @@ pub async fn start_transcription(
     };
 
     let model_path = resolve_model_path(&model);
+    let settings = crate::settings::load_settings().await;
+    let initial_prompt = build_initial_prompt(&settings.custom_vocabulary);
+    let word_replacements = settings.word_replacements.clone();
+    let language = settings.language.clone();
+    let sound_enabled = settings.sound_enabled;
+    let sound_volume = settings.sound_volume;
+
+    // Play start chime
+    if sound_enabled {
+        crate::sounds::play(crate::sounds::Sound::Start, sound_volume);
+    }
 
     // Spawn a thread to forward RMS level events to the frontend.
     let app_for_level = app.clone();
@@ -148,9 +167,11 @@ pub async fn start_transcription(
             }
         };
 
+        let prompt_ref: Option<&str> = if initial_prompt.is_empty() { None } else { Some(&initial_prompt) };
+
         for chunk in speech_rx {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                engine.transcribe(&chunk)
+                engine.transcribe(&chunk, &language, prompt_ref, &word_replacements)
             }));
             match result {
                 Ok(Ok(segments)) => {
@@ -172,10 +193,17 @@ pub async fn start_transcription(
 
 #[tauri::command]
 pub async fn stop_transcription(state: tauri::State<'_, SharedState>) -> Result<(), String> {
-    let mut s = state.lock().unwrap();
-    s.usage_running.store(false, Ordering::SeqCst);
-    if let Some(capture) = s.capture.take() {
-        capture.stop();
+    {
+        let mut s = state.lock().unwrap();
+        s.usage_running.store(false, Ordering::SeqCst);
+        if let Some(capture) = s.capture.take() {
+            capture.stop();
+        }
+    } // MutexGuard dropped here before the await below
+
+    let settings = crate::settings::load_settings().await;
+    if settings.sound_enabled {
+        crate::sounds::play(crate::sounds::Sound::Stop, settings.sound_volume);
     }
     Ok(())
 }
@@ -279,31 +307,42 @@ pub async fn capture_focused_app() -> Result<Option<String>, String> {
 
 #[tauri::command]
 pub async fn paste_transcription(text: String) -> Result<(), String> {
-    // Always copy to clipboard
-    paste::copy_to_clipboard(&text).map_err(|e| e.to_string())?;
-
-    // Check auto_paste setting
     let settings = crate::settings::load_settings().await;
-    if !settings.auto_paste {
-        return Ok(());
-    }
 
-    // Get the previously focused app
-    let app_name = {
-        let guard = previous_app().lock().unwrap();
-        guard.clone()
+    // Save previous clipboard before overwriting it
+    let previous_clipboard = if settings.restore_clipboard {
+        paste::read_clipboard()
+    } else {
+        None
     };
 
-    if let Some(name) = app_name {
-        // Don't paste back into OmWhisper itself
-        if name.to_lowercase().contains("omwhisper") {
-            return Ok(());
+    // Copy transcription to clipboard
+    paste::copy_to_clipboard(&text).map_err(|e| e.to_string())?;
+
+    // Paste into previously focused app if auto_paste is on
+    if settings.auto_paste {
+        let app_name = {
+            let guard = previous_app().lock().unwrap();
+            guard.clone()
+        };
+        if let Some(name) = app_name {
+            if !name.to_lowercase().contains("omwhisper") {
+                tokio::task::spawn_blocking(move || {
+                    paste::paste_to_app(&name).map_err(|e| e.to_string())
+                })
+                .await
+                .map_err(|e| e.to_string())??;
+            }
         }
-        tokio::task::spawn_blocking(move || {
-            paste::paste_to_app(&name).map_err(|e| e.to_string())
-        })
-        .await
-        .map_err(|e| e.to_string())??;
+    }
+
+    // Restore previous clipboard after a short delay
+    if let Some(prev) = previous_clipboard {
+        let delay = settings.clipboard_restore_delay_ms;
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+            let _ = paste::copy_to_clipboard(&prev);
+        });
     }
 
     Ok(())
@@ -575,9 +614,23 @@ pub async fn validate_license_bg() -> String {
 // ─── Transcription History ───────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn save_transcription(text: String, duration_seconds: f64, model_used: String) -> Result<i64, String> {
-    history::add_transcription(&text, duration_seconds, &model_used)
-        .map_err(|e| e.to_string())
+pub fn save_transcription(
+    text: String,
+    duration_seconds: f64,
+    model_used: String,
+    source: Option<String>,
+    raw_text: Option<String>,
+    polish_style: Option<String>,
+) -> Result<i64, String> {
+    history::add_transcription(
+        &text,
+        duration_seconds,
+        &model_used,
+        source.as_deref().unwrap_or("raw"),
+        raw_text.as_deref(),
+        polish_style.as_deref(),
+    )
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -603,4 +656,156 @@ pub fn cmd_export_history(format: String) -> Result<String, String> {
 #[tauri::command]
 pub fn cmd_clear_history() -> Result<(), String> {
     history::clear_history().map_err(|e| e.to_string())
+}
+
+// ─── Vocabulary ───────────────────────────────────────────────────────────────
+
+/// Build an initial_prompt string from a list of custom vocabulary words.
+/// Whisper uses this as soft guidance to bias recognition toward these spellings.
+pub fn build_initial_prompt(vocab: &[String]) -> String {
+    if vocab.is_empty() {
+        return String::new();
+    }
+    vocab.join(", ")
+}
+
+#[tauri::command]
+pub async fn get_vocabulary() -> Result<serde_json::Value, String> {
+    let settings = crate::settings::load_settings().await;
+    Ok(serde_json::json!({
+        "words": settings.custom_vocabulary,
+        "replacements": settings.word_replacements,
+    }))
+}
+
+#[tauri::command]
+pub async fn add_vocabulary_word(word: String) -> Result<(), String> {
+    let mut settings = crate::settings::load_settings().await;
+    let word = word.trim().to_string();
+    if !word.is_empty() && !settings.custom_vocabulary.contains(&word) {
+        settings.custom_vocabulary.push(word);
+        crate::settings::save_settings(&settings).await.map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn remove_vocabulary_word(word: String) -> Result<(), String> {
+    let mut settings = crate::settings::load_settings().await;
+    settings.custom_vocabulary.retain(|w| w != &word);
+    crate::settings::save_settings(&settings).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn add_word_replacement(from: String, to: String) -> Result<(), String> {
+    let mut settings = crate::settings::load_settings().await;
+    let from = from.trim().to_string();
+    let to = to.trim().to_string();
+    if !from.is_empty() {
+        settings.word_replacements.insert(from, to);
+        crate::settings::save_settings(&settings).await.map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn remove_word_replacement(from: String) -> Result<(), String> {
+    let mut settings = crate::settings::load_settings().await;
+    settings.word_replacements.remove(&from);
+    crate::settings::save_settings(&settings).await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// ─── Usage Stats ─────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_usage_stats() -> Result<crate::history::StatsSummary, String> {
+    crate::history::get_stats_summary().map_err(|e| e.to_string())
+}
+
+// ─── Storage Info ─────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_storage_info() -> Result<crate::history::StorageInfo, String> {
+    crate::history::get_storage_info().map_err(|e| e.to_string())
+}
+
+// ─── AI / Smart Dictation ─────────────────────────────────────────────────────
+
+#[derive(Clone, serde::Serialize)]
+pub struct OllamaStatus {
+    pub running: bool,
+    pub models: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn check_ollama_status() -> OllamaStatus {
+    let settings = crate::settings::load_settings().await;
+    let running = crate::ai::ollama::check_status(&settings.ai_ollama_url).await;
+    let models = if running {
+        crate::ai::ollama::list_models(&settings.ai_ollama_url).await
+    } else {
+        vec![]
+    };
+    OllamaStatus { running, models }
+}
+
+#[tauri::command]
+pub async fn get_ollama_models() -> Vec<String> {
+    let settings = crate::settings::load_settings().await;
+    crate::ai::ollama::list_models(&settings.ai_ollama_url).await
+}
+
+#[tauri::command]
+pub async fn polish_text_cmd(text: String, style: String) -> Result<String, String> {
+    let settings = crate::settings::load_settings().await;
+    let system_prompt = crate::styles::system_prompt_for(&style, &settings.translate_target_language);
+    let request = crate::ai::PolishRequest { text, system_prompt };
+    crate::ai::polish(request, &settings)
+        .await
+        .map(|r| r.text)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn test_ai_connection(backend: String) -> Result<String, String> {
+    let settings = crate::settings::load_settings().await;
+    let timeout = settings.ai_timeout_seconds;
+    match backend.as_str() {
+        "ollama" => {
+            let running = crate::ai::ollama::check_status(&settings.ai_ollama_url).await;
+            if running { Ok("Ollama is running".to_string()) }
+            else { Err("Ollama is not running. Make sure it is installed and started.".to_string()) }
+        }
+        "cloud" => {
+            let api_key = crate::ai::load_cloud_api_key()
+                .ok_or("No API key configured. Add your API key first.".to_string())?;
+            crate::ai::cloud::test_connection(
+                &settings.ai_cloud_model,
+                &settings.ai_cloud_api_url,
+                &api_key,
+                timeout,
+            )
+            .await
+            .map(|_| "Connection successful".to_string())
+            .map_err(|e| e.to_string())
+        }
+        _ => Err("Unknown backend".to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn save_cloud_api_key(key: String) -> Result<(), String> {
+    crate::ai::save_cloud_api_key(&key).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_cloud_api_key_status() -> bool {
+    crate::ai::load_cloud_api_key().is_some()
+}
+
+#[tauri::command]
+pub fn delete_cloud_api_key_cmd() -> Result<(), String> {
+    crate::ai::delete_cloud_api_key().map_err(|e| e.to_string())
 }

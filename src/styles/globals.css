@@ -5,9 +5,16 @@
   --font-mono: 'DM Mono', monospace;
 }
 
+/* Ensure Devanagari glyphs (ॐ U+0950) render with macOS system fonts */
+@font-face {
+  font-family: 'OmGlyph';
+  src: local('Devanagari Sangam MN'), local('Kohinoor Devanagari'), local('Devanagari MT');
+  unicode-range: U+0950;
+}
+
 @layer base {
   html, body {
-    font-family: var(--font-sans);
+    font-family: 'OmGlyph', var(--font-sans);
     background: #0a0f0d;
     color: white;
     -webkit-font-smoothing: antialiased;

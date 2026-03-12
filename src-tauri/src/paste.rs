@@ -1,5 +1,10 @@
 use anyhow::Result;
 
+/// Read the current clipboard text (returns None if empty or non-text).
+pub fn read_clipboard() -> Option<String> {
+    arboard::Clipboard::new().ok()?.get_text().ok().filter(|s| !s.is_empty())
+}
+
 /// Copy text to the system clipboard.
 pub fn copy_to_clipboard(text: &str) -> Result<()> {
     let mut clipboard = arboard::Clipboard::new()?;

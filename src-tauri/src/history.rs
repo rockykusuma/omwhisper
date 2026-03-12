@@ -13,6 +13,12 @@ pub struct TranscriptionEntry {
     pub model_used: String,
     pub created_at: String,
     pub word_count: i64,
+    /// "raw" | "smart_dictation"
+    pub source: String,
+    /// Original transcription before AI polish (only set for smart_dictation entries)
+    pub raw_text: Option<String>,
+    /// Which polish style was applied (e.g. "professional")
+    pub polish_style: Option<String>,
 }
 
 fn db_path() -> PathBuf {
@@ -43,43 +49,64 @@ fn open_db() -> Result<Connection> {
         );",
     )
     .context("failed to create tables")?;
+    // Schema migrations — safe to run every time (ADD COLUMN is idempotent via IF NOT EXISTS workaround)
+    for migration in [
+        "ALTER TABLE transcriptions ADD COLUMN source TEXT NOT NULL DEFAULT 'raw'",
+        "ALTER TABLE transcriptions ADD COLUMN raw_text TEXT",
+        "ALTER TABLE transcriptions ADD COLUMN polish_style TEXT",
+    ] {
+        let _ = conn.execute_batch(migration); // ignore error if column already exists
+    }
     Ok(conn)
 }
 
 /// Save a transcription to history. Returns the new entry id.
-pub fn add_transcription(text: &str, duration_seconds: f64, model_used: &str) -> Result<i64> {
+pub fn add_transcription(
+    text: &str,
+    duration_seconds: f64,
+    model_used: &str,
+    source: &str,
+    raw_text: Option<&str>,
+    polish_style: Option<&str>,
+) -> Result<i64> {
     let conn = open_db()?;
     let word_count = text.split_whitespace().count() as i64;
     let created_at = chrono::Local::now().to_rfc3339();
     conn.execute(
-        "INSERT INTO transcriptions (text, duration_seconds, model_used, created_at, word_count)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![text, duration_seconds, model_used, created_at, word_count],
+        "INSERT INTO transcriptions
+            (text, duration_seconds, model_used, created_at, word_count, source, raw_text, polish_style)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![text, duration_seconds, model_used, created_at, word_count, source, raw_text, polish_style],
     )
     .context("failed to insert transcription")?;
     Ok(conn.last_insert_rowid())
+}
+
+fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<TranscriptionEntry> {
+    Ok(TranscriptionEntry {
+        id: row.get(0)?,
+        text: row.get(1)?,
+        duration_seconds: row.get(2)?,
+        model_used: row.get(3)?,
+        created_at: row.get(4)?,
+        word_count: row.get(5)?,
+        source: row.get::<_, Option<String>>(6)?.unwrap_or_else(|| "raw".to_string()),
+        raw_text: row.get(7)?,
+        polish_style: row.get(8)?,
+    })
 }
 
 /// Paginated history, newest first.
 pub fn get_history(limit: i64, offset: i64) -> Result<Vec<TranscriptionEntry>> {
     let conn = open_db()?;
     let mut stmt = conn.prepare(
-        "SELECT id, text, duration_seconds, model_used, created_at, word_count
+        "SELECT id, text, duration_seconds, model_used, created_at, word_count, source, raw_text, polish_style
          FROM transcriptions
          ORDER BY created_at DESC
          LIMIT ?1 OFFSET ?2",
     )?;
     let entries = stmt
-        .query_map(params![limit, offset], |row| {
-            Ok(TranscriptionEntry {
-                id: row.get(0)?,
-                text: row.get(1)?,
-                duration_seconds: row.get(2)?,
-                model_used: row.get(3)?,
-                created_at: row.get(4)?,
-                word_count: row.get(5)?,
-            })
-        })?
+        .query_map(params![limit, offset], row_to_entry)?
         .filter_map(|r| r.ok())
         .collect();
     Ok(entries)
@@ -90,23 +117,14 @@ pub fn search_history(query: &str) -> Result<Vec<TranscriptionEntry>> {
     let conn = open_db()?;
     let pattern = format!("%{}%", query);
     let mut stmt = conn.prepare(
-        "SELECT id, text, duration_seconds, model_used, created_at, word_count
+        "SELECT id, text, duration_seconds, model_used, created_at, word_count, source, raw_text, polish_style
          FROM transcriptions
          WHERE text LIKE ?1
          ORDER BY created_at DESC
          LIMIT 100",
     )?;
     let entries = stmt
-        .query_map(params![pattern], |row| {
-            Ok(TranscriptionEntry {
-                id: row.get(0)?,
-                text: row.get(1)?,
-                duration_seconds: row.get(2)?,
-                model_used: row.get(3)?,
-                created_at: row.get(4)?,
-                word_count: row.get(5)?,
-            })
-        })?
+        .query_map(params![pattern], row_to_entry)?
         .filter_map(|r| r.ok())
         .collect();
     Ok(entries)
@@ -128,21 +146,12 @@ pub fn clear_history() -> Result<()> {
 pub fn export_history(format: &str) -> Result<String> {
     let conn = open_db()?;
     let mut stmt = conn.prepare(
-        "SELECT id, text, duration_seconds, model_used, created_at, word_count
+        "SELECT id, text, duration_seconds, model_used, created_at, word_count, source, raw_text, polish_style
          FROM transcriptions
          ORDER BY created_at DESC",
     )?;
     let entries: Vec<TranscriptionEntry> = stmt
-        .query_map([], |row| {
-            Ok(TranscriptionEntry {
-                id: row.get(0)?,
-                text: row.get(1)?,
-                duration_seconds: row.get(2)?,
-                model_used: row.get(3)?,
-                created_at: row.get(4)?,
-                word_count: row.get(5)?,
-            })
-        })?
+        .query_map([], row_to_entry)?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -170,6 +179,102 @@ pub fn export_history(format: &str) -> Result<String> {
             Ok(out)
         }
     }
+}
+
+// ─── Storage & Cleanup ────────────────────────────────────────────────────────
+
+#[derive(Debug, serde::Serialize)]
+pub struct StorageInfo {
+    pub db_size_bytes: u64,
+    pub record_count: i64,
+}
+
+/// Return the DB file size and total transcription count.
+pub fn get_storage_info() -> Result<StorageInfo> {
+    let path = db_path();
+    let db_size_bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+    let conn = open_db()?;
+    let record_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM transcriptions", [], |row| row.get(0))
+        .unwrap_or(0);
+    Ok(StorageInfo { db_size_bytes, record_count })
+}
+
+/// Delete transcriptions older than `days` days. Returns the number of deleted rows.
+pub fn cleanup_old_transcriptions(days: u32) -> Result<usize> {
+    let conn = open_db()?;
+    let cutoff = (chrono::Local::now() - chrono::Duration::days(days as i64)).to_rfc3339();
+    let deleted = conn.execute(
+        "DELETE FROM transcriptions WHERE created_at < ?1",
+        params![cutoff],
+    )?;
+    Ok(deleted)
+}
+
+// ─── Usage Stats ─────────────────────────────────────────────────────────────
+
+#[derive(Debug, serde::Serialize)]
+pub struct StatsSummary {
+    pub total_recordings: i64,
+    pub total_duration_seconds: f64,
+    pub total_words: i64,
+    pub recordings_today: i64,
+    pub streak_days: i64,
+}
+
+pub fn get_stats_summary() -> Result<StatsSummary> {
+    let conn = open_db()?;
+    let today = today_date();
+
+    let (total_recordings, total_duration_seconds, total_words): (i64, f64, i64) = conn
+        .query_row(
+            "SELECT COUNT(*), COALESCE(SUM(duration_seconds), 0), COALESCE(SUM(word_count), 0)
+             FROM transcriptions",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .unwrap_or((0, 0.0, 0));
+
+    let recordings_today: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM transcriptions WHERE DATE(created_at) = ?1",
+            params![today],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    // Streak: count consecutive days (including today) with at least one recording
+    let streak_days = {
+        let mut stmt = conn.prepare(
+            "SELECT DISTINCT DATE(created_at) as day FROM transcriptions ORDER BY day DESC",
+        )?;
+        let days: Vec<String> = stmt
+            .query_map([], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let mut streak = 0i64;
+        let mut expected = chrono::Local::now().date_naive();
+        for day_str in &days {
+            if let Ok(day) = chrono::NaiveDate::parse_from_str(day_str, "%Y-%m-%d") {
+                if day == expected {
+                    streak += 1;
+                    expected = expected.pred_opt().unwrap_or(expected);
+                } else {
+                    break;
+                }
+            }
+        }
+        streak
+    };
+
+    Ok(StatsSummary {
+        total_recordings,
+        total_duration_seconds,
+        total_words,
+        recordings_today,
+        streak_days,
+    })
 }
 
 // ─── Daily Usage Tracking ─────────────────────────────────────────────────────

@@ -6,6 +6,9 @@ mod paste;
 mod history;
 mod license;
 mod updater;
+mod sounds;
+mod ai;
+mod styles;
 
 use commands::{
     activate_license, capture_focused_app, check_accessibility_permission, cmd_clear_history,
@@ -15,7 +18,12 @@ use commands::{
     get_models_disk_usage, get_settings, get_usage_today, hide_overlay, is_first_launch,
     is_running_from_dmg, open_accessibility_settings, paste_transcription, request_microphone_permission,
     save_transcription, search_history, show_overlay, start_transcription, stop_transcription,
-    transcribe_file, update_settings, validate_license_bg, SharedState, TranscriptionState,
+    transcribe_file, update_settings, validate_license_bg,
+    get_vocabulary, add_vocabulary_word, remove_vocabulary_word, add_word_replacement, remove_word_replacement,
+    get_usage_stats, get_storage_info,
+    check_ollama_status, get_ollama_models, polish_text_cmd, test_ai_connection,
+    save_cloud_api_key, get_cloud_api_key_status, delete_cloud_api_key_cmd,
+    SharedState, TranscriptionState,
 };
 use std::sync::{Arc, Mutex};
 use tauri::{
@@ -87,6 +95,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(shared_state.clone())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(move |app| {
@@ -96,10 +105,23 @@ pub fn run() {
             let quit_item = MenuItem::with_id(app, "quit", "Quit OmWhisper", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_item, &toggle_item, &quit_item])?;
 
+            let tray_icon = {
+                const TRAY_PNG: &[u8] = include_bytes!("../icons/tray-icon.png");
+                let img = image::load_from_memory_with_format(TRAY_PNG, image::ImageFormat::Png)
+                    .map(|i| i.into_rgba8())
+                    .ok();
+                if let Some(rgba) = img {
+                    let (w, h) = (rgba.width(), rgba.height());
+                    tauri::image::Image::new_owned(rgba.into_raw(), w, h)
+                } else {
+                    app.default_window_icon().unwrap().clone()
+                }
+            };
+
             let _tray = TrayIconBuilder::new()
                 .menu(&menu)
                 .tooltip("OmWhisper — Click to toggle recording")
-                .icon(app.default_window_icon().unwrap().clone())
+                .icon(tray_icon)
                 .icon_as_template(true)
                 .on_menu_event({
                     let state = shared_state.clone();
@@ -153,22 +175,101 @@ pub fn run() {
             let shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyV);
             let state_for_shortcut = shared_state.clone();
             app.global_shortcut().on_shortcut(shortcut, move |app, _shortcut, event| {
-                if event.state == ShortcutState::Pressed {
-                    let is_recording = state_for_shortcut.lock().unwrap().capture.is_some();
-                    if is_recording {
-                        let mut s = state_for_shortcut.lock().unwrap();
-                        s.usage_running.store(false, std::sync::atomic::Ordering::SeqCst);
-                        if let Some(capture) = s.capture.take() {
-                            capture.stop();
+                let recording_mode = crate::settings::load_settings_sync().recording_mode;
+                let is_push_to_talk = recording_mode == "push_to_talk";
+
+                match event.state {
+                    ShortcutState::Pressed => {
+                        let is_recording = state_for_shortcut.lock().unwrap().capture.is_some();
+                        if is_push_to_talk {
+                            // Push-to-talk: key-down always starts (if not already recording)
+                            if !is_recording {
+                                let _ = app.emit("hotkey-toggle-recording", ());
+                                if let Some(win) = app.get_webview_window("main") {
+                                    let _ = win.show();
+                                    let _ = win.set_focus();
+                                }
+                            }
+                        } else {
+                            // Toggle mode: press toggles
+                            if is_recording {
+                                let mut s = state_for_shortcut.lock().unwrap();
+                                s.usage_running.store(false, std::sync::atomic::Ordering::SeqCst);
+                                if let Some(capture) = s.capture.take() {
+                                    capture.stop();
+                                }
+                                let _ = app.emit("recording-state", false);
+                            } else {
+                                let _ = app.emit("hotkey-toggle-recording", ());
+                            }
+                            if let Some(win) = app.get_webview_window("main") {
+                                let _ = win.show();
+                                let _ = win.set_focus();
+                            }
                         }
-                        let _ = app.emit("recording-state", false);
-                    } else {
-                        let _ = app.emit("hotkey-toggle-recording", ());
                     }
-                    // Show window when hotkey is pressed
-                    if let Some(win) = app.get_webview_window("main") {
-                        let _ = win.show();
-                        let _ = win.set_focus();
+                    ShortcutState::Released => {
+                        if is_push_to_talk {
+                            // Push-to-talk: key-up stops recording
+                            let is_recording = state_for_shortcut.lock().unwrap().capture.is_some();
+                            if is_recording {
+                                let mut s = state_for_shortcut.lock().unwrap();
+                                s.usage_running.store(false, std::sync::atomic::Ordering::SeqCst);
+                                if let Some(capture) = s.capture.take() {
+                                    capture.stop();
+                                }
+                                let _ = app.emit("recording-state", false);
+                            }
+                        }
+                    }
+                }
+            })?;
+
+            // --- Global Shortcut: Cmd+Shift+B (Smart Dictation) ---
+            let shortcut_sd = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyB);
+            let state_for_sd = shared_state.clone();
+            app.global_shortcut().on_shortcut(shortcut_sd, move |app, _shortcut, event| {
+                let settings = crate::settings::load_settings_sync();
+                let is_push_to_talk = settings.recording_mode == "push_to_talk";
+
+                match event.state {
+                    ShortcutState::Pressed => {
+                        let is_recording = state_for_sd.lock().unwrap().capture.is_some();
+                        if is_push_to_talk {
+                            if !is_recording {
+                                state_for_sd.lock().unwrap().is_smart_dictation = true;
+                                let _ = app.emit("hotkey-smart-dictation", ());
+                            }
+                        } else {
+                            if is_recording {
+                                let mut s = state_for_sd.lock().unwrap();
+                                s.usage_running.store(false, std::sync::atomic::Ordering::SeqCst);
+                                if let Some(capture) = s.capture.take() {
+                                    capture.stop();
+                                }
+                                let _ = app.emit("recording-state", false);
+                            } else {
+                                state_for_sd.lock().unwrap().is_smart_dictation = true;
+                                let _ = app.emit("hotkey-smart-dictation", ());
+                            }
+                        }
+                        if let Some(win) = app.get_webview_window("main") {
+                            let _ = win.show();
+                            let _ = win.set_focus();
+                        }
+                    }
+                    ShortcutState::Released => {
+                        if is_push_to_talk {
+                            let is_recording = state_for_sd.lock().unwrap().capture.is_some();
+                            if is_recording {
+                                let mut s = state_for_sd.lock().unwrap();
+                                s.usage_running.store(false, std::sync::atomic::Ordering::SeqCst);
+                                if let Some(capture) = s.capture.take() {
+                                    capture.stop();
+                                }
+                                let _ = app.emit("recording-state", false);
+                            }
+                        }
                     }
                 }
             })?;
@@ -202,6 +303,29 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 if let Some(info) = crate::updater::check_for_update().await {
                     let _ = app_handle_upd.emit("update-available", info);
+                }
+            });
+
+            // Play launch Om sound if enabled
+            tauri::async_runtime::spawn(async move {
+                let settings = crate::settings::load_settings().await;
+                if settings.launch_sound_enabled {
+                    // Small delay so app window renders first
+                    tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+                    crate::sounds::play(crate::sounds::Sound::Launch, settings.sound_volume);
+                }
+            });
+
+            // Auto-delete old history on launch if configured
+            tauri::async_runtime::spawn(async move {
+                let settings = crate::settings::load_settings().await;
+                if let Some(days) = settings.auto_delete_after_days {
+                    if days > 0 {
+                        let _ = tokio::task::spawn_blocking(move || {
+                            crate::history::cleanup_old_transcriptions(days)
+                        })
+                        .await;
+                    }
                 }
             });
 
@@ -243,6 +367,23 @@ pub fn run() {
             get_app_version,
             get_debug_info,
             is_running_from_dmg,
+            get_vocabulary,
+            add_vocabulary_word,
+            remove_vocabulary_word,
+            add_word_replacement,
+            remove_word_replacement,
+            get_usage_stats,
+            get_storage_info,
+            check_ollama_status,
+            get_ollama_models,
+            polish_text_cmd,
+            test_ai_connection,
+            save_cloud_api_key,
+            get_cloud_api_key_status,
+            delete_cloud_api_key_cmd,
+            styles::get_polish_styles,
+            styles::add_custom_style,
+            styles::remove_custom_style,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

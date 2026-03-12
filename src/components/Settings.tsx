@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
-  Sliders, Mic, FileText, CreditCard, Info
+  Sliders, Mic, FileText, CreditCard, Info, Sparkles
 } from "lucide-react";
 
 interface Settings {
@@ -16,14 +16,35 @@ interface Settings {
   vad_sensitivity: number;
   onboarding_complete: boolean;
   log_level: string;
+  sound_enabled: boolean;
+  sound_volume: number;
+  launch_sound_enabled: boolean;
+  restore_clipboard: boolean;
+  clipboard_restore_delay_ms: number;
+  recording_mode: string;
+  auto_delete_after_days: number | null;
+  ai_backend: string;
+  ai_ollama_model: string;
+  ai_ollama_url: string;
+  ai_cloud_model: string;
+  ai_cloud_api_url: string;
+  ai_timeout_seconds: number;
+  active_polish_style: string;
+  translate_target_language: string;
+  smart_dictation_hotkey: string;
 }
 
-type Tab = "general" | "audio" | "transcription" | "license" | "about";
+interface BuiltInStyle { id: string; name: string; description: string; }
+interface CustomStyle { name: string; system_prompt: string; }
+interface OllamaStatus { running: boolean; models: string[]; }
+
+type Tab = "general" | "audio" | "transcription" | "ai" | "license" | "about";
 
 const TABS: { id: Tab; icon: React.ElementType; label: string }[] = [
   { id: "general",       icon: Sliders,    label: "General"       },
   { id: "audio",         icon: Mic,        label: "Audio"         },
   { id: "transcription", icon: FileText,   label: "Transcription" },
+  { id: "ai",            icon: Sparkles,   label: "AI"            },
   { id: "license",       icon: CreditCard, label: "License"       },
   { id: "about",         icon: Info,       label: "About"         },
 ];
@@ -66,21 +87,88 @@ function SettingRow({
   );
 }
 
+interface StorageInfo {
+  db_size_bytes: number;
+  record_count: number;
+}
+
 export default function SettingsPanel() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [devices, setDevices] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("general");
+  const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
+  const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
+  const [builtInStyles, setBuiltInStyles] = useState<BuiltInStyle[]>([]);
+  const [customStyles, setCustomStyles] = useState<CustomStyle[]>([]);
+  const [apiKeySet, setApiKeySet] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [newStyleName, setNewStyleName] = useState("");
+  const [newStylePrompt, setNewStylePrompt] = useState("");
+  const [testResult, setTestResult] = useState<string | null>(null);
+  const [testLoading, setTestLoading] = useState(false);
 
   useEffect(() => {
     Promise.all([
       invoke<Settings>("get_settings"),
       invoke<string[]>("get_audio_devices"),
-    ]).then(([s, d]) => {
+      invoke<StorageInfo>("get_storage_info"),
+      invoke<boolean>("get_cloud_api_key_status"),
+      invoke<{ built_in: BuiltInStyle[]; custom: CustomStyle[] }>("get_polish_styles"),
+    ]).then(([s, d, info, keySet, styles]) => {
       setSettings(s);
       setDevices(d);
+      setStorageInfo(info);
+      setApiKeySet(keySet);
+      setBuiltInStyles(styles.built_in);
+      setCustomStyles(styles.custom);
     });
   }, []);
+
+  async function refreshOllamaStatus() {
+    const status = await invoke<OllamaStatus>("check_ollama_status");
+    setOllamaStatus(status);
+  }
+
+  async function handleSaveApiKey() {
+    if (!apiKeyInput.trim()) return;
+    await invoke("save_cloud_api_key", { key: apiKeyInput.trim() });
+    setApiKeySet(true);
+    setApiKeyInput("");
+  }
+
+  async function handleDeleteApiKey() {
+    await invoke("delete_cloud_api_key_cmd").catch(() => {});
+    setApiKeySet(false);
+  }
+
+  async function handleTestConnection(backend: string) {
+    setTestLoading(true);
+    setTestResult(null);
+    try {
+      const result = await invoke<string>("test_ai_connection", { backend });
+      setTestResult("✓ " + result);
+    } catch (e) {
+      setTestResult("✗ " + String(e));
+    } finally {
+      setTestLoading(false);
+    }
+  }
+
+  async function handleAddCustomStyle() {
+    if (!newStyleName.trim() || !newStylePrompt.trim()) return;
+    await invoke("add_custom_style", { name: newStyleName.trim(), systemPrompt: newStylePrompt.trim() });
+    const styles = await invoke<{ built_in: BuiltInStyle[]; custom: CustomStyle[] }>("get_polish_styles");
+    setCustomStyles(styles.custom);
+    setNewStyleName("");
+    setNewStylePrompt("");
+  }
+
+  async function handleRemoveCustomStyle(name: string) {
+    await invoke("remove_custom_style", { name });
+    setCustomStyles((prev) => prev.filter((s) => s.name !== name));
+  }
 
   async function update(patch: Partial<Settings>) {
     if (!settings) return;
@@ -138,12 +226,47 @@ export default function SettingsPanel() {
                   {settings.hotkey}
                 </div>
               </SettingRow>
+              <SettingRow label="Recording Mode" description="How the hotkey triggers recording">
+                <div className="flex rounded-lg overflow-hidden border border-white/[0.08]">
+                  {(["toggle", "push_to_talk"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => update({ recording_mode: mode })}
+                      className={`px-3 py-1.5 text-xs transition-colors cursor-pointer ${
+                        settings.recording_mode === mode
+                          ? "bg-emerald-500/20 text-emerald-400"
+                          : "bg-white/[0.04] text-white/40 hover:text-white/60"
+                      }`}
+                      aria-pressed={settings.recording_mode === mode}
+                    >
+                      {mode === "toggle" ? "Toggle" : "Push to Talk"}
+                    </button>
+                  ))}
+                </div>
+              </SettingRow>
               <SettingRow label="Launch at Login" description="Start OmWhisper when you log in">
                 <Toggle value={settings.auto_launch} onChange={(v) => update({ auto_launch: v })} label="Launch at login" />
               </SettingRow>
               <SettingRow label="Auto-Paste" description="Paste transcription into focused app">
                 <Toggle value={settings.auto_paste} onChange={(v) => update({ auto_paste: v })} label="Auto-paste" />
               </SettingRow>
+              <SettingRow label="Restore Clipboard" description="Restore previous clipboard after pasting">
+                <Toggle value={settings.restore_clipboard} onChange={(v) => update({ restore_clipboard: v })} label="Restore clipboard" />
+              </SettingRow>
+              {settings.restore_clipboard && (
+                <SettingRow label="Restore Delay" description="How long to wait before restoring clipboard">
+                  <select
+                    value={settings.clipboard_restore_delay_ms}
+                    onChange={(e) => update({ clipboard_restore_delay_ms: parseInt(e.target.value) })}
+                    className="bg-white/[0.06] text-white/60 text-xs rounded-lg px-3 py-1.5 border border-white/[0.08] cursor-pointer outline-none"
+                    aria-label="Clipboard restore delay"
+                  >
+                    <option value={1000}>1 second</option>
+                    <option value={2000}>2 seconds</option>
+                    <option value={5000}>5 seconds</option>
+                  </select>
+                </SettingRow>
+              )}
               <SettingRow label="Show Overlay" description="Floating indicator while recording">
                 <Toggle value={settings.show_overlay} onChange={(v) => update({ show_overlay: v })} label="Show overlay" />
               </SettingRow>
@@ -158,6 +281,31 @@ export default function SettingsPanel() {
                   <option value="debug">Debug</option>
                 </select>
               </SettingRow>
+            </div>
+
+            <h3 className="text-white/30 text-[10px] uppercase tracking-widest mt-6 mb-4 font-mono">Storage</h3>
+            <div className="card px-5">
+              <SettingRow label="Auto-Delete History" description="Remove transcriptions older than">
+                <select
+                  value={settings.auto_delete_after_days ?? ""}
+                  onChange={(e) => update({ auto_delete_after_days: e.target.value ? parseInt(e.target.value) : null })}
+                  className="bg-white/[0.06] text-white/60 text-xs rounded-lg px-3 py-1.5 border border-white/[0.08] cursor-pointer outline-none"
+                  aria-label="Auto-delete after days"
+                >
+                  <option value="">Never</option>
+                  <option value="7">7 days</option>
+                  <option value="30">30 days</option>
+                  <option value="90">90 days</option>
+                  <option value="180">180 days</option>
+                  <option value="365">1 year</option>
+                </select>
+              </SettingRow>
+              {storageInfo && (
+                <div className="py-3 flex items-center justify-between">
+                  <p className="text-white/30 text-xs">{storageInfo.record_count} transcription{storageInfo.record_count !== 1 ? "s" : ""} stored</p>
+                  <p className="text-white/20 text-xs font-mono">{(storageInfo.db_size_bytes / 1024).toFixed(1)} KB</p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -194,6 +342,28 @@ export default function SettingsPanel() {
                   aria-label="VAD sensitivity"
                 />
               </SettingRow>
+              <SettingRow label="Sound Effects" description="Play chimes on start and stop">
+                <Toggle value={settings.sound_enabled} onChange={(v) => update({ sound_enabled: v })} label="Sound effects" />
+              </SettingRow>
+              <SettingRow
+                label="Sound Volume"
+                description={`Chime volume · ${Math.round(settings.sound_volume * 100)}%`}
+              >
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={settings.sound_volume}
+                  onChange={(e) => update({ sound_volume: parseFloat(e.target.value) })}
+                  disabled={!settings.sound_enabled}
+                  className="w-28 accent-emerald-400 cursor-pointer disabled:opacity-40"
+                  aria-label="Sound volume"
+                />
+              </SettingRow>
+              <SettingRow label="Launch Om Sound" description="Play Om chant on app start">
+                <Toggle value={settings.launch_sound_enabled} onChange={(v) => update({ launch_sound_enabled: v })} label="Launch Om sound" />
+              </SettingRow>
             </div>
           </div>
         )}
@@ -228,6 +398,251 @@ export default function SettingsPanel() {
           </div>
         )}
 
+        {activeTab === "ai" && (
+          <div>
+            <h3 className="text-white/30 text-[10px] uppercase tracking-widest mb-4 font-mono">AI Processing</h3>
+
+            {/* Backend selector */}
+            <div className="card px-5 mb-5">
+              <SettingRow label="Backend" description="Where text is sent for polishing">
+                <div className="flex rounded-lg overflow-hidden border border-white/[0.08]">
+                  {(["disabled", "ollama", "cloud"] as const).map((b) => (
+                    <button
+                      key={b}
+                      onClick={() => { update({ ai_backend: b }); setTestResult(null); }}
+                      className={`px-3 py-1.5 text-xs capitalize transition-colors cursor-pointer ${
+                        settings.ai_backend === b
+                          ? "bg-violet-500/20 text-violet-400"
+                          : "bg-white/[0.04] text-white/40 hover:text-white/60"
+                      }`}
+                    >
+                      {b === "ollama" ? "On-Device" : b === "cloud" ? "Cloud API" : "Disabled"}
+                    </button>
+                  ))}
+                </div>
+              </SettingRow>
+              {settings.ai_backend === "disabled" && (
+                <p className="text-white/25 text-xs pb-3">Smart Dictation shortcut (⌘⇧B) will paste raw transcription.</p>
+              )}
+            </div>
+
+            {/* Ollama section */}
+            {settings.ai_backend === "ollama" && (
+              <div className="card px-5 mb-5">
+                <div className="flex items-center justify-between py-3 border-b border-white/[0.04]">
+                  <div>
+                    <p className="text-white/80 text-sm">Ollama Status</p>
+                    {ollamaStatus === null
+                      ? <p className="text-white/30 text-xs mt-0.5">Not checked yet</p>
+                      : <p className={`text-xs mt-0.5 ${ollamaStatus.running ? "text-emerald-400" : "text-red-400/70"}`}>
+                          {ollamaStatus.running ? `Running · ${ollamaStatus.models.length} model(s)` : "Not running"}
+                        </p>
+                    }
+                  </div>
+                  <button onClick={refreshOllamaStatus} className="btn-ghost text-xs py-1 px-3">Refresh</button>
+                </div>
+                <SettingRow label="Model" description="Ollama model for text polishing">
+                  <select
+                    value={settings.ai_ollama_model}
+                    onChange={(e) => update({ ai_ollama_model: e.target.value })}
+                    className="bg-white/[0.06] text-white/60 text-xs rounded-lg px-3 py-1.5 border border-white/[0.08] cursor-pointer outline-none max-w-[160px]"
+                  >
+                    {(ollamaStatus?.models.length ? ollamaStatus.models : [settings.ai_ollama_model]).map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </SettingRow>
+                <div className="py-3 flex items-center gap-3">
+                  <button
+                    onClick={() => handleTestConnection("ollama")}
+                    disabled={testLoading}
+                    className="btn-ghost text-xs py-1 px-3"
+                  >
+                    {testLoading ? "Testing…" : "Test Connection"}
+                  </button>
+                  {testResult && <span className={`text-xs font-mono ${testResult.startsWith("✓") ? "text-emerald-400" : "text-red-400/70"}`}>{testResult}</span>}
+                </div>
+                {ollamaStatus && !ollamaStatus.running && (
+                  <div className="pb-4 space-y-1.5 text-white/40 text-xs leading-relaxed">
+                    <p className="text-white/60 font-medium text-sm">Setup Ollama</p>
+                    <p>1. Download from <button onClick={() => invoke("plugin:opener|open_url", { url: "https://ollama.com" }).catch(() => {})} className="text-violet-400 underline cursor-pointer">ollama.com</button></p>
+                    <p>2. Install and open Ollama (it runs in the menu bar)</p>
+                    <p>3. Open Terminal and run: <code className="bg-white/[0.06] px-1.5 py-0.5 rounded font-mono text-white/60">ollama pull llama3.2</code></p>
+                    <p>4. Click Refresh above to detect it</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Cloud API section */}
+            {settings.ai_backend === "cloud" && (
+              <div className="card px-5 mb-5">
+                <SettingRow label="Provider" description="OpenAI-compatible API">
+                  <select
+                    value={
+                      settings.ai_cloud_api_url.includes("openai.com") ? "openai"
+                      : settings.ai_cloud_api_url.includes("groq.com") ? "groq"
+                      : "custom"
+                    }
+                    onChange={(e) => {
+                      const presets: Record<string, { url: string; model: string }> = {
+                        openai: { url: "https://api.openai.com/v1", model: "gpt-4o-mini" },
+                        groq: { url: "https://api.groq.com/openai/v1", model: "llama3-8b-8192" },
+                        custom: { url: settings.ai_cloud_api_url, model: settings.ai_cloud_model },
+                      };
+                      const p = presets[e.target.value];
+                      update({ ai_cloud_api_url: p.url, ai_cloud_model: p.model });
+                    }}
+                    className="bg-white/[0.06] text-white/60 text-xs rounded-lg px-3 py-1.5 border border-white/[0.08] cursor-pointer outline-none"
+                  >
+                    <option value="openai">OpenAI</option>
+                    <option value="groq">Groq</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </SettingRow>
+                <SettingRow label="API Key" description={apiKeySet ? "Key stored in macOS Keychain" : "Paste your API key"}>
+                  {apiKeySet ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-emerald-400 text-xs font-mono">●●●●●●●●</span>
+                      <button onClick={handleDeleteApiKey} className="text-red-400/60 hover:text-red-400 text-xs cursor-pointer">Remove</button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type={showApiKey ? "text" : "password"}
+                        value={apiKeyInput}
+                        onChange={(e) => setApiKeyInput(e.target.value)}
+                        placeholder="sk-…"
+                        className="bg-white/[0.06] border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none focus:border-violet-500/40 w-32 font-mono"
+                        onKeyDown={(e) => e.key === "Enter" && handleSaveApiKey()}
+                      />
+                      <button onClick={() => setShowApiKey((v) => !v)} className="text-white/30 hover:text-white/60 text-xs cursor-pointer">{showApiKey ? "Hide" : "Show"}</button>
+                      <button onClick={handleSaveApiKey} disabled={!apiKeyInput.trim()} className="btn-ghost text-xs py-1 px-2">Save</button>
+                    </div>
+                  )}
+                </SettingRow>
+                <SettingRow label="Model" description="Model name">
+                  <input
+                    type="text"
+                    value={settings.ai_cloud_model}
+                    onChange={(e) => update({ ai_cloud_model: e.target.value })}
+                    className="bg-white/[0.06] border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none focus:border-violet-500/40 w-32 font-mono"
+                  />
+                </SettingRow>
+                <div className="py-3 flex items-center gap-3">
+                  <button
+                    onClick={() => handleTestConnection("cloud")}
+                    disabled={testLoading || !apiKeySet}
+                    className="btn-ghost text-xs py-1 px-3"
+                  >
+                    {testLoading ? "Testing…" : "Test Connection"}
+                  </button>
+                  {testResult && <span className={`text-xs font-mono ${testResult.startsWith("✓") ? "text-emerald-400" : "text-red-400/70"}`}>{testResult}</span>}
+                </div>
+                <p className="text-white/20 text-xs pb-3 leading-relaxed">
+                  When using Cloud API, your transcription text is sent to the provider. Audio never leaves your device.
+                </p>
+              </div>
+            )}
+
+            {/* Smart Dictation shortcut + style */}
+            <h3 className="text-white/30 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Smart Dictation</h3>
+            <div className="card px-5 mb-5">
+              <SettingRow label="Shortcut" description="Hotkey for Smart Dictation">
+                <div className="px-3 py-1.5 rounded-lg bg-white/[0.06] text-white/60 text-xs font-mono">⌘⇧B</div>
+              </SettingRow>
+              <SettingRow label="Default Style" description="Polish style applied on stop">
+                <select
+                  value={settings.active_polish_style}
+                  onChange={(e) => update({ active_polish_style: e.target.value })}
+                  className="bg-white/[0.06] text-white/60 text-xs rounded-lg px-3 py-1.5 border border-white/[0.08] cursor-pointer outline-none"
+                >
+                  {builtInStyles.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {customStyles.map((s) => <option key={s.name} value={`custom:${s.system_prompt}`}>{s.name}</option>)}
+                </select>
+              </SettingRow>
+              {settings.active_polish_style === "translate" && (
+                <SettingRow label="Target Language" description="Language to translate into">
+                  <select
+                    value={settings.translate_target_language}
+                    onChange={(e) => update({ translate_target_language: e.target.value })}
+                    className="bg-white/[0.06] text-white/60 text-xs rounded-lg px-3 py-1.5 border border-white/[0.08] cursor-pointer outline-none"
+                  >
+                    {["English","Spanish","French","German","Japanese","Chinese","Hindi","Portuguese","Korean","Arabic","Russian"].map((l) => (
+                      <option key={l} value={l}>{l}</option>
+                    ))}
+                  </select>
+                </SettingRow>
+              )}
+              <SettingRow label="Timeout" description="Max seconds to wait for AI response">
+                <select
+                  value={settings.ai_timeout_seconds}
+                  onChange={(e) => update({ ai_timeout_seconds: parseInt(e.target.value) })}
+                  className="bg-white/[0.06] text-white/60 text-xs rounded-lg px-3 py-1.5 border border-white/[0.08] cursor-pointer outline-none"
+                >
+                  <option value={15}>15s</option>
+                  <option value={30}>30s</option>
+                  <option value={60}>60s</option>
+                </select>
+              </SettingRow>
+            </div>
+
+            {/* Polish styles */}
+            <h3 className="text-white/30 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Polish Styles</h3>
+            <div className="card px-5 mb-5">
+              {builtInStyles.map((s) => (
+                <div key={s.id} className="flex items-center justify-between py-2.5 border-b border-white/[0.04] last:border-0">
+                  <div>
+                    <p className="text-white/70 text-xs font-medium">{s.name}</p>
+                    <p className="text-white/25 text-xs">{s.description}</p>
+                  </div>
+                  <span className="text-white/15 text-[10px] font-mono">built-in</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Custom styles */}
+            <h3 className="text-white/30 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Custom Styles</h3>
+            <div className="card px-5 mb-4">
+              {customStyles.length === 0 && (
+                <p className="text-white/20 text-xs py-3">No custom styles yet.</p>
+              )}
+              {customStyles.map((s) => (
+                <div key={s.name} className="flex items-start justify-between py-2.5 border-b border-white/[0.04] last:border-0 gap-3">
+                  <div className="min-w-0">
+                    <p className="text-white/70 text-xs font-medium truncate">{s.name}</p>
+                    <p className="text-white/25 text-xs truncate">{s.system_prompt.slice(0, 60)}…</p>
+                  </div>
+                  <button onClick={() => handleRemoveCustomStyle(s.name)} className="text-red-400/40 hover:text-red-400 text-xs shrink-0 cursor-pointer">Remove</button>
+                </div>
+              ))}
+              <div className="pt-3 space-y-2">
+                <input
+                  type="text"
+                  value={newStyleName}
+                  onChange={(e) => setNewStyleName(e.target.value)}
+                  placeholder="Style name…"
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-white/70 text-xs outline-none focus:border-violet-500/30"
+                />
+                <textarea
+                  value={newStylePrompt}
+                  onChange={(e) => setNewStylePrompt(e.target.value)}
+                  placeholder="System prompt…"
+                  rows={3}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-white/70 text-xs outline-none focus:border-violet-500/30 resize-none font-mono"
+                />
+                <button
+                  onClick={handleAddCustomStyle}
+                  disabled={!newStyleName.trim() || !newStylePrompt.trim()}
+                  className="btn-primary text-xs py-1.5 w-full"
+                >
+                  Add Style
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeTab === "license" && <LicenseSection />}
         {activeTab === "about" && <AboutSection />}
       </div>
@@ -257,6 +672,16 @@ function AboutSection() {
     }
   }
 
+  async function handleSendFeedback() {
+    const debugInfo = await invoke<string>("get_debug_info").catch(() => "");
+    const subject = encodeURIComponent(`OmWhisper Beta Feedback — v${version}`);
+    const body = encodeURIComponent(
+      `Hi,\n\n[Your feedback here — what's working, what's not, what's missing]\n\n---\n${debugInfo}`
+    );
+    const mailto = `mailto:feedback@omwhisper.com?subject=${subject}&body=${body}`;
+    invoke("plugin:opener|open_url", { url: mailto }).catch(() => {});
+  }
+
   return (
     <div>
       <h3 className="text-white/30 text-[10px] uppercase tracking-widest mb-4 font-mono">About</h3>
@@ -276,6 +701,15 @@ function AboutSection() {
             className="btn-ghost text-xs py-1.5"
           >
             {copying ? "✓ Copied" : "Copy"}
+          </button>
+        </SettingRow>
+        <SettingRow label="Send Feedback" description="Opens your email client">
+          <button
+            onClick={handleSendFeedback}
+            aria-label="Send feedback by email"
+            className="btn-ghost text-xs py-1.5"
+          >
+            Send Feedback
           </button>
         </SettingRow>
         <div className="py-4 text-center">

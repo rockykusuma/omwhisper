@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Mic, MicOff, FileAudio } from "lucide-react";
+import { Mic, MicOff, FileAudio, Sparkles } from "lucide-react";
+import StatsCard from "./StatsCard";
 
 interface Segment {
   text: string;
@@ -15,6 +16,7 @@ interface Props {
   externalIsRecording?: boolean;
   onRecordingChange?: (recording: boolean) => void;
   activeModel?: string;
+  isSmartDictation?: boolean;
 }
 
 function WaveformMeter({ level }: { level: number }) {
@@ -51,17 +53,21 @@ export default function TranscriptionView({
   externalIsRecording,
   onRecordingChange,
   activeModel = "tiny.en",
+  isSmartDictation = false,
 }: Props) {
   const modelPath = `models/ggml-${activeModel}.bin`;
   const [segments, setSegments] = useState<Segment[]>([]);
   const [loading, setLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isPolishing, setIsPolishing] = useState(false);
+  const [polishedLabel, setPolishedLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [audioLevel, setAudioLevel] = useState<number>(0);
   const [toast, setToast] = useState<string | null>(null);
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [showFileMode, setShowFileMode] = useState(false);
+  const [statsRefresh, setStatsRefresh] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const recordingStartRef = useRef<number>(0);
 
@@ -167,18 +173,57 @@ export default function TranscriptionView({
     }
 
     setSegments((currentSegments) => {
-      const fullText = currentSegments.map((s) => s.text).join(" ").trim();
-      if (fullText) {
-        const durationSeconds = (Date.now() - recordingStartRef.current) / 1000;
-        invoke<void>("paste_transcription", { text: fullText })
+      const rawText = currentSegments.map((s) => s.text).join(" ").trim();
+      if (!rawText) return currentSegments;
+
+      const durationSeconds = (Date.now() - recordingStartRef.current) / 1000;
+
+      if (isSmartDictation) {
+        // Smart Dictation flow: polish then paste
+        (async () => {
+          setIsPolishing(true);
+          try {
+            const settings = await invoke<{ active_polish_style: string; translate_target_language: string }>("get_settings");
+            const style = settings.active_polish_style ?? "professional";
+            const polished = await invoke<string>("polish_text_cmd", { text: rawText, style });
+            setPolishedLabel(style);
+            await invoke("paste_transcription", { text: polished });
+            showToast("✓ AI-polished & copied");
+            invoke("save_transcription", {
+              text: polished,
+              durationSeconds,
+              modelUsed: activeModel,
+              source: "smart_dictation",
+              rawText,
+              polishStyle: style,
+            })
+              .then(() => setStatsRefresh((n) => n + 1))
+              .catch((e) => console.error("save_transcription failed:", e));
+          } catch (e) {
+            // Fallback: paste raw text if AI fails
+            showToast("⚠ AI polish failed — pasting raw text");
+            invoke("paste_transcription", { text: rawText }).catch(() => {});
+            invoke("save_transcription", { text: rawText, durationSeconds, modelUsed: activeModel }).catch(() => {});
+            console.error("Smart dictation polish failed:", e);
+          } finally {
+            setIsPolishing(false);
+          }
+        })();
+      } else {
+        // Regular recording flow
+        setPolishedLabel(null);
+        invoke<void>("paste_transcription", { text: rawText })
           .then(() => showToast("✓ Copied to clipboard"))
           .catch((e) => console.error("paste_transcription failed:", e));
         invoke("save_transcription", {
-          text: fullText,
+          text: rawText,
           durationSeconds,
           modelUsed: activeModel,
-        }).catch((e) => console.error("save_transcription failed:", e));
+        })
+          .then(() => setStatsRefresh((n) => n + 1))
+          .catch((e) => console.error("save_transcription failed:", e));
       }
+
       return currentSegments;
     });
   }
@@ -222,31 +267,44 @@ export default function TranscriptionView({
       {/* Central record area */}
       <div className="flex flex-col items-center gap-5 py-6">
         {/* Circular record button */}
-        <button
-          onClick={isRecording ? handleStopRecording : handleStartRecording}
-          aria-label={isRecording ? "Stop recording" : "Start recording"}
-          className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0f0d] ${
-            isRecording
-              ? "bg-red-500 shadow-[0_0_32px_rgba(239,68,68,0.45)]"
-              : "bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_0_28px_rgba(52,211,153,0.3)] hover:shadow-[0_0_40px_rgba(52,211,153,0.5)] hover:scale-105"
-          }`}
-        >
-          {/* Pulse ring when recording */}
-          {isRecording && (
-            <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-20" />
+        <div className="relative">
+          <button
+            onClick={isRecording ? handleStopRecording : handleStartRecording}
+            aria-label={isRecording ? "Stop recording" : "Start recording"}
+            className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0f0d] ${
+              isRecording
+                ? isSmartDictation
+                  ? "bg-violet-500 shadow-[0_0_32px_rgba(139,92,246,0.45)]"
+                  : "bg-red-500 shadow-[0_0_32px_rgba(239,68,68,0.45)]"
+                : "bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_0_28px_rgba(52,211,153,0.3)] hover:shadow-[0_0_40px_rgba(52,211,153,0.5)] hover:scale-105"
+            }`}
+          >
+            {isRecording && (
+              <span className={`absolute inset-0 rounded-full animate-ping opacity-20 ${isSmartDictation ? "bg-violet-400" : "bg-red-400"}`} />
+            )}
+            {isRecording
+              ? <MicOff size={28} color="white" strokeWidth={2} />
+              : <Mic size={28} color="black" strokeWidth={2} />
+            }
+          </button>
+          {/* Smart Dictation badge */}
+          {isSmartDictation && isRecording && (
+            <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-violet-500 flex items-center justify-center shadow-lg" title="Smart Dictation active">
+              <Sparkles size={12} color="white" />
+            </div>
           )}
-          {isRecording
-            ? <MicOff size={28} color="white" strokeWidth={2} />
-            : <Mic size={28} color="black" strokeWidth={2} />
-          }
-        </button>
+        </div>
 
         {/* Status / level meter */}
         <div className="flex flex-col items-center gap-2 h-10 justify-center">
-          {isRecording ? (
+          {isPolishing ? (
+            <p className="text-violet-400/80 text-[11px] font-mono animate-pulse">✦ Polishing with AI…</p>
+          ) : isRecording ? (
             <>
               <WaveformMeter level={audioLevel} />
-              <p className="text-emerald-400/60 text-[11px] font-mono">Listening…</p>
+              <p className={`text-[11px] font-mono ${isSmartDictation ? "text-violet-400/60" : "text-emerald-400/60"}`}>
+                {isSmartDictation ? "Smart Dictation…" : "Listening…"}
+              </p>
             </>
           ) : (
             !hasContent && (
@@ -271,12 +329,18 @@ export default function TranscriptionView({
       {hasContent && (
         <div className="card overflow-hidden flex-1 min-h-0">
           <div className="flex items-center gap-2 px-5 py-3 border-b border-white/[0.04]">
-            <div className={`w-2 h-2 rounded-full ${isRecording ? "bg-red-400 animate-pulse" : "bg-emerald-400"}`} />
+            <div className={`w-2 h-2 rounded-full ${isRecording ? (isSmartDictation ? "bg-violet-400 animate-pulse" : "bg-red-400 animate-pulse") : "bg-emerald-400"}`} />
             <span className="text-white/30 text-xs font-mono">
               {loading
                 ? "Running Whisper inference…"
                 : `${segments.length} segment${segments.length !== 1 ? "s" : ""}`}
             </span>
+            {polishedLabel && (
+              <span className="flex items-center gap-1 ml-1 px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-400 text-[10px] font-mono">
+                <Sparkles size={9} />
+                {polishedLabel}
+              </span>
+            )}
             {segments.length > 0 && !isRecording && (
               <button
                 onClick={() => setSegments([])}
@@ -302,9 +366,12 @@ export default function TranscriptionView({
 
       {/* Empty state */}
       {!hasContent && !error && !isRecording && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-3 opacity-40 select-none pb-8">
-          <span className="text-6xl text-white/10">ॐ</span>
-          <p className="text-white/25 text-sm">Your transcription will appear here</p>
+        <div className="flex-1 flex flex-col items-center justify-center gap-5 pb-8">
+          <div className="flex flex-col items-center gap-3 opacity-40 select-none">
+            <span className="text-6xl text-white/10">ॐ</span>
+            <p className="text-white/25 text-sm">Your transcription will appear here</p>
+          </div>
+          <StatsCard refreshTrigger={statsRefresh} />
         </div>
       )}
 

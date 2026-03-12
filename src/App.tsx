@@ -7,6 +7,7 @@ import ModelManager from "./components/ModelManager";
 import SettingsPanel from "./components/Settings";
 import Onboarding from "./components/Onboarding";
 import TranscriptionHistory from "./components/TranscriptionHistory";
+import Vocabulary from "./components/Vocabulary";
 
 interface UpdateInfo {
   latest: string;
@@ -16,6 +17,7 @@ interface UpdateInfo {
 
 function App() {
   const [isRecording, setIsRecording] = useState(false);
+  const [isSmartDictation, setIsSmartDictation] = useState(false);
   const [activeView, setActiveView] = useState<View>("home");
   const [activeModel, setActiveModel] = useState("tiny.en");
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
@@ -33,11 +35,12 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const unlistenHotkey = listen("hotkey-toggle-recording", async () => {
+    const startRecording = async (smartDictation = false) => {
       try {
         await invoke("capture_focused_app");
         await invoke("start_transcription", { model: modelPath });
         setIsRecording(true);
+        setIsSmartDictation(smartDictation);
         try {
           const settings = await invoke<{ show_overlay: boolean }>("get_settings");
           if (settings.show_overlay) await invoke("show_overlay");
@@ -45,12 +48,25 @@ function App() {
       } catch (e) {
         console.error("Failed to start transcription:", e);
       }
+    };
+
+    const unlistenHotkey = listen("hotkey-toggle-recording", () => startRecording(false));
+    const unlistenSmartDictation = listen("hotkey-smart-dictation", async () => {
+      const settings = await invoke<{ ai_backend: string }>("get_settings").catch(() => ({ ai_backend: "disabled" }));
+      if (settings.ai_backend === "disabled") {
+        setMicError("Smart Dictation needs AI setup. Open Settings → AI Processing.");
+        setTimeout(() => setMicError(null), 5000);
+        return;
+      }
+      startRecording(true);
     });
 
     const unlistenState = listen<boolean>("recording-state", (event) => {
       setIsRecording(event.payload);
       if (!event.payload) {
         setTimeout(() => invoke("hide_overlay").catch(() => {}), 1500);
+        // Reset smart dictation flag when recording stops externally (e.g. usage limit)
+        setIsSmartDictation(false);
       }
     });
 
@@ -65,6 +81,7 @@ function App() {
 
     return () => {
       unlistenHotkey.then((f) => f());
+      unlistenSmartDictation.then((f) => f());
       unlistenState.then((f) => f());
       unlistenUpdate.then((f) => f());
       unlistenMic.then((f) => f());
@@ -143,8 +160,9 @@ function App() {
           {activeView === "home" && (
             <TranscriptionView
               externalIsRecording={isRecording}
-              onRecordingChange={setIsRecording}
+              onRecordingChange={(v) => { setIsRecording(v); if (!v) setIsSmartDictation(false); }}
               activeModel={activeModel}
+              isSmartDictation={isSmartDictation}
             />
           )}
           {activeView === "models" && (
@@ -158,6 +176,7 @@ function App() {
           )}
           {activeView === "settings" && <SettingsPanel />}
           {activeView === "history" && <TranscriptionHistory />}
+          {activeView === "vocabulary" && <Vocabulary />}
         </div>
       </div>
     </div>

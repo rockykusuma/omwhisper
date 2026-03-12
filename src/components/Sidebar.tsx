@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Mic, Clock, Box, Settings } from "lucide-react";
+import { Mic, Clock, Box, Settings, BookMarked } from "lucide-react";
 
-export type View = "home" | "history" | "models" | "settings";
+export type View = "home" | "history" | "models" | "vocabulary" | "settings";
 
 interface Props {
   activeView: View;
@@ -12,10 +12,11 @@ interface Props {
 }
 
 const NAV_ITEMS: { id: View; icon: React.ElementType; label: string }[] = [
-  { id: "home",     icon: Mic,      label: "Transcribe" },
-  { id: "history",  icon: Clock,    label: "History"    },
-  { id: "models",   icon: Box,      label: "Models"     },
-  { id: "settings", icon: Settings, label: "Settings"   },
+  { id: "home",       icon: Mic,        label: "Transcribe" },
+  { id: "history",    icon: Clock,      label: "History"    },
+  { id: "models",     icon: Box,        label: "Models"     },
+  { id: "vocabulary", icon: BookMarked, label: "Vocabulary" },
+  { id: "settings",   icon: Settings,   label: "Settings"   },
 ];
 
 export default function Sidebar({ activeView, onNavigate, appVersion }: Props) {
