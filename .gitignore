@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.npm
+
+# Build outputs
+dist/
+src-tauri/target/
+
+# Whisper models (large binary files — download locally)
+models/*.bin
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# Tauri
+src-tauri/target/
+src-tauri/WixTools/
+src-tauri/Frameworks/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+
+# Misc
+*.dmg
+*.app
+*.msi
+thumbs.db

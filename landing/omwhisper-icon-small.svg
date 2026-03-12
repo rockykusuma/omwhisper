@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <linearGradient id="omG" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="50%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#f97316" />
+    </linearGradient>
+  </defs>
+  <circle cx="16" cy="16" r="15" fill="#1a1210" />
+  <circle cx="16" cy="16" r="14" fill="none" stroke="#f59e0b" stroke-width="0.8" opacity="0.25" />
+  <text
+    x="16"
+    y="16"
+    text-anchor="middle"
+    dominant-baseline="central"
+    fill="url(#omG)"
+    font-family="serif"
+    font-size="20"
+  >ॐ</text>
+</svg>

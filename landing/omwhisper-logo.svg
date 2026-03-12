@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="omGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b" />
+      <stop offset="50%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#f97316" />
+    </linearGradient>
+    <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#f97316" stop-opacity="0.15" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="96" fill="#0c0806" />
+  
+  <!-- Outer ring -->
+  <circle cx="100" cy="100" r="90" fill="none" stroke="url(#ringGradient)" stroke-width="1.5" />
+  
+  <!-- Sound wave rings (subtle) -->
+  <circle cx="100" cy="100" r="78" fill="none" stroke="url(#ringGradient)" stroke-width="0.5" stroke-dasharray="4 8" opacity="0.3" />
+  <circle cx="100" cy="100" r="84" fill="none" stroke="url(#ringGradient)" stroke-width="0.5" stroke-dasharray="3 12" opacity="0.2" />
+  
+  <!-- Om symbol -->
+  <text
+    x="100"
+    y="100"
+    text-anchor="middle"
+    dominant-baseline="central"
+    fill="url(#omGradient)"
+    filter="url(#glow)"
+    font-family="serif"
+    font-size="110"
+  >ॐ</text>
+</svg>
