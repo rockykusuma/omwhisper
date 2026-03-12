@@ -1,0 +1,68 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OmWhisper",
+  "version": "0.1.0",
+  "identifier": "com.omwhisper.app",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "OmWhisper",
+        "width": 780,
+        "height": 560,
+        "minWidth": 680,
+        "minHeight": 480,
+        "resizable": true,
+        "fullscreen": false,
+        "visible": false,
+        "skipTaskbar": true
+      },
+      {
+        "label": "overlay",
+        "title": "OmWhisper Overlay",
+        "width": 320,
+        "height": 72,
+        "visible": false,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "transparent": true,
+        "url": "/"
+      }
+    ],
+    "macOSPrivateApi": true,
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "app"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "shortDescription": "Your voice, transcribed instantly. Private by design.",
+    "longDescription": "OmWhisper transcribes your voice in real-time using on-device Whisper AI. No internet required, no data leaves your Mac. Works system-wide with a global hotkey.",
+    "copyright": "© 2026 OmWhisper",
+    "category": "Productivity",
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "dmg": {
+        "windowSize": { "width": 660, "height": 400 },
+        "appPosition": { "x": 180, "y": 170 },
+        "applicationFolderPosition": { "x": 480, "y": 170 }
+      }
+    }
+  }
+}
