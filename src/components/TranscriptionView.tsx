@@ -4,13 +4,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Mic, MicOff, FileAudio, Sparkles } from "lucide-react";
 import StatsCard from "./StatsCard";
-
-interface Segment {
-  text: string;
-  start_ms: number;
-  end_ms: number;
-  is_final: boolean;
-}
+import LicenseActivation from "./LicenseActivation";
+import { useToast } from "../hooks/useToast";
+import { logger } from "../utils/logger";
+import type { TranscriptionSegment } from "../types";
 
 interface Props {
   externalIsRecording?: boolean;
@@ -56,7 +53,7 @@ export default function TranscriptionView({
   isSmartDictation = false,
 }: Props) {
   const modelPath = `models/ggml-${activeModel}.bin`;
-  const [segments, setSegments] = useState<Segment[]>([]);
+  const [segments, setSegments] = useState<TranscriptionSegment[]>([]);
   const [loading, setLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isPolishing, setIsPolishing] = useState(false);
@@ -64,24 +61,19 @@ export default function TranscriptionView({
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [audioLevel, setAudioLevel] = useState<number>(0);
-  const [toast, setToast] = useState<string | null>(null);
+  const { toast, showToast } = useToast();
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [showFileMode, setShowFileMode] = useState(false);
   const [statsRefresh, setStatsRefresh] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const recordingStartRef = useRef<number>(0);
 
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2500);
-  }
-
   useEffect(() => {
     if (externalIsRecording !== undefined) setIsRecording(externalIsRecording);
   }, [externalIsRecording]);
 
   useEffect(() => {
-    const unlisten = listen<{ segments: Segment[] }>("transcription-update", (event) => {
+    const unlisten = listen<{ segments: TranscriptionSegment[] }>("transcription-update", (event) => {
       setSegments((prev) => [...prev, ...event.payload.segments]);
     });
     return () => { unlisten.then((f) => f()); };
@@ -99,7 +91,7 @@ export default function TranscriptionView({
       try { await invoke("stop_transcription"); } catch {}
       setIsRecording(false);
       onRecordingChange?.(false);
-      setTimeout(() => invoke("hide_overlay").catch(() => {}), 500);
+      setTimeout(() => invoke("hide_overlay").catch((e) => logger.debug("hide_overlay:", e)), 500);
       setShowUpgradePrompt(true);
     });
     return () => { unlisten.then((f) => f()); };
@@ -126,7 +118,7 @@ export default function TranscriptionView({
     setLoading(true);
 
     try {
-      const result = await invoke<Segment[]>("transcribe_file", {
+      const result = await invoke<TranscriptionSegment[]>("transcribe_file", {
         path: filePath,
         modelPath,
       });
@@ -150,7 +142,9 @@ export default function TranscriptionView({
       try {
         const settings = await invoke<{ show_overlay: boolean }>("get_settings");
         if (settings.show_overlay) await invoke("show_overlay");
-      } catch {}
+      } catch (e) {
+        logger.debug("show_overlay:", e);
+      }
     } catch (e) {
       const msg = String(e);
       if (msg.includes("free_tier_limit_reached")) {
@@ -169,7 +163,7 @@ export default function TranscriptionView({
     } finally {
       setIsRecording(false);
       onRecordingChange?.(false);
-      setTimeout(() => invoke("hide_overlay").catch(() => {}), 1500);
+      setTimeout(() => invoke("hide_overlay").catch((e) => logger.debug("hide_overlay:", e)), 1500);
     }
 
     setSegments((currentSegments) => {
@@ -198,13 +192,13 @@ export default function TranscriptionView({
               polishStyle: style,
             })
               .then(() => setStatsRefresh((n) => n + 1))
-              .catch((e) => console.error("save_transcription failed:", e));
+              .catch((e) => logger.error("save_transcription failed:", e));
           } catch (e) {
             // Fallback: paste raw text if AI fails
             showToast("⚠ AI polish failed — pasting raw text");
-            invoke("paste_transcription", { text: rawText }).catch(() => {});
-            invoke("save_transcription", { text: rawText, durationSeconds, modelUsed: activeModel }).catch(() => {});
-            console.error("Smart dictation polish failed:", e);
+            invoke("paste_transcription", { text: rawText }).catch((e) => logger.debug("paste_transcription:", e));
+            invoke("save_transcription", { text: rawText, durationSeconds, modelUsed: activeModel }).catch((e) => logger.debug("save_transcription:", e));
+            logger.error("Smart dictation polish failed:", e);
           } finally {
             setIsPolishing(false);
           }
@@ -214,14 +208,14 @@ export default function TranscriptionView({
         setPolishedLabel(null);
         invoke<void>("paste_transcription", { text: rawText })
           .then(() => showToast("✓ Copied to clipboard"))
-          .catch((e) => console.error("paste_transcription failed:", e));
+          .catch((e) => logger.error("paste_transcription failed:", e));
         invoke("save_transcription", {
           text: rawText,
           durationSeconds,
           modelUsed: activeModel,
         })
           .then(() => setStatsRefresh((n) => n + 1))
-          .catch((e) => console.error("save_transcription failed:", e));
+          .catch((e) => logger.error("save_transcription failed:", e));
       }
 
       return currentSegments;
@@ -234,10 +228,10 @@ export default function TranscriptionView({
     <div className="flex flex-col h-full px-8 py-6">
       {/* Active model badge */}
       <div className="flex items-center justify-between mb-6">
-        <span className="text-white/20 text-xs font-mono">{activeModel} model</span>
+        <span className="text-white/35 text-xs font-mono">{activeModel} model</span>
         <button
           onClick={() => setShowFileMode((v) => !v)}
-          className="flex items-center gap-1.5 text-white/25 hover:text-white/50 text-xs transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 text-white/40 hover:text-white/50 text-xs transition-colors cursor-pointer"
           aria-label="Toggle file transcription mode"
         >
           <FileAudio size={13} />
@@ -258,7 +252,7 @@ export default function TranscriptionView({
               {loading ? "Transcribing…" : "Select .wav file"}
             </button>
             {fileName && (
-              <span className="text-white/30 text-xs font-mono truncate">{fileName}</span>
+              <span className="text-white/50 text-xs font-mono truncate">{fileName}</span>
             )}
           </div>
         </div>
@@ -308,8 +302,8 @@ export default function TranscriptionView({
             </>
           ) : (
             !hasContent && (
-              <p className="text-white/20 text-[11px] font-mono">
-                Press <kbd className="font-sans text-white/30">⌘⇧V</kbd> or tap the button
+              <p className="text-white/35 text-[11px] font-mono">
+                Press <kbd className="font-sans text-white/50">⌘⇧V</kbd> or tap the button
               </p>
             )
           )}
@@ -330,7 +324,7 @@ export default function TranscriptionView({
         <div className="card overflow-hidden flex-1 min-h-0">
           <div className="flex items-center gap-2 px-5 py-3 border-b border-white/[0.04]">
             <div className={`w-2 h-2 rounded-full ${isRecording ? (isSmartDictation ? "bg-violet-400 animate-pulse" : "bg-red-400 animate-pulse") : "bg-emerald-400"}`} />
-            <span className="text-white/30 text-xs font-mono">
+            <span className="text-white/50 text-xs font-mono">
               {loading
                 ? "Running Whisper inference…"
                 : `${segments.length} segment${segments.length !== 1 ? "s" : ""}`}
@@ -344,7 +338,7 @@ export default function TranscriptionView({
             {segments.length > 0 && !isRecording && (
               <button
                 onClick={() => setSegments([])}
-                className="ml-auto text-white/20 hover:text-white/50 text-[10px] font-sans cursor-pointer"
+                className="ml-auto text-white/35 hover:text-white/50 text-[10px] font-sans cursor-pointer"
                 aria-label="Clear transcription"
               >
                 Clear
@@ -352,8 +346,8 @@ export default function TranscriptionView({
             )}
           </div>
           <div ref={scrollRef} className="p-5 space-y-3 overflow-y-auto max-h-80">
-            {segments.map((seg, i) => (
-              <div key={i} className="flex gap-4">
+            {segments.map((seg) => (
+              <div key={`${seg.start_ms}-${seg.end_ms}`} className="flex gap-4">
                 <span className="text-emerald-500/40 text-xs shrink-0 mt-0.5 font-mono">
                   {formatTime(seg.start_ms)}
                 </span>
@@ -369,7 +363,7 @@ export default function TranscriptionView({
         <div className="flex-1 flex flex-col items-center justify-center gap-5 pb-8">
           <div className="flex flex-col items-center gap-3 opacity-40 select-none">
             <span className="text-6xl text-white/10">ॐ</span>
-            <p className="text-white/25 text-sm">Your transcription will appear here</p>
+            <p className="text-white/40 text-sm">Your transcription will appear here</p>
           </div>
           <StatsCard refreshTrigger={statsRefresh} />
         </div>
@@ -399,7 +393,7 @@ export default function TranscriptionView({
             }} />
             <button
               onClick={() => setShowUpgradePrompt(false)}
-              className="mt-3 w-full py-2 text-white/30 hover:text-white/60 text-sm transition-colors cursor-pointer"
+              className="mt-3 w-full py-2 text-white/50 hover:text-white/60 text-sm transition-colors cursor-pointer"
             >
               Dismiss
             </button>
@@ -410,69 +404,3 @@ export default function TranscriptionView({
   );
 }
 
-// ─── License activation widget ─────────────────────────────────────────────────
-function LicenseActivation({ onActivated }: { onActivated: () => void }) {
-  const [key, setKey] = useState("");
-  const [status, setStatus] = useState<"idle" | "checking" | "success" | "error">("idle");
-  const [errorMsg, setErrorMsg] = useState("");
-
-  async function handleActivate() {
-    if (!key.trim()) return;
-    setStatus("checking");
-    setErrorMsg("");
-    try {
-      await invoke("activate_license", { key: key.trim() });
-      setStatus("success");
-      setTimeout(onActivated, 1200);
-    } catch (e) {
-      const msg = String(e);
-      if (msg.includes("max_activations_reached")) {
-        setErrorMsg("This key is already activated on another device. Deactivate it there first.");
-      } else if (msg.includes("network_error")) {
-        setErrorMsg("Network error. Check your connection and try again.");
-      } else {
-        setErrorMsg("Invalid license key. Please check and try again.");
-      }
-      setStatus("error");
-    }
-  }
-
-  if (status === "success") {
-    return (
-      <div className="py-2 text-emerald-400 font-semibold text-sm">
-        ✓ License activated! OmWhisper is fully unlocked.
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <input
-        type="text"
-        value={key}
-        onChange={(e) => { setKey(e.target.value); setStatus("idle"); setErrorMsg(""); }}
-        placeholder="Enter license key…"
-        className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-2.5 text-white/80 text-sm placeholder:text-white/20 outline-none focus:border-emerald-500/40 font-mono"
-        aria-label="License key"
-      />
-      {errorMsg && <p className="text-red-400/70 text-xs">{errorMsg}</p>}
-      <button
-        onClick={handleActivate}
-        disabled={status === "checking" || !key.trim()}
-        className="btn-primary w-full py-2.5"
-      >
-        {status === "checking" ? "Activating…" : "Activate License"}
-      </button>
-      <p className="text-white/25 text-xs text-center">
-        Don't have a key?{" "}
-        <a
-          href="#"
-          onClick={(e) => { e.preventDefault(); invoke("plugin:opener|open_url", { url: "https://omwhisper.lemonsqueezy.com" }).catch(() => {}); }}
-          className="text-emerald-500/60 hover:text-emerald-400 underline"
-        >
-          Buy for $12
-        </a>
-      </p>
-    </div>
-  );
-}

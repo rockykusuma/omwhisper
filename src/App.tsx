@@ -8,12 +8,8 @@ import SettingsPanel from "./components/Settings";
 import Onboarding from "./components/Onboarding";
 import TranscriptionHistory from "./components/TranscriptionHistory";
 import Vocabulary from "./components/Vocabulary";
-
-interface UpdateInfo {
-  latest: string;
-  download_url: string;
-  release_notes: string;
-}
+import { logger } from "./utils/logger";
+import type { UpdateInfo } from "./types";
 
 function App() {
   const [isRecording, setIsRecording] = useState(false);
@@ -46,7 +42,7 @@ function App() {
           if (settings.show_overlay) await invoke("show_overlay");
         } catch {}
       } catch (e) {
-        console.error("Failed to start transcription:", e);
+        logger.error("Failed to start transcription:", e);
       }
     };
 
@@ -64,7 +60,7 @@ function App() {
     const unlistenState = listen<boolean>("recording-state", (event) => {
       setIsRecording(event.payload);
       if (!event.payload) {
-        setTimeout(() => invoke("hide_overlay").catch(() => {}), 1500);
+        setTimeout(() => invoke("hide_overlay").catch((e) => logger.debug("hide_overlay:", e)), 1500);
         // Reset smart dictation flag when recording stops externally (e.g. usage limit)
         setIsSmartDictation(false);
       }
@@ -80,11 +76,8 @@ function App() {
     });
 
     return () => {
-      unlistenHotkey.then((f) => f());
-      unlistenSmartDictation.then((f) => f());
-      unlistenState.then((f) => f());
-      unlistenUpdate.then((f) => f());
-      unlistenMic.then((f) => f());
+      Promise.all([unlistenHotkey, unlistenSmartDictation, unlistenState, unlistenUpdate, unlistenMic])
+        .then((fns) => fns.forEach((f) => f()));
     };
   }, [modelPath]);
 
@@ -115,7 +108,7 @@ function App() {
             </span>
             <button
               onClick={() => setRunningFromDmg(false)}
-              className="text-white/30 hover:text-white/60 text-xs cursor-pointer ml-4 shrink-0"
+              className="text-white/50 hover:text-white/60 text-xs cursor-pointer ml-4 shrink-0"
               aria-label="Dismiss disk image warning"
             >
               ✕
@@ -139,7 +132,7 @@ function App() {
               </a>
               <button
                 onClick={() => setUpdateInfo(null)}
-                className="text-white/30 hover:text-white/60 text-xs cursor-pointer"
+                className="text-white/50 hover:text-white/60 text-xs cursor-pointer"
                 aria-label="Dismiss update notification"
               >
                 ✕

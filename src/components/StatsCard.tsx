@@ -1,13 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-
-interface Stats {
-  total_recordings: number;
-  total_duration_seconds: number;
-  total_words: number;
-  recordings_today: number;
-  streak_days: number;
-}
+import type { UsageStats } from "../types";
 
 function formatDuration(secs: number): string {
   const h = Math.floor(secs / 3600);
@@ -31,7 +24,7 @@ function StatItem({ value, label }: StatItemProps) {
   return (
     <div className="flex flex-col items-center gap-0.5 px-3">
       <span className="text-white/70 text-sm font-semibold font-mono tabular-nums">{value}</span>
-      <span className="text-white/25 text-[10px] font-mono">{label}</span>
+      <span className="text-white/40 text-[10px] font-mono">{label}</span>
     </div>
   );
 }
@@ -41,10 +34,10 @@ interface Props {
 }
 
 export default function StatsCard({ refreshTrigger }: Props) {
-  const [stats, setStats] = useState<Stats | null>(null);
+  const [stats, setStats] = useState<UsageStats | null>(null);
 
   const load = useCallback(async () => {
-    const s = await invoke<Stats>("get_usage_stats").catch(() => null);
+    const s = await invoke<UsageStats>("get_usage_stats").catch(() => null);
     setStats(s);
   }, []);
 
@@ -57,7 +50,7 @@ export default function StatsCard({ refreshTrigger }: Props) {
       <StatItem value={formatCount(stats.total_recordings)} label="recordings" />
       <StatItem value={formatDuration(stats.total_duration_seconds)} label="total time" />
       <StatItem value={formatCount(stats.total_words)} label="words" />
-      <StatItem value={String(stats.recordings_today)} label="today" />
+      <StatItem value={stats.recordings_today.toString()} label="today" />
       {stats.streak_days > 1 && (
         <StatItem value={`${stats.streak_days}🔥`} label="day streak" />
       )}

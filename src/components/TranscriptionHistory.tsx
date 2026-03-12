@@ -1,17 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-
-interface TranscriptionEntry {
-  id: number;
-  text: string;
-  duration_seconds: number;
-  model_used: string;
-  created_at: string;
-  word_count: number;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-interface Props {}
+import { useToast } from "../hooks/useToast";
+import { logger } from "../utils/logger";
+import type { TranscriptionEntry } from "../types";
 
 function formatDate(isoString: string): string {
   try {
@@ -32,21 +23,16 @@ function formatDuration(secs: number): string {
   return `${Math.floor(secs / 60)}m ${Math.round(secs % 60)}s`;
 }
 
-export default function TranscriptionHistory(_props: Props) {
+export default function TranscriptionHistory() {
   const [entries, setEntries] = useState<TranscriptionEntry[]>([]);
   const [query, setQuery] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const { toast, showToast } = useToast();
   const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [isLicensed, setIsLicensed] = useState(false);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const PAGE = 30;
-
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2500);
-  }
 
   const loadHistory = useCallback(async (newOffset = 0, searchQuery = "") => {
     try {
@@ -68,12 +54,12 @@ export default function TranscriptionHistory(_props: Props) {
       setEntries(result);
       setOffset(0);
     } catch (e) {
-      console.error("Failed to load history:", e);
+      logger.error("Failed to load history:", e);
     }
   }, []);
 
   useEffect(() => {
-    invoke<string>("get_license_status").then((s) => setIsLicensed(s === "Licensed" || s === "GracePeriod")).catch(() => {});
+    invoke<string>("get_license_status").then((s) => setIsLicensed(s === "Licensed" || s === "GracePeriod")).catch((e) => logger.debug("get_license_status:", e));
     loadHistory(0, "");
   }, [loadHistory]);
 
@@ -92,7 +78,7 @@ export default function TranscriptionHistory(_props: Props) {
       if (expandedId === id) setExpandedId(null);
       showToast("Deleted");
     } catch (e) {
-      console.error("Delete failed:", e);
+      logger.error("Delete failed:", e);
     }
   }
 
@@ -102,7 +88,7 @@ export default function TranscriptionHistory(_props: Props) {
       showToast("✓ Copied");
     } catch {
       // fallback: use tauri paste_transcription just to copy
-      await invoke("paste_transcription", { text }).catch(() => {});
+      await invoke("paste_transcription", { text }).catch((e) => logger.debug("paste_transcription:", e));
       showToast("✓ Copied");
     }
   }
@@ -119,7 +105,7 @@ export default function TranscriptionHistory(_props: Props) {
       URL.revokeObjectURL(url);
       showToast("✓ Exported");
     } catch (e) {
-      console.error("Export failed:", e);
+      logger.error("Export failed:", e);
     }
   }
 
@@ -130,7 +116,7 @@ export default function TranscriptionHistory(_props: Props) {
       setShowConfirmClear(false);
       showToast("History cleared");
     } catch (e) {
-      console.error("Clear failed:", e);
+      logger.error("Clear failed:", e);
     }
   }
 
@@ -145,8 +131,7 @@ export default function TranscriptionHistory(_props: Props) {
           {isLicensed ? (
             <div className="relative group">
               <button
-                className="text-white/30 hover:text-white/70 transition-colors text-xs px-3 py-1.5 rounded-lg border border-white/10 hover:border-white/20 cursor-pointer"
-                style={{ fontFamily: "'DM Sans', sans-serif" }}
+                className="text-white/50 hover:text-white/70 transition-colors text-xs px-3 py-1.5 rounded-lg border border-white/10 hover:border-white/20 cursor-pointer font-sans"
               >
                 Export ▾
               </button>
@@ -155,8 +140,7 @@ export default function TranscriptionHistory(_props: Props) {
                   <button
                     key={fmt}
                     onClick={() => handleExport(fmt)}
-                    className="px-4 py-2 text-xs text-white/60 hover:text-white hover:bg-white/5 text-left cursor-pointer"
-                    style={{ fontFamily: "'DM Sans', sans-serif" }}
+                    className="px-4 py-2 text-xs text-white/60 hover:text-white hover:bg-white/5 text-left cursor-pointer font-sans"
                   >
                     {fmt.toUpperCase()}
                   </button>
@@ -165,17 +149,15 @@ export default function TranscriptionHistory(_props: Props) {
             </div>
           ) : (
             <span
-              className="text-white/20 text-xs px-3 py-1.5 rounded-lg border border-white/[0.05] cursor-default"
+              className="text-white/35 text-xs px-3 py-1.5 rounded-lg border border-white/[0.05] cursor-default font-sans"
               title="Upgrade to export"
-              style={{ fontFamily: "'DM Sans', sans-serif" }}
             >
               🔒 Export
             </span>
           )}
           <button
             onClick={() => setShowConfirmClear(true)}
-            className="text-red-400/50 hover:text-red-400 transition-colors text-xs px-3 py-1.5 rounded-lg border border-red-500/10 hover:border-red-500/30 cursor-pointer"
-            style={{ fontFamily: "'DM Sans', sans-serif" }}
+            className="text-red-400/50 hover:text-red-400 transition-colors text-xs px-3 py-1.5 rounded-lg border border-red-500/10 hover:border-red-500/30 cursor-pointer font-sans"
           >
             Clear All
           </button>
@@ -189,13 +171,12 @@ export default function TranscriptionHistory(_props: Props) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search transcriptions…"
-          className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-2.5 text-white/80 text-sm placeholder:text-white/20 outline-none focus:border-emerald-500/40 transition-colors"
-          style={{ fontFamily: "'DM Sans', sans-serif" }}
+          className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-4 py-2.5 text-white/80 text-sm placeholder:text-white/35 outline-none focus:border-emerald-500/40 transition-colors font-sans"
         />
         {query && (
           <button
             onClick={() => setQuery("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 cursor-pointer text-xs"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/60 cursor-pointer text-xs"
           >
             ✕
           </button>
@@ -203,15 +184,15 @@ export default function TranscriptionHistory(_props: Props) {
       </div>
 
       {/* Entry list */}
-      <div className="space-y-2 overflow-y-auto pr-1" style={{ maxHeight: "calc(100vh - 200px)" }}>
+      <div className="space-y-2 overflow-y-auto pr-1 max-h-[calc(100vh-200px)]">
         {entries.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3 opacity-50 select-none">
             <span className="text-5xl text-white/10">🕐</span>
-            <p className="text-white/25 text-sm">
+            <p className="text-white/40 text-sm">
               {query ? "No results found" : "No transcriptions yet"}
             </p>
             {!query && (
-              <p className="text-white/15 text-xs text-center max-w-xs leading-relaxed">
+              <p className="text-white/50 text-xs text-center max-w-xs leading-relaxed">
                 Start a recording with ⌘⇧V and your transcriptions will appear here
               </p>
             )}
@@ -233,14 +214,12 @@ export default function TranscriptionHistory(_props: Props) {
                 >
                   <div className="flex-1 min-w-0">
                     <p
-                      className="text-white/75 text-sm leading-relaxed"
-                      style={{ fontFamily: "'DM Sans', sans-serif" }}
+                      className="text-white/75 text-sm leading-relaxed font-sans"
                     >
                       {isExpanded ? entry.text : preview}
                     </p>
                     <div
-                      className="flex items-center gap-3 mt-2 text-white/25 text-xs"
-                      style={{ fontFamily: "'DM Mono', monospace" }}
+                      className="flex items-center gap-3 mt-2 text-white/40 text-xs font-mono"
                     >
                       <span>{formatDate(entry.created_at)}</span>
                       <span>·</span>
@@ -251,7 +230,7 @@ export default function TranscriptionHistory(_props: Props) {
                       <span className="text-emerald-500/40">{entry.model_used}</span>
                     </div>
                   </div>
-                  <span className="text-white/20 text-xs mt-0.5 shrink-0">
+                  <span className="text-white/35 text-xs mt-0.5 shrink-0">
                     {isExpanded ? "▲" : "▼"}
                   </span>
                 </div>
@@ -261,15 +240,13 @@ export default function TranscriptionHistory(_props: Props) {
                   <div className="px-4 pb-3 flex items-center gap-2 border-t border-white/[0.04] pt-3">
                     <button
                       onClick={() => handleCopy(entry.text)}
-                      className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors cursor-pointer"
-                      style={{ fontFamily: "'DM Sans', sans-serif" }}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors cursor-pointer font-sans"
                     >
                       Copy
                     </button>
                     <button
                       onClick={() => handleDelete(entry.id)}
-                      className="text-xs px-3 py-1.5 rounded-lg bg-red-500/5 text-red-400/60 hover:bg-red-500/10 hover:text-red-400 transition-colors cursor-pointer"
-                      style={{ fontFamily: "'DM Sans', sans-serif" }}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-red-500/5 text-red-400/60 hover:bg-red-500/10 hover:text-red-400 transition-colors cursor-pointer font-sans"
                     >
                       Delete
                     </button>
@@ -284,8 +261,7 @@ export default function TranscriptionHistory(_props: Props) {
         {hasMore && !query && (
           <button
             onClick={() => loadHistory(offset, "")}
-            className="w-full text-center text-white/30 hover:text-white/60 text-xs py-3 transition-colors cursor-pointer"
-            style={{ fontFamily: "'DM Sans', sans-serif" }}
+            className="w-full text-center text-white/50 hover:text-white/60 text-xs py-3 transition-colors cursor-pointer font-sans"
           >
             Load more
           </button>
@@ -296,30 +272,22 @@ export default function TranscriptionHistory(_props: Props) {
       {showConfirmClear && (
         <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/50">
           <div className="bg-[#0d1a14] border border-white/10 rounded-2xl p-6 max-w-xs w-full mx-4 shadow-2xl">
-            <h3
-              className="text-white/90 font-semibold mb-2"
-              style={{ fontFamily: "'DM Sans', sans-serif" }}
-            >
+            <h3 className="text-white/90 font-semibold mb-2 font-sans">
               Clear all history?
             </h3>
-            <p
-              className="text-white/40 text-sm mb-5"
-              style={{ fontFamily: "'DM Sans', sans-serif" }}
-            >
+            <p className="text-white/40 text-sm mb-5 font-sans">
               This will permanently delete all transcription history. This can't be undone.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowConfirmClear(false)}
-                className="flex-1 py-2 rounded-xl border border-white/10 text-white/50 hover:text-white/80 text-sm transition-colors cursor-pointer"
-                style={{ fontFamily: "'DM Sans', sans-serif" }}
+                className="flex-1 py-2 rounded-xl border border-white/10 text-white/50 hover:text-white/80 text-sm transition-colors cursor-pointer font-sans"
               >
                 Cancel
               </button>
               <button
                 onClick={handleClearAll}
-                className="flex-1 py-2 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 text-sm transition-colors cursor-pointer"
-                style={{ fontFamily: "'DM Sans', sans-serif" }}
+                className="flex-1 py-2 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 text-sm transition-colors cursor-pointer font-sans"
               >
                 Clear All
               </button>
@@ -330,10 +298,7 @@ export default function TranscriptionHistory(_props: Props) {
 
       {/* Toast */}
       {toast && (
-        <div
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs"
-          style={{ fontFamily: "'DM Mono', monospace" }}
-        >
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono">
           {toast}
         </div>
       )}

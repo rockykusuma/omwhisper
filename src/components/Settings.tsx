@@ -4,39 +4,10 @@ import { listen } from "@tauri-apps/api/event";
 import {
   Sliders, Mic, FileText, CreditCard, Info, Sparkles
 } from "lucide-react";
+import { logger } from "../utils/logger";
+import type { AppSettings, BuiltInStyle, CustomStyle, OllamaStatus, StorageInfo } from "../types";
 
-interface Settings {
-  hotkey: string;
-  active_model: string;
-  language: string;
-  auto_launch: boolean;
-  auto_paste: boolean;
-  show_overlay: boolean;
-  audio_input_device: string | null;
-  vad_sensitivity: number;
-  onboarding_complete: boolean;
-  log_level: string;
-  sound_enabled: boolean;
-  sound_volume: number;
-  launch_sound_enabled: boolean;
-  restore_clipboard: boolean;
-  clipboard_restore_delay_ms: number;
-  recording_mode: string;
-  auto_delete_after_days: number | null;
-  ai_backend: string;
-  ai_ollama_model: string;
-  ai_ollama_url: string;
-  ai_cloud_model: string;
-  ai_cloud_api_url: string;
-  ai_timeout_seconds: number;
-  active_polish_style: string;
-  translate_target_language: string;
-  smart_dictation_hotkey: string;
-}
-
-interface BuiltInStyle { id: string; name: string; description: string; }
-interface CustomStyle { name: string; system_prompt: string; }
-interface OllamaStatus { running: boolean; models: string[]; }
+type Settings = AppSettings;
 
 type Tab = "general" | "audio" | "transcription" | "ai" | "license" | "about";
 
@@ -80,16 +51,11 @@ function SettingRow({
     <div className="flex items-center justify-between gap-4 py-3 border-b border-white/[0.04] last:border-0">
       <div>
         <p className="text-white/80 text-sm">{label}</p>
-        {description && <p className="text-white/30 text-xs mt-0.5">{description}</p>}
+        {description && <p className="text-white/50 text-xs mt-0.5">{description}</p>}
       </div>
       <div className="shrink-0">{children}</div>
     </div>
   );
-}
-
-interface StorageInfo {
-  db_size_bytes: number;
-  record_count: number;
 }
 
 export default function SettingsPanel() {
@@ -139,7 +105,7 @@ export default function SettingsPanel() {
   }
 
   async function handleDeleteApiKey() {
-    await invoke("delete_cloud_api_key_cmd").catch(() => {});
+    await invoke("delete_cloud_api_key_cmd").catch((e) => logger.debug("delete_cloud_api_key_cmd:", e));
     setApiKeySet(false);
   }
 
@@ -181,7 +147,7 @@ export default function SettingsPanel() {
 
   if (!settings) {
     return (
-      <div className="flex items-center justify-center h-64 text-white/20 text-sm">
+      <div className="flex items-center justify-center h-64 text-white/35 text-sm">
         Loading…
       </div>
     );
@@ -219,7 +185,7 @@ export default function SettingsPanel() {
 
         {activeTab === "general" && (
           <div>
-            <h3 className="text-white/30 text-[10px] uppercase tracking-widest mb-4 font-mono">General</h3>
+            <h3 className="text-white/50 text-[10px] uppercase tracking-widest mb-4 font-mono">General</h3>
             <div className="card px-5">
               <SettingRow label="Global Hotkey" description="Toggle recording from anywhere">
                 <div className="px-3 py-1.5 rounded-lg bg-white/[0.06] text-white/60 text-xs font-mono">
@@ -283,7 +249,7 @@ export default function SettingsPanel() {
               </SettingRow>
             </div>
 
-            <h3 className="text-white/30 text-[10px] uppercase tracking-widest mt-6 mb-4 font-mono">Storage</h3>
+            <h3 className="text-white/50 text-[10px] uppercase tracking-widest mt-6 mb-4 font-mono">Storage</h3>
             <div className="card px-5">
               <SettingRow label="Auto-Delete History" description="Remove transcriptions older than">
                 <select
@@ -302,8 +268,8 @@ export default function SettingsPanel() {
               </SettingRow>
               {storageInfo && (
                 <div className="py-3 flex items-center justify-between">
-                  <p className="text-white/30 text-xs">{storageInfo.record_count} transcription{storageInfo.record_count !== 1 ? "s" : ""} stored</p>
-                  <p className="text-white/20 text-xs font-mono">{(storageInfo.db_size_bytes / 1024).toFixed(1)} KB</p>
+                  <p className="text-white/50 text-xs">{storageInfo.record_count} transcription{storageInfo.record_count !== 1 ? "s" : ""} stored</p>
+                  <p className="text-white/35 text-xs font-mono">{(storageInfo.db_size_bytes / 1024).toFixed(1)} KB</p>
                 </div>
               )}
             </div>
@@ -312,7 +278,7 @@ export default function SettingsPanel() {
 
         {activeTab === "audio" && (
           <div>
-            <h3 className="text-white/30 text-[10px] uppercase tracking-widest mb-4 font-mono">Audio</h3>
+            <h3 className="text-white/50 text-[10px] uppercase tracking-widest mb-4 font-mono">Audio</h3>
             <div className="card px-5">
               <SettingRow label="Microphone" description="Input device for recording">
                 <select
@@ -370,7 +336,7 @@ export default function SettingsPanel() {
 
         {activeTab === "transcription" && (
           <div>
-            <h3 className="text-white/30 text-[10px] uppercase tracking-widest mb-4 font-mono">Transcription</h3>
+            <h3 className="text-white/50 text-[10px] uppercase tracking-widest mb-4 font-mono">Transcription</h3>
             <div className="card px-5">
               <SettingRow label="Active Model" description="Whisper model used for transcription">
                 <div className="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-mono">
@@ -400,7 +366,7 @@ export default function SettingsPanel() {
 
         {activeTab === "ai" && (
           <div>
-            <h3 className="text-white/30 text-[10px] uppercase tracking-widest mb-4 font-mono">AI Processing</h3>
+            <h3 className="text-white/50 text-[10px] uppercase tracking-widest mb-4 font-mono">AI Processing</h3>
 
             {/* Backend selector */}
             <div className="card px-5 mb-5">
@@ -422,7 +388,7 @@ export default function SettingsPanel() {
                 </div>
               </SettingRow>
               {settings.ai_backend === "disabled" && (
-                <p className="text-white/25 text-xs pb-3">Smart Dictation shortcut (⌘⇧B) will paste raw transcription.</p>
+                <p className="text-white/40 text-xs pb-3">Smart Dictation shortcut (⌘⇧B) will paste raw transcription.</p>
               )}
             </div>
 
@@ -433,7 +399,7 @@ export default function SettingsPanel() {
                   <div>
                     <p className="text-white/80 text-sm">Ollama Status</p>
                     {ollamaStatus === null
-                      ? <p className="text-white/30 text-xs mt-0.5">Not checked yet</p>
+                      ? <p className="text-white/50 text-xs mt-0.5">Not checked yet</p>
                       : <p className={`text-xs mt-0.5 ${ollamaStatus.running ? "text-emerald-400" : "text-red-400/70"}`}>
                           {ollamaStatus.running ? `Running · ${ollamaStatus.models.length} model(s)` : "Not running"}
                         </p>
@@ -516,7 +482,7 @@ export default function SettingsPanel() {
                         className="bg-white/[0.06] border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none focus:border-violet-500/40 w-32 font-mono"
                         onKeyDown={(e) => e.key === "Enter" && handleSaveApiKey()}
                       />
-                      <button onClick={() => setShowApiKey((v) => !v)} className="text-white/30 hover:text-white/60 text-xs cursor-pointer">{showApiKey ? "Hide" : "Show"}</button>
+                      <button onClick={() => setShowApiKey((v) => !v)} className="text-white/50 hover:text-white/60 text-xs cursor-pointer">{showApiKey ? "Hide" : "Show"}</button>
                       <button onClick={handleSaveApiKey} disabled={!apiKeyInput.trim()} className="btn-ghost text-xs py-1 px-2">Save</button>
                     </div>
                   )}
@@ -539,14 +505,14 @@ export default function SettingsPanel() {
                   </button>
                   {testResult && <span className={`text-xs font-mono ${testResult.startsWith("✓") ? "text-emerald-400" : "text-red-400/70"}`}>{testResult}</span>}
                 </div>
-                <p className="text-white/20 text-xs pb-3 leading-relaxed">
+                <p className="text-white/35 text-xs pb-3 leading-relaxed">
                   When using Cloud API, your transcription text is sent to the provider. Audio never leaves your device.
                 </p>
               </div>
             )}
 
             {/* Smart Dictation shortcut + style */}
-            <h3 className="text-white/30 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Smart Dictation</h3>
+            <h3 className="text-white/50 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Smart Dictation</h3>
             <div className="card px-5 mb-5">
               <SettingRow label="Shortcut" description="Hotkey for Smart Dictation">
                 <div className="px-3 py-1.5 rounded-lg bg-white/[0.06] text-white/60 text-xs font-mono">⌘⇧B</div>
@@ -588,30 +554,30 @@ export default function SettingsPanel() {
             </div>
 
             {/* Polish styles */}
-            <h3 className="text-white/30 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Polish Styles</h3>
+            <h3 className="text-white/50 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Polish Styles</h3>
             <div className="card px-5 mb-5">
               {builtInStyles.map((s) => (
                 <div key={s.id} className="flex items-center justify-between py-2.5 border-b border-white/[0.04] last:border-0">
                   <div>
                     <p className="text-white/70 text-xs font-medium">{s.name}</p>
-                    <p className="text-white/25 text-xs">{s.description}</p>
+                    <p className="text-white/40 text-xs">{s.description}</p>
                   </div>
-                  <span className="text-white/15 text-[10px] font-mono">built-in</span>
+                  <span className="text-white/50 text-[10px] font-mono">built-in</span>
                 </div>
               ))}
             </div>
 
             {/* Custom styles */}
-            <h3 className="text-white/30 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Custom Styles</h3>
+            <h3 className="text-white/50 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Custom Styles</h3>
             <div className="card px-5 mb-4">
               {customStyles.length === 0 && (
-                <p className="text-white/20 text-xs py-3">No custom styles yet.</p>
+                <p className="text-white/35 text-xs py-3">No custom styles yet.</p>
               )}
               {customStyles.map((s) => (
                 <div key={s.name} className="flex items-start justify-between py-2.5 border-b border-white/[0.04] last:border-0 gap-3">
                   <div className="min-w-0">
                     <p className="text-white/70 text-xs font-medium truncate">{s.name}</p>
-                    <p className="text-white/25 text-xs truncate">{s.system_prompt.slice(0, 60)}…</p>
+                    <p className="text-white/40 text-xs truncate">{s.system_prompt.slice(0, 60)}…</p>
                   </div>
                   <button onClick={() => handleRemoveCustomStyle(s.name)} className="text-red-400/40 hover:text-red-400 text-xs shrink-0 cursor-pointer">Remove</button>
                 </div>
@@ -656,7 +622,7 @@ function AboutSection() {
   const [copying, setCopying] = useState(false);
 
   useEffect(() => {
-    invoke<string>("get_app_version").then(setVersion).catch(() => {});
+    invoke<string>("get_app_version").then(setVersion).catch((e) => logger.debug("get_app_version:", e));
   }, []);
 
   async function handleCopyDebugInfo() {
@@ -666,7 +632,7 @@ function AboutSection() {
       await navigator.clipboard.writeText(info);
     } catch {
       const info = await invoke<string>("get_debug_info").catch(() => "");
-      await invoke("paste_transcription", { text: info }).catch(() => {});
+      await invoke("paste_transcription", { text: info }).catch((e) => logger.debug("paste_transcription:", e));
     } finally {
       setTimeout(() => setCopying(false), 1500);
     }
@@ -684,13 +650,13 @@ function AboutSection() {
 
   return (
     <div>
-      <h3 className="text-white/30 text-[10px] uppercase tracking-widest mb-4 font-mono">About</h3>
+      <h3 className="text-white/50 text-[10px] uppercase tracking-widest mb-4 font-mono">About</h3>
       <div className="card px-5">
         <SettingRow label="Version">
-          <span className="text-white/30 text-xs font-mono">{version}</span>
+          <span className="text-white/50 text-xs font-mono">{version}</span>
         </SettingRow>
         <SettingRow label="Model Storage">
-          <span className="text-white/30 text-xs font-mono truncate max-w-[180px]">
+          <span className="text-white/50 text-xs font-mono truncate max-w-[180px]">
             ~/Library/Application Support/com.omwhisper.app
           </span>
         </SettingRow>
@@ -713,7 +679,7 @@ function AboutSection() {
           </button>
         </SettingRow>
         <div className="py-4 text-center">
-          <p className="text-white/20 text-xs">Made with ॐ by Rakesh Kusuma</p>
+          <p className="text-white/35 text-xs">Made with ॐ by Rakesh Kusuma</p>
         </div>
       </div>
     </div>
@@ -795,7 +761,7 @@ function LicenseSection() {
 
   return (
     <div>
-      <h3 className="text-white/30 text-[10px] uppercase tracking-widest mb-4 font-mono">License</h3>
+      <h3 className="text-white/50 text-[10px] uppercase tracking-widest mb-4 font-mono">License</h3>
       <div className="card p-5 space-y-3">
         {isActive ? (
           <>
@@ -809,17 +775,17 @@ function LicenseSection() {
               <button
                 onClick={handleDeactivate}
                 disabled={deactivating}
-                className="text-white/25 hover:text-red-400 text-xs transition-colors cursor-pointer disabled:opacity-50"
+                className="text-white/40 hover:text-red-400 text-xs transition-colors cursor-pointer disabled:opacity-50"
                 aria-label="Deactivate license"
               >
                 {deactivating ? "Deactivating…" : "Deactivate"}
               </button>
             </div>
             {info?.email && (
-              <p className="text-white/30 text-xs font-mono">{info.email}</p>
+              <p className="text-white/50 text-xs font-mono">{info.email}</p>
             )}
             {info?.activated_on && (
-              <p className="text-white/20 text-xs font-mono">
+              <p className="text-white/35 text-xs font-mono">
                 Activated {new Date(info.activated_on).toLocaleDateString()}
               </p>
             )}
@@ -837,7 +803,7 @@ function LicenseSection() {
                 value={key}
                 onChange={(e) => { setKey(e.target.value); setError(null); }}
                 placeholder="Enter license key…"
-                className="flex-1 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white/80 text-sm placeholder:text-white/20 outline-none focus:border-emerald-500/40 transition-colors font-mono"
+                className="flex-1 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white/80 text-sm placeholder:text-white/35 outline-none focus:border-emerald-500/40 transition-colors font-mono"
                 aria-label="License key"
               />
               <button
@@ -849,7 +815,7 @@ function LicenseSection() {
               </button>
             </div>
             {error && <p className="text-red-400/70 text-xs">{error}</p>}
-            <p className="text-white/20 text-xs">
+            <p className="text-white/35 text-xs">
               Don't have a key?{" "}
               <a
                 href="#"

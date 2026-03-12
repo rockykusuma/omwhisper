@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { X } from "lucide-react";
+import { useToast } from "../hooks/useToast";
+import { logger } from "../utils/logger";
 
 interface VocabData {
   words: string[];
@@ -12,12 +14,7 @@ export default function Vocabulary() {
   const [newWord, setNewWord] = useState("");
   const [newFrom, setNewFrom] = useState("");
   const [newTo, setNewTo] = useState("");
-  const [toast, setToast] = useState<string | null>(null);
-
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2000);
-  }
+  const { toast, showToast } = useToast(2000);
 
   async function load() {
     const result = await invoke<VocabData>("get_vocabulary").catch(() => ({ words: [], replacements: {} }));
@@ -29,14 +26,14 @@ export default function Vocabulary() {
   async function handleAddWord() {
     const word = newWord.trim();
     if (!word) return;
-    await invoke("add_vocabulary_word", { word }).catch(() => {});
+    await invoke("add_vocabulary_word", { word }).catch((e) => logger.debug("add_vocabulary_word:", e));
     setNewWord("");
     await load();
     showToast(`Added "${word}"`);
   }
 
   async function handleRemoveWord(word: string) {
-    await invoke("remove_vocabulary_word", { word }).catch(() => {});
+    await invoke("remove_vocabulary_word", { word }).catch((e) => logger.debug("remove_vocabulary_word:", e));
     await load();
   }
 
@@ -44,7 +41,7 @@ export default function Vocabulary() {
     const from = newFrom.trim();
     const to = newTo.trim();
     if (!from || !to) return;
-    await invoke("add_word_replacement", { from, to }).catch(() => {});
+    await invoke("add_word_replacement", { from, to }).catch((e) => logger.debug("add_word_replacement:", e));
     setNewFrom("");
     setNewTo("");
     await load();
@@ -52,7 +49,7 @@ export default function Vocabulary() {
   }
 
   async function handleRemoveReplacement(from: string) {
-    await invoke("remove_word_replacement", { from }).catch(() => {});
+    await invoke("remove_word_replacement", { from }).catch((e) => logger.debug("remove_word_replacement:", e));
     await load();
   }
 
@@ -63,17 +60,17 @@ export default function Vocabulary() {
       {/* Header */}
       <div>
         <h2 className="text-xl font-bold text-white/90">Vocabulary</h2>
-        <p className="text-white/30 text-xs mt-1 font-mono">
+        <p className="text-white/50 text-xs mt-1 font-mono">
           Teach Whisper how to spell names, brands, and jargon
         </p>
       </div>
 
       {/* Custom Words */}
       <div>
-        <h3 className="text-white/30 text-[10px] uppercase tracking-widest mb-3 font-mono">
+        <h3 className="text-white/50 text-[10px] uppercase tracking-widest mb-3 font-mono">
           Custom Words
         </h3>
-        <p className="text-white/25 text-xs mb-3 leading-relaxed">
+        <p className="text-white/40 text-xs mb-3 leading-relaxed">
           Add proper names, acronyms, or technical terms. Whisper will prefer these exact spellings.
         </p>
         <div className="card p-4 space-y-3">
@@ -85,7 +82,7 @@ export default function Vocabulary() {
               onChange={(e) => setNewWord(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAddWord()}
               placeholder="e.g. OmWhisper, Rakesh, CUDA…"
-              className="flex-1 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white/80 text-sm placeholder:text-white/20 outline-none focus:border-emerald-500/40 transition-colors font-mono"
+              className="flex-1 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white/80 text-sm placeholder:text-white/35 outline-none focus:border-emerald-500/40 transition-colors font-mono"
               aria-label="Add custom word"
             />
             <button
@@ -108,7 +105,7 @@ export default function Vocabulary() {
                   {word}
                   <button
                     onClick={() => handleRemoveWord(word)}
-                    className="text-white/30 hover:text-red-400 transition-colors cursor-pointer"
+                    className="text-white/50 hover:text-red-400 transition-colors cursor-pointer"
                     aria-label={`Remove ${word}`}
                   >
                     <X size={11} />
@@ -117,17 +114,17 @@ export default function Vocabulary() {
               ))}
             </div>
           ) : (
-            <p className="text-white/15 text-xs font-mono">No custom words yet</p>
+            <p className="text-white/50 text-xs font-mono">No custom words yet</p>
           )}
         </div>
       </div>
 
       {/* Auto-Replacements */}
       <div>
-        <h3 className="text-white/30 text-[10px] uppercase tracking-widest mb-3 font-mono">
+        <h3 className="text-white/50 text-[10px] uppercase tracking-widest mb-3 font-mono">
           Auto-Replacements
         </h3>
-        <p className="text-white/25 text-xs mb-3 leading-relaxed">
+        <p className="text-white/40 text-xs mb-3 leading-relaxed">
           Replace words automatically after transcription. Case-insensitive, whole-word matching.
         </p>
         <div className="card p-4 space-y-3">
@@ -138,17 +135,17 @@ export default function Vocabulary() {
               value={newFrom}
               onChange={(e) => setNewFrom(e.target.value)}
               placeholder="Replace…"
-              className="flex-1 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white/80 text-sm placeholder:text-white/20 outline-none focus:border-emerald-500/40 transition-colors font-mono"
+              className="flex-1 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white/80 text-sm placeholder:text-white/35 outline-none focus:border-emerald-500/40 transition-colors font-mono"
               aria-label="Word to replace"
             />
-            <span className="text-white/20 text-sm shrink-0">→</span>
+            <span className="text-white/35 text-sm shrink-0">→</span>
             <input
               type="text"
               value={newTo}
               onChange={(e) => setNewTo(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAddReplacement()}
               placeholder="With…"
-              className="flex-1 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white/80 text-sm placeholder:text-white/20 outline-none focus:border-emerald-500/40 transition-colors font-mono"
+              className="flex-1 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white/80 text-sm placeholder:text-white/35 outline-none focus:border-emerald-500/40 transition-colors font-mono"
               aria-label="Replacement word"
             />
             <button
@@ -169,11 +166,11 @@ export default function Vocabulary() {
                   className="flex items-center gap-3 py-1.5 px-3 rounded-xl bg-white/[0.03] border border-white/[0.05]"
                 >
                   <span className="text-white/50 text-xs font-mono flex-1">{from}</span>
-                  <span className="text-white/20 text-xs">→</span>
+                  <span className="text-white/35 text-xs">→</span>
                   <span className="text-emerald-400/70 text-xs font-mono flex-1">{to}</span>
                   <button
                     onClick={() => handleRemoveReplacement(from)}
-                    className="text-white/20 hover:text-red-400 transition-colors cursor-pointer ml-1"
+                    className="text-white/35 hover:text-red-400 transition-colors cursor-pointer ml-1"
                     aria-label={`Remove replacement for ${from}`}
                   >
                     <X size={12} />
@@ -182,13 +179,13 @@ export default function Vocabulary() {
               ))}
             </div>
           ) : (
-            <p className="text-white/15 text-xs font-mono">No replacements yet</p>
+            <p className="text-white/50 text-xs font-mono">No replacements yet</p>
           )}
         </div>
       </div>
 
       {/* Examples hint */}
-      <div className="text-white/15 text-xs leading-relaxed font-mono space-y-0.5">
+      <div className="text-white/50 text-xs leading-relaxed font-mono space-y-0.5">
         <p>Examples: "okay" → "OK" · "gonna" → "going to" · "OmWhisper" as custom word</p>
       </div>
 
