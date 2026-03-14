@@ -94,6 +94,17 @@ pub fn paste_to_app(app_name: &str) -> Result<()> {
     // Wait for the app to come to front
     std::thread::sleep(std::time::Duration::from_millis(300));
 
+    // Check if Accessibility is actually granted for this process
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXIsProcessTrusted() -> bool;
+    }
+    let trusted = unsafe { AXIsProcessTrusted() };
+    tracing::info!("paste_to_app: AXIsProcessTrusted={}", trusted);
+    if !trusted {
+        return Err(anyhow::anyhow!("OmWhisper does not have Accessibility permission — grant it in System Settings → Privacy → Accessibility"));
+    }
+
     // Send Cmd+V via raw CGEventPost — works from any thread, no HIToolbox query
     unsafe {
         // Key down

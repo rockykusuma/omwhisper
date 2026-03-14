@@ -36,17 +36,22 @@ fn resolve_model_path(model_path: &str) -> PathBuf {
     if p.is_absolute() {
         return p.to_path_buf();
     }
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe| {
-            // debug/  ->  target/  ->  src-tauri/  ->  project root
-            exe.parent()?
-                .parent()?
-                .parent()?
-                .parent()
-                .map(|root| root.join(model_path))
-        })
-        .unwrap_or_else(|| p.to_path_buf())
+    // 1. App data dir (production + bundle dev)
+    if let Some(data_dir) = dirs::data_local_dir() {
+        let prod = data_dir.join("com.omwhisper.app").join(model_path);
+        if prod.exists() {
+            return prod;
+        }
+    }
+    // 2. Walk up from exe (cargo tauri dev: debug/ -> target/ -> src-tauri/ -> project root)
+    if let Some(dev) = std::env::current_exe().ok().and_then(|exe| {
+        exe.parent()?.parent()?.parent()?.parent().map(|r| r.join(model_path))
+    }) {
+        if dev.exists() {
+            return dev;
+        }
+    }
+    p.to_path_buf()
 }
 
 #[tauri::command]
@@ -430,7 +435,7 @@ pub async fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
             let _ = win.set_position(tauri::PhysicalPosition { x, y });
         }
         win.show().map_err(|e| e.to_string())?;
-        win.set_focus().map_err(|e| e.to_string())?;
+        // Don't steal focus — user must keep typing in their dictation target
     }
     Ok(())
 }
