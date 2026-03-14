@@ -73,7 +73,12 @@ export default function TranscriptionView({
   useEffect(() => {
     if (externalIsRecording !== undefined) {
       setIsRecording(externalIsRecording);
-      if (externalIsRecording) recordingStartRef.current = Date.now();
+      if (externalIsRecording) {
+        recordingStartRef.current = Date.now();
+        setSegments([]); // Clear previous recording when a new one starts
+        setPolishedLabel(null);
+        setError(null);
+      }
     }
   }, [externalIsRecording]);
 
