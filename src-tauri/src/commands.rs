@@ -186,6 +186,8 @@ pub async fn start_transcription(
                 }
             }
         }
+        // All audio chunks have been processed — signal the frontend to paste/save
+        let _ = app.emit("transcription-complete", ());
     });
 
     Ok(())
@@ -298,6 +300,10 @@ fn previous_app() -> &'static Mutex<Option<String>> {
     PREVIOUS_APP.get_or_init(|| Mutex::new(None))
 }
 
+pub fn get_previous_app() -> &'static Mutex<Option<String>> {
+    previous_app()
+}
+
 #[tauri::command]
 pub async fn capture_focused_app() -> Result<Option<String>, String> {
     let app_name = paste::get_frontmost_app();
@@ -325,14 +331,23 @@ pub async fn paste_transcription(text: String) -> Result<(), String> {
             let guard = previous_app().lock().unwrap();
             guard.clone()
         };
+        tracing::info!("paste_transcription: previous_app={:?}", app_name);
         if let Some(name) = app_name {
             if !name.to_lowercase().contains("omwhisper") {
-                tokio::task::spawn_blocking(move || {
+                let result = tokio::task::spawn_blocking(move || {
                     paste::paste_to_app(&name).map_err(|e| e.to_string())
                 })
                 .await
-                .map_err(|e| e.to_string())??;
+                .map_err(|e| e.to_string())?;
+                if let Err(e) = result {
+                    tracing::error!("paste_to_app failed: {}", e);
+                    // Don't propagate — clipboard is already set, user can paste manually
+                }
+            } else {
+                tracing::info!("paste_transcription: skipping paste — app is OmWhisper");
             }
+        } else {
+            tracing::warn!("paste_transcription: no previous_app captured");
         }
     }
 

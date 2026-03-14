@@ -67,9 +67,14 @@ export default function TranscriptionView({
   const [statsRefresh, setStatsRefresh] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const recordingStartRef = useRef<number>(0);
+  const isPendingPaste = useRef(false);
+  const pendingIsSmartDictation = useRef(false);
 
   useEffect(() => {
-    if (externalIsRecording !== undefined) setIsRecording(externalIsRecording);
+    if (externalIsRecording !== undefined) {
+      setIsRecording(externalIsRecording);
+      if (externalIsRecording) recordingStartRef.current = Date.now();
+    }
   }, [externalIsRecording]);
 
   useEffect(() => {
@@ -85,6 +90,70 @@ export default function TranscriptionView({
     });
     return () => { unlisten.then((f) => f()); };
   }, []);
+
+  useEffect(() => {
+    const unlisten = listen("hotkey-stop-recording", () => {
+      handleStopRecording();
+    });
+    return () => { unlisten.then((f) => f()); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const unlisten = listen("transcription-complete", () => {
+      if (!isPendingPaste.current) return;
+      isPendingPaste.current = false;
+      const smartDictation = pendingIsSmartDictation.current;
+
+      setSegments((currentSegments) => {
+        const rawText = currentSegments.map((s) => s.text).join(" ").trim();
+        if (!rawText) return currentSegments;
+
+        const durationSeconds = (Date.now() - recordingStartRef.current) / 1000;
+
+        if (smartDictation) {
+          (async () => {
+            setIsPolishing(true);
+            try {
+              const settings = await invoke<{ active_polish_style: string; translate_target_language: string }>("get_settings");
+              const style = settings.active_polish_style ?? "professional";
+              const polished = await invoke<string>("polish_text_cmd", { text: rawText, style });
+              setPolishedLabel(style);
+              await invoke("paste_transcription", { text: polished });
+              showToast("✓ AI-polished & copied");
+              invoke("save_transcription", {
+                text: polished,
+                durationSeconds,
+                modelUsed: activeModel,
+                source: "smart_dictation",
+                rawText,
+                polishStyle: style,
+              })
+                .then(() => setStatsRefresh((n) => n + 1))
+                .catch((e) => logger.error("save_transcription failed:", e));
+            } catch (e) {
+              showToast("⚠ AI polish failed — pasting raw text");
+              invoke("paste_transcription", { text: rawText }).catch((e) => logger.debug("paste_transcription:", e));
+              invoke("save_transcription", { text: rawText, durationSeconds, modelUsed: activeModel }).catch((e) => logger.debug("save_transcription:", e));
+              logger.error("Smart dictation polish failed:", e);
+            } finally {
+              setIsPolishing(false);
+            }
+          })();
+        } else {
+          setPolishedLabel(null);
+          invoke<void>("paste_transcription", { text: rawText })
+            .then(() => showToast("✓ Copied to clipboard"))
+            .catch((e) => logger.error("paste_transcription failed:", e));
+          invoke("save_transcription", { text: rawText, durationSeconds, modelUsed: activeModel })
+            .then(() => setStatsRefresh((n) => n + 1))
+            .catch((e) => logger.error("save_transcription failed:", e));
+        }
+
+        return currentSegments;
+      });
+    });
+    return () => { unlisten.then((f) => f()); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const unlisten = listen("usage-limit-reached", async () => {
@@ -156,70 +225,20 @@ export default function TranscriptionView({
   }
 
   async function handleStopRecording() {
+    // Mark that we want to paste when transcription-complete fires
+    pendingIsSmartDictation.current = isSmartDictation;
+    isPendingPaste.current = true;
+
     try {
       await invoke("stop_transcription");
     } catch (e) {
       setError(String(e));
+      isPendingPaste.current = false; // don't paste if stop failed
     } finally {
       setIsRecording(false);
       onRecordingChange?.(false);
       setTimeout(() => invoke("hide_overlay").catch((e) => logger.debug("hide_overlay:", e)), 1500);
     }
-
-    setSegments((currentSegments) => {
-      const rawText = currentSegments.map((s) => s.text).join(" ").trim();
-      if (!rawText) return currentSegments;
-
-      const durationSeconds = (Date.now() - recordingStartRef.current) / 1000;
-
-      if (isSmartDictation) {
-        // Smart Dictation flow: polish then paste
-        (async () => {
-          setIsPolishing(true);
-          try {
-            const settings = await invoke<{ active_polish_style: string; translate_target_language: string }>("get_settings");
-            const style = settings.active_polish_style ?? "professional";
-            const polished = await invoke<string>("polish_text_cmd", { text: rawText, style });
-            setPolishedLabel(style);
-            await invoke("paste_transcription", { text: polished });
-            showToast("✓ AI-polished & copied");
-            invoke("save_transcription", {
-              text: polished,
-              durationSeconds,
-              modelUsed: activeModel,
-              source: "smart_dictation",
-              rawText,
-              polishStyle: style,
-            })
-              .then(() => setStatsRefresh((n) => n + 1))
-              .catch((e) => logger.error("save_transcription failed:", e));
-          } catch (e) {
-            // Fallback: paste raw text if AI fails
-            showToast("⚠ AI polish failed — pasting raw text");
-            invoke("paste_transcription", { text: rawText }).catch((e) => logger.debug("paste_transcription:", e));
-            invoke("save_transcription", { text: rawText, durationSeconds, modelUsed: activeModel }).catch((e) => logger.debug("save_transcription:", e));
-            logger.error("Smart dictation polish failed:", e);
-          } finally {
-            setIsPolishing(false);
-          }
-        })();
-      } else {
-        // Regular recording flow
-        setPolishedLabel(null);
-        invoke<void>("paste_transcription", { text: rawText })
-          .then(() => showToast("✓ Copied to clipboard"))
-          .catch((e) => logger.error("paste_transcription failed:", e));
-        invoke("save_transcription", {
-          text: rawText,
-          durationSeconds,
-          modelUsed: activeModel,
-        })
-          .then(() => setStatsRefresh((n) => n + 1))
-          .catch((e) => logger.error("save_transcription failed:", e));
-      }
-
-      return currentSegments;
-    });
   }
 
   const hasContent = segments.length > 0 || loading;

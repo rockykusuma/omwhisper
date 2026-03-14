@@ -33,7 +33,7 @@ function App() {
   useEffect(() => {
     const startRecording = async (smartDictation = false) => {
       try {
-        await invoke("capture_focused_app");
+        // capture_focused_app is now called in Rust shortcut handler before window activation
         await invoke("start_transcription", { model: modelPath });
         setIsRecording(true);
         setIsSmartDictation(smartDictation);

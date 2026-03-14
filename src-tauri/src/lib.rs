@@ -184,27 +184,31 @@ pub fn run() {
                         if is_push_to_talk {
                             // Push-to-talk: key-down always starts (if not already recording)
                             if !is_recording {
+                                // Capture focused app BEFORE showing window to avoid stealing focus
+                                let focused = crate::paste::get_frontmost_app();
+                                *crate::commands::get_previous_app().lock().unwrap() = focused;
                                 let _ = app.emit("hotkey-toggle-recording", ());
                                 if let Some(win) = app.get_webview_window("main") {
                                     let _ = win.show();
-                                    let _ = win.set_focus();
+                                    // Don't steal focus — user needs to keep dictating
                                 }
                             }
                         } else {
                             // Toggle mode: press toggles
                             if is_recording {
-                                let mut s = state_for_shortcut.lock().unwrap();
-                                s.usage_running.store(false, std::sync::atomic::Ordering::SeqCst);
-                                if let Some(capture) = s.capture.take() {
-                                    capture.stop();
-                                }
-                                let _ = app.emit("recording-state", false);
+                                // Delegate stop to frontend so stop_transcription drains
+                                // remaining audio before paste runs
+                                let _ = app.emit("hotkey-stop-recording", ());
                             } else {
+                                // Capture focused app BEFORE showing window
+                                let focused = crate::paste::get_frontmost_app();
+                                tracing::info!("hotkey pressed: captured frontmost app = {:?}", focused);
+                                *crate::commands::get_previous_app().lock().unwrap() = focused;
                                 let _ = app.emit("hotkey-toggle-recording", ());
-                            }
-                            if let Some(win) = app.get_webview_window("main") {
-                                let _ = win.show();
-                                let _ = win.set_focus();
+                                if let Some(win) = app.get_webview_window("main") {
+                                    let _ = win.show();
+                                    // Don't steal focus on start
+                                }
                             }
                         }
                     }
@@ -237,25 +241,33 @@ pub fn run() {
                         let is_recording = state_for_sd.lock().unwrap().capture.is_some();
                         if is_push_to_talk {
                             if !is_recording {
+                                // Capture focused app before showing window
+                                let focused = crate::paste::get_frontmost_app();
+                                tracing::info!("smart-dictation hotkey: captured frontmost app = {:?}", focused);
+                                *crate::commands::get_previous_app().lock().unwrap() = focused;
                                 state_for_sd.lock().unwrap().is_smart_dictation = true;
                                 let _ = app.emit("hotkey-smart-dictation", ());
+                                if let Some(win) = app.get_webview_window("main") {
+                                    let _ = win.show();
+                                    // Don't steal focus on start
+                                }
                             }
                         } else {
                             if is_recording {
-                                let mut s = state_for_sd.lock().unwrap();
-                                s.usage_running.store(false, std::sync::atomic::Ordering::SeqCst);
-                                if let Some(capture) = s.capture.take() {
-                                    capture.stop();
-                                }
-                                let _ = app.emit("recording-state", false);
+                                // Delegate stop to frontend for proper audio drain + paste
+                                let _ = app.emit("hotkey-stop-recording", ());
                             } else {
+                                // Capture focused app before showing window
+                                let focused = crate::paste::get_frontmost_app();
+                                tracing::info!("smart-dictation hotkey: captured frontmost app = {:?}", focused);
+                                *crate::commands::get_previous_app().lock().unwrap() = focused;
                                 state_for_sd.lock().unwrap().is_smart_dictation = true;
                                 let _ = app.emit("hotkey-smart-dictation", ());
+                                if let Some(win) = app.get_webview_window("main") {
+                                    let _ = win.show();
+                                    // Don't steal focus on start
+                                }
                             }
-                        }
-                        if let Some(win) = app.get_webview_window("main") {
-                            let _ = win.show();
-                            let _ = win.set_focus();
                         }
                     }
                     ShortcutState::Released => {
