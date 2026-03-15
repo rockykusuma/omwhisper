@@ -208,15 +208,10 @@ pub fn run() {
                     }
                     ShortcutState::Released => {
                         if is_push_to_talk {
-                            // Push-to-talk: key-up stops recording
+                            // Push-to-talk: key-up delegates to frontend so isPendingPaste is set
                             let is_recording = state_for_shortcut.lock().unwrap().capture.is_some();
                             if is_recording {
-                                let mut s = state_for_shortcut.lock().unwrap();
-                                s.usage_running.store(false, std::sync::atomic::Ordering::SeqCst);
-                                if let Some(capture) = s.capture.take() {
-                                    capture.stop();
-                                }
-                                let _ = app.emit("recording-state", false);
+                                let _ = app.emit("hotkey-stop-recording", ());
                             }
                         }
                     }
@@ -260,14 +255,10 @@ pub fn run() {
                     }
                     ShortcutState::Released => {
                         if is_push_to_talk {
+                            // Push-to-talk: delegate to frontend so isPendingPaste is set
                             let is_recording = state_for_sd.lock().unwrap().capture.is_some();
                             if is_recording {
-                                let mut s = state_for_sd.lock().unwrap();
-                                s.usage_running.store(false, std::sync::atomic::Ordering::SeqCst);
-                                if let Some(capture) = s.capture.take() {
-                                    capture.stop();
-                                }
-                                let _ = app.emit("recording-state", false);
+                                let _ = app.emit("hotkey-stop-recording", ());
                             }
                         }
                     }
