@@ -106,7 +106,7 @@ pub fn run() {
             let menu = Menu::with_items(app, &[&show_item, &toggle_item, &quit_item])?;
 
             let tray_icon = {
-                const TRAY_PNG: &[u8] = include_bytes!("../icons/tray-icon.png");
+                const TRAY_PNG: &[u8] = include_bytes!("../icons/tray-icon@2x.png");
                 let img = image::load_from_memory_with_format(TRAY_PNG, image::ImageFormat::Png)
                     .map(|i| i.into_rgba8())
                     .ok();
