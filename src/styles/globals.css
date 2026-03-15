@@ -27,7 +27,30 @@
   --nm-pressed-sm: inset 2px 2px 6px  var(--shadow-dark), inset -2px -2px 6px  var(--shadow-light);
 }
 
-/* ══ THEME 0 — Charcoal (default) ═══════════════════════════════════════ */
+/* ══ THEME 0 — Emerald ═══════════════════════════════════════════════════ */
+[data-theme="emerald"] {
+  --bg:           #dff0eb;
+  --shadow-dark:  #a0bdb6;
+  --shadow-light: #f0fdf4;
+
+  --t1: rgba(26, 46, 40, 0.88);
+  --t2: rgba(26, 46, 40, 0.55);
+  --t3: rgba(26, 46, 40, 0.38);
+  --t4: rgba(26, 46, 40, 0.22);
+
+  --accent:           #10b981;
+  --accent-glow:      rgba(16, 185, 129, 0.50);
+  --accent-glow-weak: rgba(16, 185, 129, 0.25);
+  --accent-bg:        rgba(16, 185, 129, 0.12);
+  --accent-grad-from: #6ee7b7;
+  --accent-grad-to:   #10b981;
+
+  --color-emerald-300: #6ee7b7;
+  --color-emerald-400: #10b981;
+  --color-emerald-500: #059669;
+}
+
+/* ══ THEME 1 — Charcoal (default) ════════════════════════════════════════ */
 :root,
 [data-theme="charcoal"] {
   --bg:           #1e2229;
@@ -47,73 +70,7 @@
   --accent-grad-to:   #25b87e;
 }
 
-/* ══ THEME 1 — Forest Dark ═══════════════════════════════════════════════ */
-[data-theme="forest-dark"] {
-  --bg:           #1c2821;
-  --shadow-dark:  #0e1812;
-  --shadow-light: #2a3a30;
-
-  --t1: rgba(255, 255, 255, 0.90);
-  --t2: rgba(255, 255, 255, 0.55);
-  --t3: rgba(255, 255, 255, 0.35);
-  --t4: rgba(255, 255, 255, 0.20);
-
-  --accent:           #34d399;
-  --accent-glow:      rgba(52, 211, 153, 0.50);
-  --accent-glow-weak: rgba(52, 211, 153, 0.25);
-  --accent-bg:        rgba(52, 211, 153, 0.12);
-  --accent-grad-from: #3de0a8;
-  --accent-grad-to:   #25b87e;
-}
-
-/* ══ THEME 2 — Sage Light ════════════════════════════════════════════════ */
-[data-theme="sage-light"] {
-  --bg:           #d4e2d8;
-  --shadow-dark:  #b0c2b8;
-  --shadow-light: #f0f8f4;
-
-  --t1: rgba(14, 26, 18, 0.88);
-  --t2: rgba(14, 26, 18, 0.55);
-  --t3: rgba(14, 26, 18, 0.38);
-  --t4: rgba(14, 26, 18, 0.22);
-
-  --accent:           #059669;
-  --accent-glow:      rgba(5, 150, 105, 0.45);
-  --accent-glow-weak: rgba(5, 150, 105, 0.22);
-  --accent-bg:        rgba(5, 150, 105, 0.12);
-  --accent-grad-from: #10b981;
-  --accent-grad-to:   #059669;
-
-  /* Adapt Tailwind emerald palette to a darker shade for contrast on light bg */
-  --color-emerald-300: #10b981;
-  --color-emerald-400: #059669;
-  --color-emerald-500: #047857;
-}
-
-/* ══ THEME 3 — Ocean Blue ════════════════════════════════════════════════ */
-[data-theme="ocean-blue"] {
-  --bg:           #ccd8e8;
-  --shadow-dark:  #aabccc;
-  --shadow-light: #eaf4ff;
-
-  --t1: rgba(8, 18, 32, 0.88);
-  --t2: rgba(8, 18, 32, 0.55);
-  --t3: rgba(8, 18, 32, 0.38);
-  --t4: rgba(8, 18, 32, 0.22);
-
-  --accent:           #0284c7;
-  --accent-glow:      rgba(2, 132, 199, 0.45);
-  --accent-glow-weak: rgba(2, 132, 199, 0.22);
-  --accent-bg:        rgba(2, 132, 199, 0.12);
-  --accent-grad-from: #38bdf8;
-  --accent-grad-to:   #0284c7;
-
-  --color-emerald-300: #38bdf8;
-  --color-emerald-400: #0284c7;
-  --color-emerald-500: #0369a1;
-}
-
-/* ══ THEME 4 — Warm Amber ════════════════════════════════════════════════ */
+/* ══ THEME 2 — Warm Amber ════════════════════════════════════════════════ */
 [data-theme="warm-amber"] {
   --bg:           #e2d8c8;
   --shadow-dark:  #c4baa8;
@@ -134,29 +91,6 @@
   --color-emerald-300: #fbbf24;
   --color-emerald-400: #d97706;
   --color-emerald-500: #b45309;
-}
-
-/* ══ THEME 5 — Slate Night ═══════════════════════════════════════════════ */
-[data-theme="slate-night"] {
-  --bg:           #1a2038;
-  --shadow-dark:  #0c1224;
-  --shadow-light: #283050;
-
-  --t1: rgba(255, 255, 255, 0.90);
-  --t2: rgba(255, 255, 255, 0.55);
-  --t3: rgba(255, 255, 255, 0.35);
-  --t4: rgba(255, 255, 255, 0.20);
-
-  --accent:           #60a5fa;
-  --accent-glow:      rgba(96, 165, 250, 0.50);
-  --accent-glow-weak: rgba(96, 165, 250, 0.25);
-  --accent-bg:        rgba(96, 165, 250, 0.12);
-  --accent-grad-from: #93c5fd;
-  --accent-grad-to:   #3b82f6;
-
-  --color-emerald-300: #93c5fd;
-  --color-emerald-400: #60a5fa;
-  --color-emerald-500: #3b82f6;
 }
 
 /* ── Base styles ─────────────────────────────────────────────────────── */
