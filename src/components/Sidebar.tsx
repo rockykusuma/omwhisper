@@ -62,21 +62,52 @@ export default function Sidebar({ activeView, onNavigate, appVersion }: Props) {
       }}
     >
       {/* Logo */}
-      <div className="px-5 py-5">
-        <div
-          className="flex items-center gap-2.5 px-3 py-2.5 rounded-2xl"
-          style={{ boxShadow: "var(--nm-raised-sm)" }}
-        >
-          <span className="text-emerald-400 text-[22px] leading-none select-none drop-shadow-[0_0_8px_var(--accent-glow)]">ॐ</span>
-          <span className="text-white/90 font-semibold text-sm tracking-tight">OmWhisper</span>
-          {isLicensed && (
+      <div className="px-4 py-5">
+        <div className="flex items-center gap-3">
+          {/* ॐ mark — neumorphic box matching the HTML landing logo */}
+          <div
+            className="shrink-0 flex items-center justify-center rounded-[14px]"
+            style={{
+              width: 44,
+              height: 44,
+              background: "var(--bg)",
+              boxShadow: "5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light)",
+            }}
+          >
             <span
-              className="text-[9px] px-1.5 py-0.5 rounded-full text-emerald-300 font-mono leading-none ml-auto"
-              style={{ background: "var(--accent-bg)", boxShadow: "var(--nm-pressed-sm)" }}
+              className="select-none leading-none"
+              style={{
+                fontFamily: "'DM Serif Display', serif",
+                fontSize: 24,
+                color: "var(--accent)",
+                filter: "drop-shadow(0 0 6px var(--accent-glow))",
+              }}
             >
-              PRO
+              ॐ
             </span>
-          )}
+          </div>
+
+          {/* App name + PRO badge */}
+          <div className="flex flex-col min-w-0">
+            <span
+              className="font-semibold text-sm tracking-tight leading-tight"
+              style={{ color: "var(--t1)" }}
+            >
+              OmWhisper
+            </span>
+            {isLicensed && (
+              <span
+                className="text-[9px] font-mono leading-none mt-0.5 w-fit px-1.5 py-0.5 rounded-full"
+                style={{
+                  color: "var(--accent)",
+                  background: "var(--accent-bg)",
+                  boxShadow: "var(--nm-pressed-sm)",
+                }}
+              >
+                PRO
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
