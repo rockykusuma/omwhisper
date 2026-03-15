@@ -69,6 +69,7 @@ export default function TranscriptionView({
   const recordingStartRef = useRef<number>(0);
   const isPendingPaste = useRef(false);
   const pendingIsSmartDictation = useRef(false);
+  const hasPasted = useRef(false);
 
   useEffect(() => {
     if (externalIsRecording !== undefined) {
@@ -78,6 +79,7 @@ export default function TranscriptionView({
         setSegments([]); // Clear previous recording when a new one starts
         setPolishedLabel(null);
         setError(null);
+        hasPasted.current = false;
       }
     }
   }, [externalIsRecording]);
@@ -110,6 +112,9 @@ export default function TranscriptionView({
       const smartDictation = pendingIsSmartDictation.current;
 
       setSegments((currentSegments) => {
+        if (hasPasted.current) return currentSegments;
+        hasPasted.current = true;
+
         const rawText = currentSegments.map((s) => s.text).join(" ").trim();
         if (!rawText) return currentSegments;
 

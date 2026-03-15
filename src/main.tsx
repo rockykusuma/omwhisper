@@ -1,4 +1,3 @@
-import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import OverlayWindow from "./components/OverlayWindow";
@@ -26,19 +25,15 @@ getWindowLabel().then(label => {
     document.body.style.overflow = "hidden";
     document.documentElement.style.background = "transparent";
     ReactDOM.createRoot(root).render(
-      <React.StrictMode>
-        <div style={{ height: "72px", padding: 0 }}>
-          <OverlayWindow />
-        </div>
-      </React.StrictMode>
+      <div style={{ height: "72px", padding: 0 }}>
+        <OverlayWindow />
+      </div>
     );
   } else {
     ReactDOM.createRoot(root).render(
-      <React.StrictMode>
-        <ErrorBoundary>
-          <App />
-        </ErrorBoundary>
-      </React.StrictMode>
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
     );
   }
 });
