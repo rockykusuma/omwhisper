@@ -47,9 +47,9 @@ def make_tray_icon(src: Image.Image, size: int) -> Image.Image:
     if bbox:
         img = img.crop(bbox)
 
-    # Add ~8% padding on each side so the symbol doesn't touch the edges
+    # Add ~1% padding on each side so the symbol fills the frame
     sym_w, sym_h = img.size
-    pad = int(max(sym_w, sym_h) * 0.08)
+    pad = int(max(sym_w, sym_h) * 0.01)
     padded_size = max(sym_w, sym_h) + pad * 2
     canvas = Image.new("RGBA", (padded_size, padded_size), (0, 0, 0, 0))
     offset_x = (padded_size - sym_w) // 2
@@ -82,7 +82,7 @@ def main():
 
     # ── Tray icons ────────────────────────────────────────────────────────────
 
-    for size, name in [(22, "tray-icon.png"), (44, "tray-icon@2x.png")]:
+    for size, name in [(26, "tray-icon.png"), (52, "tray-icon@2x.png")]:
         make_tray_icon(src, size).save(str(ICONS_DIR / name))
         print(f"  Saved {name}")
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { Cpu, MemoryStick, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
 
 interface ModelInfo {
   name: string;
@@ -10,6 +11,7 @@ interface ModelInfo {
   sha256: string;
   is_downloaded: boolean;
   is_english_only: boolean;
+  category: string;
 }
 
 interface DownloadProgress {
@@ -17,6 +19,19 @@ interface DownloadProgress {
   progress: number;
   done: boolean;
   error: string | null;
+}
+
+interface SystemSpec {
+  total_ram_gb: number;
+  cpu_brand: string;
+  cpu_cores: number;
+  is_apple_silicon: boolean;
+}
+
+interface ModelRecommendation {
+  recommended_model: string;
+  reason: string;
+  spec: SystemSpec;
 }
 
 function formatBytes(bytes: number): string {
@@ -32,10 +47,12 @@ interface Props {
 
 export default function ModelManager({ activeModel, onModelChange }: Props) {
   const [models, setModels] = useState<ModelInfo[]>([]);
-  const [downloading, setDownloading] = useState<Record<string, number>>({}); // name → progress 0-1
+  const [downloading, setDownloading] = useState<Record<string, number>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [diskUsage, setDiskUsage] = useState(0);
   const [_isLicensed, setIsLicensed] = useState(false);
+  const [recommendation, setRecommendation] = useState<ModelRecommendation | null>(null);
+  const [specExpanded, setSpecExpanded] = useState(false);
 
   async function loadModels() {
     const [list, usage] = await Promise.all([
@@ -49,30 +66,19 @@ export default function ModelManager({ activeModel, onModelChange }: Props) {
   useEffect(() => {
     invoke<string>("get_license_status").then((s) => setIsLicensed(s === "Licensed" || s === "GracePeriod")).catch(() => {});
     loadModels();
+    invoke<ModelRecommendation>("get_model_recommendation").then(setRecommendation).catch(() => {});
 
     const unlisten = listen<DownloadProgress>("download-progress", (event) => {
       const { name, progress, done, error } = event.payload;
       if (done) {
-        setDownloading((prev) => {
-          const next = { ...prev };
-          delete next[name];
-          return next;
-        });
-        if (error) {
-          setErrors((prev) => ({ ...prev, [name]: error }));
-        } else {
-          loadModels();
-        }
+        setDownloading((prev) => { const next = { ...prev }; delete next[name]; return next; });
+        if (error) setErrors((prev) => ({ ...prev, [name]: error }));
+        else loadModels();
       } else {
         setDownloading((prev) => ({ ...prev, [name]: progress }));
-        setErrors((prev) => {
-          const next = { ...prev };
-          delete next[name];
-          return next;
-        });
+        setErrors((prev) => { const next = { ...prev }; delete next[name]; return next; });
       }
     });
-
     return () => { unlisten.then((f) => f()); };
   }, []);
 
@@ -88,110 +94,238 @@ export default function ModelManager({ activeModel, onModelChange }: Props) {
     loadModels();
   }
 
+  const recModel = recommendation?.recommended_model;
+
   return (
     <div className="w-full max-w-2xl mx-auto px-8 py-6">
       {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-white/90">Models</h2>
-        <p className="text-white/50 text-xs mt-1 font-mono">{formatBytes(diskUsage)} used on disk</p>
+      <div className="mb-5">
+        <h2 className="text-xl font-bold" style={{ color: "var(--t1)" }}>Models</h2>
+        <p className="text-xs mt-1 font-mono" style={{ color: "var(--t3)" }}>{formatBytes(diskUsage)} used on disk</p>
       </div>
 
-      {/* Model list */}
-      <div className="space-y-3">
-        {models.map((model) => {
-          const isActive = activeModel === model.name;
-          const isDownloading = model.name in downloading;
-          const progress = downloading[model.name] ?? 0;
-          const error = errors[model.name];
-          const isLocked = false;
+      {/* Recommendation Card — subtle tinted glass, no harsh left border */}
+      {recommendation && (
+        <div
+          className="rounded-2xl p-4 mb-5"
+          style={{
+            background: "color-mix(in srgb, var(--accent) 6%, var(--bg))",
+            boxShadow: "var(--nm-raised-sm), 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent)",
+          }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Sparkles size={13} style={{ color: "var(--accent)" }} />
+              <span className="text-sm font-semibold" style={{ color: "var(--t1)" }}>
+                Recommended for your Mac
+              </span>
+            </div>
+            <button
+              onClick={() => setSpecExpanded(v => !v)}
+              className="cursor-pointer transition-colors mt-0.5"
+              style={{ color: "var(--t3)" }}
+              title="Show system info"
+            >
+              {specExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+          </div>
 
-          return (
+          <p className="text-xs mt-2 leading-relaxed" style={{ color: "var(--t2)" }}>
+            {recommendation.reason}
+          </p>
+
+          {recModel && recModel !== activeModel && (
+            <button
+              onClick={() => {
+                const m = models.find(m => m.name === recModel);
+                if (m?.is_downloaded) onModelChange(recModel);
+                else if (m && !(recModel in downloading)) handleDownload(recModel);
+              }}
+              className="mt-3 btn-primary text-xs px-3 py-1.5"
+            >
+              {models.find(m => m.name === recModel)?.is_downloaded
+                ? `Switch to ${recModel}`
+                : `Download & use ${recModel}`}
+            </button>
+          )}
+
+          {/* Expanded spec */}
+          {specExpanded && (
+            <div
+              className="mt-3 pt-3 grid grid-cols-2 gap-y-1.5"
+              style={{ borderTop: "1px solid color-mix(in srgb, var(--accent) 15%, transparent)" }}
+            >
+              <div className="flex items-center gap-1.5">
+                <Cpu size={11} style={{ color: "var(--t3)" }} />
+                <span className="text-xs" style={{ color: "var(--t3)" }}>
+                  {recommendation.spec.is_apple_silicon ? "Apple Silicon" : "Intel"} · {recommendation.spec.cpu_cores} cores
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <MemoryStick size={11} style={{ color: "var(--t3)" }} />
+                <span className="text-xs" style={{ color: "var(--t3)" }}>
+                  {recommendation.spec.total_ram_gb.toFixed(1)} GB RAM
+                </span>
+              </div>
+              <div className="col-span-2 mt-0.5">
+                <span className="text-[11px] font-mono" style={{ color: "var(--t4)" }}>
+                  {recommendation.spec.cpu_brand}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Model list — grouped by category */}
+      {["English Only", "Multilingual", "Turbo"].map((cat) => {
+        const group = models.filter((m) => m.category === cat);
+        if (group.length === 0) return null;
+        return (
+          <div key={cat} className="mb-5">
+            <p className="text-[10px] font-mono uppercase tracking-widest mb-2 px-1" style={{ color: "var(--t4)" }}>
+              {cat}
+            </p>
+            <div className="space-y-2.5">
+              {group.map((model) => {
+        const isActive = activeModel === model.name;
+        const isRecommended = model.name === recModel;
+        const isDownloading = model.name in downloading;
+        const progress = downloading[model.name] ?? 0;
+        const error = errors[model.name];
+
+        return (
             <div
               key={model.name}
-              className="rounded-2xl p-5 transition-all duration-300"
+              className="rounded-2xl px-5 py-4 transition-all duration-200"
               style={{
-                background: "var(--bg)",
+                background: isActive
+                  ? "color-mix(in srgb, var(--accent) 5%, var(--bg))"
+                  : "var(--bg)",
                 boxShadow: isActive
-                  ? "var(--nm-pressed-sm), 0 0 16px rgba(52,211,153,0.08)"
+                  ? "var(--nm-pressed-sm), 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent)"
                   : "var(--nm-raised-sm)",
-                opacity: isLocked ? 0.5 : 1,
               }}
             >
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center justify-between gap-4">
+                {/* Left: name + badges + description */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span
-                      className="text-white font-semibold"
-                      style={{ fontFamily: "'DM Sans', sans-serif" }}
-                    >
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    {/* Active dot indicator */}
+                    {isActive && (
+                      <span
+                        className="w-1.5 h-1.5 rounded-full shrink-0"
+                        style={{ background: "var(--accent)", boxShadow: "0 0 5px var(--accent-glow)" }}
+                      />
+                    )}
+                    <span className="font-semibold text-sm" style={{ color: "var(--t1)" }}>
                       {model.name}
                     </span>
+
+                    {/* EN pill */}
                     {model.is_english_only && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.06] text-white/50" style={{ fontFamily: "'DM Mono', monospace" }}>
+                      <span
+                        className="text-[10px] px-1.5 py-px rounded font-mono"
+                        style={{ color: "var(--t4)", background: "color-mix(in srgb, var(--t1) 6%, transparent)" }}
+                      >
                         EN
                       </span>
                     )}
+
+                    {/* ACTIVE badge — outlined */}
                     {isActive && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400" style={{ fontFamily: "'DM Mono', monospace" }}>
-                        ACTIVE
+                      <span
+                        className="text-[10px] px-1.5 py-px rounded font-mono"
+                        style={{
+                          color: "var(--accent)",
+                          border: "1px solid color-mix(in srgb, var(--accent) 35%, transparent)",
+                          background: "transparent",
+                        }}
+                      >
+                        Active
+                      </span>
+                    )}
+
+                    {/* RECOMMENDED badge — outlined with sparkle */}
+                    {isRecommended && (
+                      <span
+                        className="text-[10px] px-1.5 py-px rounded font-mono flex items-center gap-0.5"
+                        style={{
+                          color: "var(--accent)",
+                          border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)",
+                          background: "color-mix(in srgb, var(--accent) 7%, transparent)",
+                        }}
+                      >
+                        <Sparkles size={8} />
+                        Recommended
                       </span>
                     )}
                   </div>
-                  <p className="text-white/40 text-sm leading-relaxed" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+
+                  <p className="text-xs leading-relaxed" style={{ color: "var(--t2)" }}>
                     {model.description}
                   </p>
-                  <p className="text-white/35 text-xs mt-1" style={{ fontFamily: "'DM Mono', monospace" }}>
+                  <p className="text-[11px] mt-1 font-mono" style={{ color: "var(--t4)" }}>
                     {model.size_label}
                   </p>
                 </div>
 
-                {/* Actions */}
-                <div className="flex flex-col items-end gap-2 shrink-0">
-                  {isLocked ? (
-                    <span
-                      className="text-[10px] px-2 py-1 rounded-lg bg-white/[0.04] text-white/40"
-                      style={{ fontFamily: "'DM Mono', monospace" }}
-                    >
-                      🔒 Upgrade to unlock
-                    </span>
-                  ) : model.is_downloaded ? (
+                {/* Right: actions */}
+                <div className="flex flex-col items-end gap-1.5 shrink-0">
+                  {model.is_downloaded ? (
                     <>
                       {!isActive && (
-                        <button
-                          onClick={() => onModelChange(model.name)}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-500 text-black text-xs font-semibold hover:bg-emerald-400 transition-colors cursor-pointer"
-                          style={{ fontFamily: "'DM Sans', sans-serif" }}
-                        >
+                        <button onClick={() => onModelChange(model.name)} className="btn-primary text-xs px-3 py-1.5">
                           Set Active
                         </button>
                       )}
                       {!isActive && (
                         <button
                           onClick={() => handleDelete(model.name)}
-                          className="px-3 py-1.5 rounded-lg bg-white/[0.04] text-white/50 text-xs hover:bg-red-500/10 hover:text-red-400 transition-colors cursor-pointer"
-                          style={{ fontFamily: "'DM Sans', sans-serif" }}
+                          className="btn-ghost text-xs px-3 py-1.5"
+                          style={{ fontSize: 11 }}
                         >
                           Delete
                         </button>
                       )}
                     </>
                   ) : isDownloading ? (
-                    <div className="text-right">
-                      <p className="text-emerald-400/60 text-xs mb-1" style={{ fontFamily: "'DM Mono', monospace" }}>
+                    <div className="text-right min-w-[64px]">
+                      <p className="text-[11px] font-mono mb-1" style={{ color: "var(--accent)" }}>
                         {Math.round(progress * 100)}%
                       </p>
-                      <div className="w-24 h-1 rounded-full bg-white/10 overflow-hidden">
+                      <div
+                        className="h-1 rounded-full overflow-hidden"
+                        style={{ width: 64, background: "color-mix(in srgb, var(--t1) 8%, transparent)" }}
+                      >
                         <div
-                          className="h-full bg-emerald-400 rounded-full transition-all duration-300"
-                          style={{ width: `${progress * 100}%` }}
+                          className="h-full rounded-full transition-all duration-200"
+                          style={{ width: `${progress * 100}%`, background: "var(--accent)" }}
                         />
                       </div>
                     </div>
                   ) : (
                     <button
                       onClick={() => handleDownload(model.name)}
-                      className="px-3 py-1.5 rounded-lg bg-white/[0.06] text-white/60 text-xs hover:bg-emerald-500/20 hover:text-emerald-400 transition-colors cursor-pointer"
-                      style={{ fontFamily: "'DM Sans', sans-serif" }}
+                      className="text-xs px-3 py-1.5 rounded-lg transition-all duration-150 cursor-pointer font-medium"
+                      style={{
+                        color: "var(--t2)",
+                        background: "var(--bg)",
+                        boxShadow: "var(--nm-raised-sm)",
+                        border: isRecommended
+                          ? "1px solid color-mix(in srgb, var(--accent) 25%, transparent)"
+                          : "1px solid transparent",
+                      }}
+                      onMouseEnter={e => {
+                        (e.currentTarget as HTMLButtonElement).style.color = "var(--accent)";
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = "color-mix(in srgb, var(--accent) 40%, transparent)";
+                      }}
+                      onMouseLeave={e => {
+                        (e.currentTarget as HTMLButtonElement).style.color = "var(--t2)";
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = isRecommended
+                          ? "color-mix(in srgb, var(--accent) 25%, transparent)"
+                          : "transparent";
+                      }}
                     >
                       Download
                     </button>
@@ -199,16 +333,16 @@ export default function ModelManager({ activeModel, onModelChange }: Props) {
                 </div>
               </div>
 
-              {/* Error */}
               {error && (
-                <p className="text-red-400 text-xs mt-3" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-                  ✗ {error}
-                </p>
+                <p className="text-red-400 text-xs mt-2">✗ {error}</p>
               )}
             </div>
           );
         })}
-      </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

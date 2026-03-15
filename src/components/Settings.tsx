@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import {
-  Sliders, Mic, FileText, CreditCard, Info, Sparkles
+  Sliders, Mic, FileText, Info, Sparkles, ShieldCheck, ShieldAlert, Keyboard
 } from "lucide-react";
 import { logger } from "../utils/logger";
 import { useTheme, THEMES } from "../hooks/useTheme";
@@ -10,16 +9,118 @@ import type { AppSettings, BuiltInStyle, CustomStyle, OllamaStatus, StorageInfo 
 
 type Settings = AppSettings;
 
-type Tab = "general" | "audio" | "transcription" | "ai" | "license" | "about";
+type Tab = "general" | "audio" | "transcription" | "ai" | "shortcuts" | "about";
 
 const TABS: { id: Tab; icon: React.ElementType; label: string }[] = [
   { id: "general",       icon: Sliders,    label: "General"       },
   { id: "audio",         icon: Mic,        label: "Audio"         },
   { id: "transcription", icon: FileText,   label: "Transcription" },
   { id: "ai",            icon: Sparkles,   label: "AI"            },
-  { id: "license",       icon: CreditCard, label: "License"       },
+  { id: "shortcuts",     icon: Keyboard,   label: "Shortcuts"     },
   { id: "about",         icon: Info,       label: "About"         },
 ];
+
+/** Convert our internal shortcut string → human-readable symbols */
+function formatHotkey(hotkey: string): string {
+  if (!hotkey) return "";
+  return hotkey.split("+").map(part => {
+    switch (part) {
+      case "CmdOrCtrl": case "Cmd": case "Super": return "⌘";
+      case "Shift":   return "⇧";
+      case "Alt": case "Option": return "⌥";
+      case "Ctrl": case "Control": return "⌃";
+      case "Space":    return "Space";
+      case "CapsLock": return "⇪";
+      case "Tab":      return "⇥";
+      default:         return part.toUpperCase();
+    }
+  }).join("");
+}
+
+/** Keyboard shortcut recorder widget */
+function HotkeyRecorder({
+  value,
+  onChange,
+  requireModifier = true,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  requireModifier?: boolean;
+}) {
+  const [recording, setRecording] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!recording) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Pure-modifier presses — wait for the actual key
+      if (["Meta", "Shift", "Alt", "Control"].includes(e.key)) return;
+
+      // Escape cancels without saving
+      if (e.key === "Escape") { setRecording(false); return; }
+
+      const parts: string[] = [];
+      if (e.metaKey || e.ctrlKey) parts.push("CmdOrCtrl");
+      if (e.shiftKey)              parts.push("Shift");
+      if (e.altKey)                parts.push("Alt");
+
+      const key = e.key === " "        ? "Space"
+        : e.key === "CapsLock"         ? "CapsLock"
+        : e.key.length === 1           ? e.key.toUpperCase()
+        : e.key;                         // F1, Tab, Backspace, etc.
+
+      parts.push(key);
+
+      // requireModifier = true: need combo. requireModifier = false: single key OK
+      if (!requireModifier || parts.length >= 2) {
+        onChange(parts.join("+"));
+        setRecording(false);
+      }
+    };
+
+    const onBlur = () => setRecording(false);
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [recording, onChange]);
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        ref={btnRef}
+        onClick={() => setRecording(r => !r)}
+        className="px-2.5 py-1 rounded-lg text-xs font-mono transition-all duration-150 cursor-pointer"
+        style={{
+          background: recording ? "var(--accent-bg)" : "var(--bg)",
+          color:      recording ? "var(--accent)"    : "var(--t2)",
+          boxShadow:  recording ? "var(--nm-pressed-sm)" : "var(--nm-raised-sm)",
+          border:     recording ? "1px solid var(--accent-glow-weak)" : "1px solid transparent",
+          minWidth: 84,
+        }}
+        title={recording ? "Press your shortcut (Esc to cancel)" : "Click to record shortcut"}
+      >
+        {recording ? "Press keys…" : (value ? formatHotkey(value) : "— None —")}
+      </button>
+      {value && !recording && (
+        <button
+          onClick={() => onChange("")}
+          className="w-5 h-5 rounded-full flex items-center justify-center cursor-pointer transition-all duration-150"
+          style={{ background: "var(--bg)", color: "var(--t3)", boxShadow: "var(--nm-raised-sm)", fontSize: 11, lineHeight: 1 }}
+          title="Clear shortcut"
+        >
+          ×
+        </button>
+      )}
+    </div>
+  );
+}
 
 function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label?: string }) {
   return (
@@ -66,11 +167,11 @@ function SettingRow({
   );
 }
 
-export default function SettingsPanel() {
+export default function SettingsPanel({ initialTab }: { initialTab?: Tab }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [devices, setDevices] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>("general");
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? "general");
   const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
   const [builtInStyles, setBuiltInStyles] = useState<BuiltInStyle[]>([]);
@@ -82,6 +183,7 @@ export default function SettingsPanel() {
   const [newStylePrompt, setNewStylePrompt] = useState("");
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
+  const [accessibilityGranted, setAccessibilityGranted] = useState<boolean | null>(null);
   const { theme, setTheme } = useTheme();
 
   useEffect(() => {
@@ -90,12 +192,14 @@ export default function SettingsPanel() {
       invoke<string[]>("get_audio_devices"),
       invoke<StorageInfo>("get_storage_info"),
       invoke<boolean>("get_cloud_api_key_status"),
+      invoke<boolean>("check_accessibility_permission"),
       invoke<{ built_in: BuiltInStyle[]; custom: CustomStyle[] }>("get_polish_styles"),
-    ]).then(([s, d, info, keySet, styles]) => {
+    ]).then(([s, d, info, keySet, a11y, styles]) => {
       setSettings(s);
       setDevices(d);
       setStorageInfo(info);
       setApiKeySet(keySet);
+      setAccessibilityGranted(a11y);
       setBuiltInStyles(styles.built_in);
       setCustomStyles(styles.custom);
     });
@@ -239,29 +343,6 @@ export default function SettingsPanel() {
 
             <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">General</h3>
             <div className="card px-5">
-              <SettingRow label="Global Hotkey" description="Toggle recording from anywhere">
-                <div className="px-3 py-1.5 rounded-lg bg-white/[0.06] text-white/60 text-xs font-mono">
-                  {settings.hotkey}
-                </div>
-              </SettingRow>
-              <SettingRow label="Recording Mode" description="How the hotkey triggers recording">
-                <div className="flex rounded-xl overflow-hidden" style={{ boxShadow: "var(--nm-pressed-sm)" }}>
-                  {(["toggle", "push_to_talk"] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      onClick={() => update({ recording_mode: mode })}
-                      className="px-3 py-1.5 text-xs transition-all duration-150 cursor-pointer"
-                      style={{
-                        background: settings.recording_mode === mode ? "var(--accent-bg)" : "transparent",
-                        color: settings.recording_mode === mode ? "var(--accent)" : "var(--t3)",
-                      }}
-                      aria-pressed={settings.recording_mode === mode}
-                    >
-                      {mode === "toggle" ? "Toggle" : "Push to Talk"}
-                    </button>
-                  ))}
-                </div>
-              </SettingRow>
               <SettingRow label="Launch at Login" description="Start OmWhisper when you log in">
                 <Toggle value={settings.auto_launch} onChange={(v) => update({ auto_launch: v })} label="Launch at login" />
               </SettingRow>
@@ -288,6 +369,38 @@ export default function SettingsPanel() {
               <SettingRow label="Show Overlay" description="Floating indicator while recording">
                 <Toggle value={settings.show_overlay} onChange={(v) => update({ show_overlay: v })} label="Show overlay" />
               </SettingRow>
+              {settings.show_overlay && (
+                <>
+                  <SettingRow label="Overlay Position" description="Where to show the recording indicator">
+                    <select
+                      value={settings.overlay_placement ?? "top-center"}
+                      onChange={(e) => update({ overlay_placement: e.target.value })}
+                      className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
+                      style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                      aria-label="Overlay position"
+                    >
+                      <option value="top-center">Top Center</option>
+                      <option value="top-left">Top Left</option>
+                      <option value="top-right">Top Right</option>
+                      <option value="bottom-center">Bottom Center</option>
+                      <option value="bottom-left">Bottom Left</option>
+                      <option value="bottom-right">Bottom Right</option>
+                    </select>
+                  </SettingRow>
+                  <SettingRow label="Overlay Style" description="Visual appearance of the recording indicator">
+                    <select
+                      value={settings.overlay_style ?? "micro"}
+                      onChange={(e) => update({ overlay_style: e.target.value })}
+                      className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
+                      style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                      aria-label="Overlay style"
+                    >
+                      <option value="micro">Micro — compact bars</option>
+                      <option value="waveform">Waveform — bars + label</option>
+                    </select>
+                  </SettingRow>
+                </>
+              )}
               <SettingRow label="Log Level" description="Verbosity of log file">
                 <select
                   value={settings.log_level ?? "normal"}
@@ -324,6 +437,73 @@ export default function SettingsPanel() {
                   <p className="text-white/35 text-xs font-mono">{(storageInfo.db_size_bytes / 1024).toFixed(1)} KB</p>
                 </div>
               )}
+            </div>
+
+            {/* Permissions */}
+            <h3 className="text-t3 text-[10px] uppercase tracking-widest mt-6 mb-4 font-mono">Permissions</h3>
+            <div className="card px-5">
+              <div className="flex items-center justify-between gap-4 py-3.5">
+                <div className="flex items-center gap-2.5">
+                  {accessibilityGranted
+                    ? <ShieldCheck size={15} style={{ color: "var(--accent)", flexShrink: 0 }} />
+                    : <ShieldAlert size={15} className="text-red-400 shrink-0" />
+                  }
+                  <div>
+                    <p className="text-sm" style={{ color: "var(--t1)" }}>Accessibility</p>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--t3)" }}>
+                      Required for auto-paste to focused apps
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  {/* Status badge */}
+                  <span
+                    className="text-[10px] font-mono px-2 py-0.5 rounded-full"
+                    style={{
+                      color: accessibilityGranted ? "var(--accent)" : "#f87171",
+                      background: accessibilityGranted ? "var(--accent-bg)" : "rgba(248,113,113,0.12)",
+                      boxShadow: "var(--nm-pressed-sm)",
+                    }}
+                  >
+                    {accessibilityGranted === null ? "checking…" : accessibilityGranted ? "Granted" : "Not granted"}
+                  </span>
+
+                  {/* Open settings button — only shown when not granted */}
+                  {accessibilityGranted === false && (
+                    <button
+                      onClick={() => {
+                        invoke("open_accessibility_settings").catch(() => {});
+                        // Re-check after a short delay in case user grants it
+                        setTimeout(() => {
+                          invoke<boolean>("check_accessibility_permission")
+                            .then(setAccessibilityGranted)
+                            .catch(() => {});
+                        }, 3000);
+                      }}
+                      className="btn-ghost text-xs"
+                    >
+                      Open Settings →
+                    </button>
+                  )}
+
+                  {/* Re-check button — always visible when granted to allow refresh */}
+                  {accessibilityGranted === true && (
+                    <button
+                      onClick={() =>
+                        invoke<boolean>("check_accessibility_permission")
+                          .then(setAccessibilityGranted)
+                          .catch(() => {})
+                      }
+                      className="text-[10px] cursor-pointer transition-colors"
+                      style={{ color: "var(--t4)" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = "var(--t2)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = "var(--t4)")}
+                    >
+                      ↻ Refresh
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -387,32 +567,35 @@ export default function SettingsPanel() {
         )}
 
         {activeTab === "transcription" && (
-          <div>
-            <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Transcription</h3>
-            <div className="card px-5">
-              <SettingRow label="Active Model" description="Whisper model used for transcription">
-                <div className="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-mono">
-                  {settings.active_model}
-                </div>
-              </SettingRow>
-              <SettingRow label="Language" description="Transcription language">
-                <select
-                  value={settings.language}
-                  onChange={(e) => update({ language: e.target.value })}
-                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                  aria-label="Transcription language"
-                >
-                  <option value="en">English</option>
-                  <option value="auto">Auto-detect</option>
-                  <option value="es">Spanish</option>
-                  <option value="fr">French</option>
-                  <option value="de">German</option>
-                  <option value="ja">Japanese</option>
-                  <option value="zh">Chinese</option>
-                  <option value="hi">Hindi</option>
-                </select>
-              </SettingRow>
+          <div className="space-y-5">
+            <div>
+              <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Transcription</h3>
+              <div className="card px-5">
+                <SettingRow label="Active Model" description="Whisper model used for transcription">
+                  <div className="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-mono">
+                    {settings.active_model}
+                  </div>
+                </SettingRow>
+                <SettingRow label="Language" description="Transcription language">
+                  <select
+                    value={settings.language}
+                    onChange={(e) => update({ language: e.target.value })}
+                    className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                    aria-label="Transcription language"
+                  >
+                    <option value="en">English</option>
+                    <option value="auto">Auto-detect</option>
+                    <option value="es">Spanish</option>
+                    <option value="fr">French</option>
+                    <option value="de">German</option>
+                    <option value="ja">Japanese</option>
+                    <option value="zh">Chinese</option>
+                    <option value="hi">Hindi</option>
+                  </select>
+                </SettingRow>
+              </div>
             </div>
+            <FileTranscriptionSection activeModel={settings.active_model} />
           </div>
         )}
 
@@ -661,8 +844,185 @@ export default function SettingsPanel() {
           </div>
         )}
 
-        {activeTab === "license" && <LicenseSection />}
+        {activeTab === "shortcuts" && (
+          <div>
+            <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Recording</h3>
+            <div className="card px-5 mb-6">
+              <SettingRow label="Toggle Hotkey" description="Press once to start, press again to stop">
+                <HotkeyRecorder
+                  value={settings.hotkey}
+                  onChange={(v) => update({ hotkey: v || "CmdOrCtrl+Shift+V" })}
+                />
+              </SettingRow>
+              <SettingRow label="Smart Dictation" description="Record with AI polish (Cmd+Shift+B by default)">
+                <HotkeyRecorder
+                  value={settings.smart_dictation_hotkey ?? "CmdOrCtrl+Shift+B"}
+                  onChange={(v) => update({ smart_dictation_hotkey: v || "CmdOrCtrl+Shift+B" })}
+                />
+              </SettingRow>
+            </div>
+
+            <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Push to Talk</h3>
+            <div className="card px-5 mb-6">
+              <SettingRow label="Push to Talk Mode" description="Hold a key to record, release when done">
+                <Toggle
+                  value={settings.recording_mode === "push_to_talk"}
+                  onChange={(v) => update({ recording_mode: v ? "push_to_talk" : "toggle" })}
+                  label="Push to talk"
+                />
+              </SettingRow>
+              {settings.recording_mode === "push_to_talk" && (
+                <>
+                  <SettingRow label="Push to Talk Key" description="Single key or combo — hold to record, release to stop">
+                    <div className="flex items-center gap-1.5">
+                      {settings.push_to_talk_hotkey === "Fn" ? (
+                        /* Fn active — show it as the selected key with a clear button */
+                        <>
+                          <span
+                            className="px-2.5 py-1 rounded-lg text-xs font-mono"
+                            style={{
+                              background: "var(--accent-bg)",
+                              color: "var(--accent)",
+                              boxShadow: "var(--nm-pressed-sm)",
+                              border: "1px solid var(--accent-glow-weak)",
+                            }}
+                          >
+                            fn
+                          </span>
+                          <button
+                            onClick={() => update({ push_to_talk_hotkey: "CmdOrCtrl+Shift+X" })}
+                            className="w-5 h-5 rounded-full flex items-center justify-center cursor-pointer transition-all duration-150"
+                            style={{ background: "var(--bg)", color: "var(--t3)", boxShadow: "var(--nm-raised-sm)", fontSize: 11 }}
+                            title="Clear"
+                          >×</button>
+                        </>
+                      ) : (
+                        /* Normal key recorder with fn as a quick-pick option */
+                        <>
+                          <button
+                            onClick={() => update({ push_to_talk_hotkey: "Fn" })}
+                            className="px-2 py-1 rounded-lg text-xs font-mono transition-all duration-150 cursor-pointer"
+                            style={{
+                              background: "var(--bg)",
+                              color: "var(--t4)",
+                              boxShadow: "var(--nm-raised-sm)",
+                              border: "1px solid transparent",
+                            }}
+                            title="Use Fn key"
+                          >fn</button>
+                          <span style={{ color: "var(--t4)", fontSize: 10 }}>or</span>
+                          <HotkeyRecorder
+                            value={settings.push_to_talk_hotkey ?? ""}
+                            onChange={(v) => update({ push_to_talk_hotkey: v || "CmdOrCtrl+Shift+X" })}
+                            requireModifier={false}
+                          />
+                        </>
+                      )}
+                    </div>
+                  </SettingRow>
+                  <SettingRow label="Double-press to Lock" description="Press twice quickly to keep recording without holding">
+                    <Toggle
+                      value={settings.double_press_lock ?? false}
+                      onChange={(v) => update({ double_press_lock: v })}
+                      label="Double press lock"
+                    />
+                  </SettingRow>
+                </>
+              )}
+            </div>
+
+            <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Reference</h3>
+            <div className="card px-5">
+              {[
+                { action: "Dictate in any app",    keys: ["⌘", "⇧", "V"], note: "Toggle recording" },
+                { action: "Smart Dictation",        keys: ["⌘", "⇧", "B"], note: "Record + AI polish" },
+                { action: "Open / close app",       keys: ["⌘", "⇧", "V"], note: "From menu bar" },
+              ].map(({ action, keys, note }) => (
+                <div key={action} className="flex items-center justify-between py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
+                  <div>
+                    <p className="text-sm" style={{ color: "var(--t2)" }}>{action}</p>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--t4)" }}>{note}</p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {keys.map((k) => (
+                      <kbd
+                        key={k}
+                        className="inline-flex items-center justify-center text-[11px] font-mono rounded-md px-1.5 py-0.5 min-w-[22px]"
+                        style={{ background: "var(--bg)", color: "var(--accent)", boxShadow: "var(--nm-raised-sm)", lineHeight: 1.4 }}
+                      >
+                        {k}
+                      </kbd>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {activeTab === "about" && <AboutSection />}
+      </div>
+    </div>
+  );
+}
+
+// ─── File Transcription ────────────────────────────────────────────────────────
+function FileTranscriptionSection({ activeModel }: { activeModel: string }) {
+  const [loading, setLoading] = useState(false);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSelectFile() {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const selected = await open({ filters: [{ name: "Audio", extensions: ["wav"] }], multiple: false });
+    if (!selected) return;
+    const filePath = typeof selected === "string" ? selected : (selected as { path: string }).path;
+    setFileName(filePath.split("/").pop() ?? filePath);
+    setResult(null);
+    setError(null);
+    setLoading(true);
+    try {
+      const segments = await invoke<{ text: string }[]>("transcribe_file", {
+        path: filePath,
+        modelPath: `models/ggml-${activeModel}.bin`,
+      });
+      setResult(segments.map((s) => s.text).join(" ").trim());
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div>
+      <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">File Transcription</h3>
+      <div className="card p-5 space-y-3">
+        <p className="text-xs" style={{ color: "var(--t3)" }}>
+          Transcribe a .wav audio file using the active model.
+        </p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleSelectFile}
+            disabled={loading}
+            className="btn-primary text-xs py-1.5 disabled:opacity-50"
+          >
+            {loading ? "Transcribing…" : "Select .wav file"}
+          </button>
+          {fileName && (
+            <span className="text-xs font-mono truncate" style={{ color: "var(--t3)" }}>{fileName}</span>
+          )}
+        </div>
+        {error && <p className="text-red-400/70 text-xs">{error}</p>}
+        {result && (
+          <div
+            className="rounded-xl p-3 text-xs leading-relaxed"
+            style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)", color: "var(--t2)" }}
+          >
+            {result}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -738,154 +1098,3 @@ function AboutSection() {
   );
 }
 
-// ─── License ───────────────────────────────────────────────────────────────────
-interface LicenseInfoData {
-  status: string;
-  email: string | null;
-  activated_on: string | null;
-  last_validated: string | null;
-}
-
-function LicenseSection() {
-  const [info, setInfo] = useState<LicenseInfoData | null>(null);
-  const [key, setKey] = useState("");
-  const [activating, setActivating] = useState(false);
-  const [deactivating, setDeactivating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
-  }
-
-  async function loadInfo() {
-    try {
-      const data = await invoke<LicenseInfoData>("get_license_info");
-      setInfo(data);
-    } catch {}
-  }
-
-  useEffect(() => { loadInfo(); }, []);
-
-  useEffect(() => {
-    const unlisten = listen("license-status", () => loadInfo());
-    return () => { unlisten.then((f) => f()); };
-  }, []);
-
-  async function handleActivate() {
-    if (!key.trim()) return;
-    setActivating(true);
-    setError(null);
-    try {
-      await invoke("activate_license", { key: key.trim() });
-      setKey("");
-      showToast("✓ License activated!");
-      await loadInfo();
-    } catch (e) {
-      const msg = String(e);
-      if (msg.includes("max_activations_reached")) {
-        setError("Already activated on another device. Deactivate it there first.");
-      } else if (msg.includes("network_error")) {
-        setError("Network error. Check your connection and try again.");
-      } else {
-        setError("Invalid license key.");
-      }
-    } finally {
-      setActivating(false);
-    }
-  }
-
-  async function handleDeactivate() {
-    setDeactivating(true);
-    try {
-      await invoke("deactivate_license");
-      showToast("Deactivated. You can now activate on another device.");
-      await loadInfo();
-    } catch {
-      showToast("Deactivation failed.");
-    } finally {
-      setDeactivating(false);
-    }
-  }
-
-  const isActive = info?.status === "Licensed" || info?.status === "GracePeriod";
-
-  return (
-    <div>
-      <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">License</h3>
-      <div className="card p-5 space-y-3">
-        {isActive ? (
-          <>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span className="text-emerald-400 text-sm font-semibold">
-                  {info?.status === "GracePeriod" ? "Licensed (grace period)" : "Licensed"}
-                </span>
-              </div>
-              <button
-                onClick={handleDeactivate}
-                disabled={deactivating}
-                className="text-white/40 hover:text-red-400 text-xs transition-colors cursor-pointer disabled:opacity-50"
-                aria-label="Deactivate license"
-              >
-                {deactivating ? "Deactivating…" : "Deactivate"}
-              </button>
-            </div>
-            {info?.email && (
-              <p className="text-white/50 text-xs font-mono">{info.email}</p>
-            )}
-            {info?.activated_on && (
-              <p className="text-white/35 text-xs font-mono">
-                Activated {new Date(info.activated_on).toLocaleDateString()}
-              </p>
-            )}
-          </>
-        ) : (
-          <>
-            <p className="text-white/40 text-sm">
-              {info?.status === "Expired"
-                ? "License expired — please re-validate or buy a new key."
-                : "Free tier: 30 min/day · tiny.en only"}
-            </p>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={key}
-                onChange={(e) => { setKey(e.target.value); setError(null); }}
-                placeholder="Enter license key…"
-                className="flex-1 rounded-xl px-3 py-2 text-white/80 text-sm placeholder:text-white/30 outline-none font-mono" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                aria-label="License key"
-              />
-              <button
-                onClick={handleActivate}
-                disabled={activating || !key.trim()}
-                className="btn-primary shrink-0"
-              >
-                {activating ? "…" : "Activate"}
-              </button>
-            </div>
-            {error && <p className="text-red-400/70 text-xs">{error}</p>}
-            <p className="text-white/35 text-xs">
-              Don't have a key?{" "}
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  invoke("plugin:opener|open_url", { url: "https://omwhisper.lemonsqueezy.com" }).catch(() => {});
-                }}
-                className="text-emerald-500/50 hover:text-emerald-400 underline"
-              >
-                Buy OmWhisper for $12
-              </a>
-            </p>
-          </>
-        )}
-        {toast && (
-          <p className="text-emerald-400 text-xs font-mono">{toast}</p>
-        )}
-      </div>
-    </div>
-  );
-}

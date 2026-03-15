@@ -9,6 +9,8 @@ mod updater;
 mod sounds;
 mod ai;
 mod styles;
+#[cfg(target_os = "macos")]
+mod fn_key;
 
 use commands::{
     activate_license, capture_focused_app, check_accessibility_permission, cmd_clear_history,
@@ -23,11 +25,12 @@ use commands::{
     get_usage_stats, get_storage_info,
     check_ollama_status, get_ollama_models, polish_text_cmd, test_ai_connection,
     save_cloud_api_key, get_cloud_api_key_status, delete_cloud_api_key_cmd,
+    get_model_recommendation,
     SharedState, TranscriptionState,
 };
 use std::sync::{Arc, Mutex};
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Emitter, Manager,
 };
@@ -100,10 +103,42 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(move |app| {
             // --- System Tray ---
-            let show_item = MenuItem::with_id(app, "show", "Show Window", true, None::<&str>)?;
-            let toggle_item = MenuItem::with_id(app, "toggle", "Start Recording", true, None::<&str>)?;
+            let current_settings = crate::settings::load_settings_sync();
+            let selected_device = current_settings.audio_input_device.clone().unwrap_or_default();
+            let device_names = crate::settings::list_audio_devices();
+
+            let toggle_item   = MenuItem::with_id(app, "toggle",   "Start Recording", true, None::<&str>)?;
+            let sep1          = PredefinedMenuItem::separator(app)?;
+            let show_item     = MenuItem::with_id(app, "show",     "Show Window",     true, None::<&str>)?;
+            let settings_item = MenuItem::with_id(app, "settings", "Settings…",       true, None::<&str>)?;
+            let sep2          = PredefinedMenuItem::separator(app)?;
+
+            // Microphone submenu — check-mark on the currently selected device
+            let mic_items: Vec<MenuItem<_>> = if device_names.is_empty() {
+                vec![MenuItem::with_id(app, "mic_none", "No devices found", false, None::<&str>)?]
+            } else {
+                device_names.iter().map(|d| {
+                    let label = if *d == selected_device { format!("✓  {}", d) } else { d.clone() };
+                    MenuItem::with_id(app, format!("mic:{}", d), label, true, None::<&str>)
+                }).collect::<std::result::Result<Vec<_>, _>>()?
+            };
+            let mic_refs: Vec<&dyn tauri::menu::IsMenuItem<_>> =
+                mic_items.iter().map(|i| i as &dyn tauri::menu::IsMenuItem<_>).collect();
+            let mic_submenu = Submenu::with_items(app, "Microphone", true, &mic_refs)?;
+
+            let sep3      = PredefinedMenuItem::separator(app)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit OmWhisper", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_item, &toggle_item, &quit_item])?;
+
+            let menu = Menu::with_items(app, &[
+                &toggle_item,
+                &sep1,
+                &show_item,
+                &settings_item,
+                &sep2,
+                &mic_submenu,
+                &sep3,
+                &quit_item,
+            ])?;
 
             let tray_icon = {
                 const TRAY_PNG: &[u8] = include_bytes!("../icons/tray-icon@2x.png");
@@ -132,6 +167,13 @@ pub fn run() {
                                 let _ = win.set_focus();
                             }
                         }
+                        "settings" => {
+                            if let Some(win) = app.get_webview_window("main") {
+                                let _ = win.show();
+                                let _ = win.set_focus();
+                            }
+                            let _ = app.emit("tray-navigate", "settings");
+                        }
                         "toggle" => {
                             let is_recording = state.lock().unwrap().capture.is_some();
                             if is_recording {
@@ -147,6 +189,18 @@ pub fn run() {
                         }
                         "quit" => {
                             app.exit(0);
+                        }
+                        id if id.starts_with("mic:") => {
+                            let device_name = id.trim_start_matches("mic:").to_string();
+                            let app_handle = app.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let mut s = crate::settings::load_settings().await;
+                                s.audio_input_device = Some(device_name);
+                                if let Err(e) = crate::settings::save_settings(&s).await {
+                                    tracing::error!("Failed to save mic selection: {}", e);
+                                }
+                                let _ = app_handle.emit("settings-changed", ());
+                            });
                         }
                         _ => {}
                     }
@@ -171,52 +225,186 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // --- Global Shortcut: Cmd+Shift+V ---
-            let shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyV);
-            let state_for_shortcut = shared_state.clone();
-            app.global_shortcut().on_shortcut(shortcut, move |app, _shortcut, event| {
-                let recording_mode = crate::settings::load_settings_sync().recording_mode;
-                let is_push_to_talk = recording_mode == "push_to_talk";
-
-                match event.state {
-                    ShortcutState::Pressed => {
-                        let is_recording = state_for_shortcut.lock().unwrap().capture.is_some();
-                        if is_push_to_talk {
-                            // Push-to-talk: key-down always starts (if not already recording)
-                            if !is_recording {
-                                // Capture focused app BEFORE doing anything
-                                let focused = crate::paste::get_frontmost_app();
-                                *crate::commands::get_previous_app().lock().unwrap() = focused;
-                                // Don't show/focus the main window — overlay handles visual feedback
-                                let _ = app.emit("hotkey-toggle-recording", ());
-                            }
-                        } else {
-                            // Toggle mode: press toggles
-                            if is_recording {
-                                // Delegate stop to frontend so stop_transcription drains
-                                // remaining audio before paste runs
-                                let _ = app.emit("hotkey-stop-recording", ());
-                            } else {
-                                // Capture focused app BEFORE doing anything
-                                let focused = crate::paste::get_frontmost_app();
-                                tracing::info!("hotkey pressed: captured frontmost app = {:?}", focused);
-                                *crate::commands::get_previous_app().lock().unwrap() = focused;
-                                // Don't show/focus the main window — overlay handles visual feedback
-                                let _ = app.emit("hotkey-toggle-recording", ());
-                            }
-                        }
-                    }
-                    ShortcutState::Released => {
-                        if is_push_to_talk {
-                            // Push-to-talk: key-up delegates to frontend so isPendingPaste is set
-                            let is_recording = state_for_shortcut.lock().unwrap().capture.is_some();
-                            if is_recording {
-                                let _ = app.emit("hotkey-stop-recording", ());
-                            }
-                        }
+            // --- Helper: parse "CmdOrCtrl+Shift+V" → Shortcut ---
+            fn parse_hotkey(s: &str) -> Option<Shortcut> {
+                let mut mods = Modifiers::empty();
+                let mut key = None;
+                for part in s.split('+') {
+                    match part.trim() {
+                        "CmdOrCtrl" | "Cmd" | "Super" => mods |= Modifiers::SUPER,
+                        "Shift"                        => mods |= Modifiers::SHIFT,
+                        "Alt" | "Option"               => mods |= Modifiers::ALT,
+                        "Ctrl" | "Control"             => mods |= Modifiers::CONTROL,
+                        k => key = match k {
+                            // Letters
+                            "A" => Some(Code::KeyA), "B" => Some(Code::KeyB),
+                            "C" => Some(Code::KeyC), "D" => Some(Code::KeyD),
+                            "E" => Some(Code::KeyE), "F" => Some(Code::KeyF),
+                            "G" => Some(Code::KeyG), "H" => Some(Code::KeyH),
+                            "I" => Some(Code::KeyI), "J" => Some(Code::KeyJ),
+                            "K" => Some(Code::KeyK), "L" => Some(Code::KeyL),
+                            "M" => Some(Code::KeyM), "N" => Some(Code::KeyN),
+                            "O" => Some(Code::KeyO), "P" => Some(Code::KeyP),
+                            "Q" => Some(Code::KeyQ), "R" => Some(Code::KeyR),
+                            "S" => Some(Code::KeyS), "T" => Some(Code::KeyT),
+                            "U" => Some(Code::KeyU), "V" => Some(Code::KeyV),
+                            "W" => Some(Code::KeyW), "X" => Some(Code::KeyX),
+                            "Y" => Some(Code::KeyY), "Z" => Some(Code::KeyZ),
+                            // Digits
+                            "0" => Some(Code::Digit0), "1" => Some(Code::Digit1),
+                            "2" => Some(Code::Digit2), "3" => Some(Code::Digit3),
+                            "4" => Some(Code::Digit4), "5" => Some(Code::Digit5),
+                            "6" => Some(Code::Digit6), "7" => Some(Code::Digit7),
+                            "8" => Some(Code::Digit8), "9" => Some(Code::Digit9),
+                            // Function keys
+                            "F1"  => Some(Code::F1),  "F2"  => Some(Code::F2),
+                            "F3"  => Some(Code::F3),  "F4"  => Some(Code::F4),
+                            "F5"  => Some(Code::F5),  "F6"  => Some(Code::F6),
+                            "F7"  => Some(Code::F7),  "F8"  => Some(Code::F8),
+                            "F9"  => Some(Code::F9),  "F10" => Some(Code::F10),
+                            "F11" => Some(Code::F11), "F12" => Some(Code::F12),
+                            // Special keys
+                            "Space"     => Some(Code::Space),
+                            "CapsLock"  => Some(Code::CapsLock),
+                            "Tab"       => Some(Code::Tab),
+                            "Enter"     => Some(Code::Enter),
+                            "Backspace" => Some(Code::Backspace),
+                            "Delete"    => Some(Code::Delete),
+                            "Escape"    => Some(Code::Escape),
+                            "ArrowUp"   => Some(Code::ArrowUp),
+                            "ArrowDown" => Some(Code::ArrowDown),
+                            "ArrowLeft" => Some(Code::ArrowLeft),
+                            "ArrowRight"=> Some(Code::ArrowRight),
+                            "Home"      => Some(Code::Home),
+                            "End"       => Some(Code::End),
+                            "PageUp"    => Some(Code::PageUp),
+                            "PageDown"  => Some(Code::PageDown),
+                            _ => None,
+                        },
                     }
                 }
+                key.map(|k| Shortcut::new(if mods.is_empty() { None } else { Some(mods) }, k))
+            }
+
+            let initial_settings = crate::settings::load_settings_sync();
+
+            // --- Toggle shortcut: press once to start, press again to stop ---
+            let toggle_sc = parse_hotkey(&initial_settings.hotkey)
+                .unwrap_or_else(|| Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyV));
+            let state_toggle = shared_state.clone();
+            app.global_shortcut().on_shortcut(toggle_sc, move |app, _shortcut, event| {
+                if event.state != ShortcutState::Pressed { return; }
+                let is_recording = state_toggle.lock().unwrap().capture.is_some();
+                if is_recording {
+                    let _ = app.emit("hotkey-stop-recording", ());
+                } else {
+                    let focused = crate::paste::get_frontmost_app();
+                    tracing::info!("toggle hotkey: captured frontmost app = {:?}", focused);
+                    *crate::commands::get_previous_app().lock().unwrap() = focused;
+                    let _ = app.emit("hotkey-toggle-recording", ());
+                }
             })?;
+
+            // --- Push-to-talk shortcut: hold to record, release to stop ---
+            if let Some(ptt_sc) = parse_hotkey(&initial_settings.push_to_talk_hotkey) {
+                let state_ptt = shared_state.clone();
+                let ptt_last_ms = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+                let ptt_locked  = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+                if let Err(e) = app.global_shortcut().on_shortcut(ptt_sc, move |app, _shortcut, event| {
+                    let settings = crate::settings::load_settings_sync();
+                    let is_recording = state_ptt.lock().unwrap().capture.is_some();
+                    let now_ms = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64;
+                    match event.state {
+                        ShortcutState::Pressed => {
+                            if !is_recording {
+                                if settings.double_press_lock {
+                                    let last = ptt_last_ms.load(std::sync::atomic::Ordering::SeqCst);
+                                    if now_ms.saturating_sub(last) < 500 {
+                                        ptt_locked.store(true, std::sync::atomic::Ordering::SeqCst);
+                                    } else {
+                                        ptt_locked.store(false, std::sync::atomic::Ordering::SeqCst);
+                                    }
+                                }
+                                ptt_last_ms.store(now_ms, std::sync::atomic::Ordering::SeqCst);
+                                let focused = crate::paste::get_frontmost_app();
+                                tracing::info!("ptt pressed: captured frontmost app = {:?}", focused);
+                                *crate::commands::get_previous_app().lock().unwrap() = focused;
+                                let _ = app.emit("hotkey-toggle-recording", ());
+                            } else if settings.double_press_lock && ptt_locked.load(std::sync::atomic::Ordering::SeqCst) {
+                                ptt_locked.store(false, std::sync::atomic::Ordering::SeqCst);
+                                let _ = app.emit("hotkey-stop-recording", ());
+                            }
+                        }
+                        ShortcutState::Released => {
+                            if is_recording && !ptt_locked.load(std::sync::atomic::Ordering::SeqCst) {
+                                let _ = app.emit("hotkey-stop-recording", ());
+                            }
+                        }
+                    }
+                }) {
+                    tracing::warn!("Could not register PTT shortcut: {}", e);
+                }
+            }
+
+            // --- Fn key PTT via raw CGEventTap ---
+            // tauri_plugin_global_shortcut uses W3C key codes which don't include fn.
+            // We use a minimal CGEventTap that monitors kCGEventFlagsChanged and checks
+            // kCGEventFlagMaskSecondaryFn — no HIToolbox/string_from_code, no crash.
+            #[cfg(target_os = "macos")]
+            if initial_settings.recording_mode == "push_to_talk"
+                && initial_settings.push_to_talk_hotkey == "Fn"
+            {
+                let app_press = app.handle().clone();
+                let app_release = app.handle().clone();
+                let state_press = shared_state.clone();
+                let state_release = shared_state.clone();
+                let ptt_last_ms = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+                let ptt_locked  = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+                let last_clone  = ptt_last_ms.clone();
+                let locked_press = ptt_locked.clone();
+                let locked_release = ptt_locked.clone();
+
+                crate::fn_key::spawn_fn_key_tap(
+                    move || {
+                        let settings = crate::settings::load_settings_sync();
+                        let is_recording = state_press.lock().unwrap().capture.is_some();
+                        let now_ms = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as u64;
+                        if !is_recording {
+                            if settings.double_press_lock {
+                                let last = last_clone.load(std::sync::atomic::Ordering::SeqCst);
+                                if now_ms.saturating_sub(last) < 500 {
+                                    locked_press.store(true, std::sync::atomic::Ordering::SeqCst);
+                                } else {
+                                    locked_press.store(false, std::sync::atomic::Ordering::SeqCst);
+                                }
+                            }
+                            last_clone.store(now_ms, std::sync::atomic::Ordering::SeqCst);
+                            let focused = crate::paste::get_frontmost_app();
+                            *crate::commands::get_previous_app().lock().unwrap() = focused;
+                            let _ = app_press.emit("hotkey-toggle-recording", ());
+                        } else if settings.double_press_lock
+                            && locked_press.load(std::sync::atomic::Ordering::SeqCst)
+                        {
+                            locked_press.store(false, std::sync::atomic::Ordering::SeqCst);
+                            let _ = app_press.emit("hotkey-stop-recording", ());
+                        }
+                    },
+                    move || {
+                        let is_recording = state_release.lock().unwrap().capture.is_some();
+                        if is_recording
+                            && !locked_release.load(std::sync::atomic::Ordering::SeqCst)
+                        {
+                            let _ = app_release.emit("hotkey-stop-recording", ());
+                        }
+                    },
+                );
+            }
 
             // --- Global Shortcut: Cmd+Shift+B (Smart Dictation) ---
             let shortcut_sd = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyB);
@@ -297,15 +485,6 @@ pub fn run() {
                 }
             });
 
-            // Play launch Om sound if enabled
-            tauri::async_runtime::spawn(async move {
-                let settings = crate::settings::load_settings().await;
-                if settings.launch_sound_enabled {
-                    // Small delay so app window renders first
-                    tokio::time::sleep(std::time::Duration::from_millis(600)).await;
-                    crate::sounds::play(crate::sounds::Sound::Launch, settings.sound_volume);
-                }
-            });
 
             // Auto-delete old history on launch if configured
             tauri::async_runtime::spawn(async move {
@@ -372,6 +551,7 @@ pub fn run() {
             save_cloud_api_key,
             get_cloud_api_key_status,
             delete_cloud_api_key_cmd,
+            get_model_recommendation,
             styles::get_polish_styles,
             styles::add_custom_style,
             styles::remove_custom_style,

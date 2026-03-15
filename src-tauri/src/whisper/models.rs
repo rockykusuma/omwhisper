@@ -15,51 +15,93 @@ pub struct ModelInfo {
     pub sha256: String,
     pub is_downloaded: bool,
     pub is_english_only: bool,
+    /// "English Only" | "Multilingual" | "Turbo"
+    pub category: String,
 }
 
 /// All available models with their Hugging Face download URLs and checksums.
-pub fn available_models() -> Vec<(&'static str, &'static str, u64, &'static str, bool, &'static str)> {
-    // (name, description, size_bytes, sha256, english_only, size_label)
+/// Tuple: (name, description, size_bytes, sha256, english_only, size_label, category)
+pub fn available_models() -> Vec<(&'static str, &'static str, u64, &'static str, bool, &'static str, &'static str)> {
     vec![
+        // ── English Only ──────────────────────────────────────────────────────
         (
             "tiny.en",
             "Fastest, lowest accuracy. Great for quick notes.",
             75_000_000,
             "921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f",
-            true,
-            "75 MB",
+            true, "75 MB", "English Only",
         ),
         (
             "base.en",
-            "Fast with better accuracy. Recommended for most users.",
+            "Fast with better accuracy. Good for everyday use.",
             142_000_000,
             "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
-            true,
-            "142 MB",
+            true, "142 MB", "English Only",
         ),
         (
             "small.en",
             "Balanced speed and accuracy. Great for professional use.",
             466_000_000,
             "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d",
-            true,
-            "466 MB",
+            true, "466 MB", "English Only",
         ),
         (
             "medium.en",
             "High accuracy, slower. Best for important recordings.",
             1_500_000_000,
             "cc37e93478338ec7700281a7ac30a10128929eb8f427dda2e865faa8f6da4356",
-            true,
-            "1.5 GB",
+            true, "1.5 GB", "English Only",
+        ),
+        // ── Multilingual ──────────────────────────────────────────────────────
+        (
+            "tiny",
+            "Fastest multilingual model. Supports 99 languages.",
+            75_000_000,
+            "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
+            false, "75 MB", "Multilingual",
+        ),
+        (
+            "base",
+            "Fast multilingual. Good accuracy across most languages.",
+            142_000_000,
+            "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+            false, "142 MB", "Multilingual",
+        ),
+        (
+            "small",
+            "Balanced multilingual. Strong accuracy for 99 languages.",
+            466_000_000,
+            "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+            false, "466 MB", "Multilingual",
+        ),
+        (
+            "medium",
+            "High accuracy multilingual. Ideal for non-English transcription.",
+            1_500_000_000,
+            "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208",
+            false, "1.5 GB", "Multilingual",
+        ),
+        (
+            "large-v2",
+            "Near-best accuracy, all languages. Stable and widely used.",
+            2_900_000_000,
+            "9a423fe4d40c82774b6af34115b8b935f34152246eb19e80e376071d3f999487",
+            false, "2.9 GB", "Multilingual",
         ),
         (
             "large-v3",
-            "Best accuracy, multilingual. Requires Apple Silicon.",
+            "Best accuracy, all languages. Requires plenty of RAM.",
             3_100_000_000,
             "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
-            false,
-            "3.1 GB",
+            false, "3.1 GB", "Multilingual",
+        ),
+        // ── Turbo ─────────────────────────────────────────────────────────────
+        (
+            "large-v3-turbo",
+            "Large-v3 quality at 8× the speed. Best balance of accuracy and performance.",
+            1_620_000_000,
+            "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69",
+            false, "1.6 GB", "Turbo",
         ),
     ]
 }
@@ -104,7 +146,7 @@ pub fn model_url(name: &str) -> String {
 pub fn list_models() -> Vec<ModelInfo> {
     available_models()
         .into_iter()
-        .map(|(name, desc, size, sha256, english_only, size_label)| {
+        .map(|(name, desc, size, sha256, english_only, size_label, category)| {
             let path = model_path(name);
             ModelInfo {
                 name: name.to_string(),
@@ -114,6 +156,7 @@ pub fn list_models() -> Vec<ModelInfo> {
                 sha256: sha256.to_string(),
                 is_downloaded: path.exists(),
                 is_english_only: english_only,
+                category: category.to_string(),
             }
         })
         .collect()
@@ -172,7 +215,7 @@ where
     let expected_sha256 = available_models()
         .into_iter()
         .find(|(n, ..)| *n == name)
-        .map(|(_, _, _, sha, ..)| sha.to_string())
+        .map(|(_, _, _, sha, _, _, _)| sha.to_string())
         .unwrap_or_default();
 
     if !expected_sha256.is_empty() {
