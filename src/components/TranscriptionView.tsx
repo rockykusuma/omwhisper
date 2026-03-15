@@ -259,7 +259,7 @@ export default function TranscriptionView({
       <div className="flex items-center justify-between mb-6">
         <span
           className="text-[11px] font-mono px-2.5 py-1 rounded-lg"
-          style={{ color: "rgba(255,255,255,0.40)", boxShadow: "var(--nm-pressed-sm)", background: "var(--bg)" }}
+          style={{ color: "var(--t3)", boxShadow: "var(--nm-pressed-sm)", background: "var(--bg)" }}
         >
           {activeModel}
         </span>
@@ -267,7 +267,7 @@ export default function TranscriptionView({
           onClick={() => setShowFileMode((v) => !v)}
           className="flex items-center gap-1.5 text-xs transition-all duration-150 cursor-pointer px-2.5 py-1 rounded-lg"
           style={{
-            color: showFileMode ? "rgb(52,211,153)" : "rgba(255,255,255,0.40)",
+            color: showFileMode ? "var(--accent)" : "var(--t3)",
             boxShadow: showFileMode ? "var(--nm-pressed-sm)" : "var(--nm-raised-sm)",
             background: "var(--bg)",
           }}
@@ -317,8 +317,8 @@ export default function TranscriptionView({
                       boxShadow: "var(--nm-pressed), 0 0 20px rgba(239,68,68,0.20)",
                     }
                 : {
-                    background: "linear-gradient(145deg, #3de0a8, #1d9e6e)",
-                    boxShadow: "var(--nm-raised), 0 0 28px rgba(52,211,153,0.25)",
+                    background: "linear-gradient(145deg, var(--accent-grad-from), var(--accent-grad-to))",
+                    boxShadow: "var(--nm-raised), 0 0 28px var(--accent-glow-weak)",
                   }
             }
           >
@@ -388,11 +388,11 @@ export default function TranscriptionView({
         <div className="card-inset overflow-hidden flex-1 min-h-0">
           <div
             className="flex items-center gap-2 px-5 py-3"
-            style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+            style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}
           >
             <div
               className={`w-2 h-2 rounded-full ${isRecording ? (isSmartDictation ? "bg-violet-400 animate-pulse" : "bg-red-400 animate-pulse") : "bg-emerald-400"}`}
-              style={isRecording ? undefined : { boxShadow: "0 0 5px rgba(52,211,153,0.6)" }}
+              style={isRecording ? undefined : { boxShadow: "0 0 5px var(--accent-glow)" }}
             />
             <span className="text-white/45 text-xs font-mono">
               {loading
@@ -412,7 +412,7 @@ export default function TranscriptionView({
               <button
                 onClick={() => setSegments([])}
                 className="ml-auto text-[10px] font-sans cursor-pointer transition-colors duration-150"
-                style={{ color: "rgba(255,255,255,0.30)" }}
+                style={{ color: "var(--t4)" }}
                 aria-label="Clear transcription"
               >
                 Clear
@@ -439,8 +439,8 @@ export default function TranscriptionView({
             <span
               className="text-5xl"
               style={{
-                color: "rgba(255,255,255,0.06)",
-                filter: "drop-shadow(0 0 12px rgba(52,211,153,0.08))",
+                color: "var(--t4)",
+                filter: "drop-shadow(0 0 12px var(--accent-glow-weak))",
               }}
             >
               ॐ
@@ -455,7 +455,7 @@ export default function TranscriptionView({
       {toast && (
         <div
           className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl text-emerald-400 text-xs font-mono pointer-events-none z-50"
-          style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm), 0 0 16px rgba(52,211,153,0.15)" }}
+          style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm), 0 0 16px var(--accent-glow-weak)" }}
         >
           {toast}
         </div>
@@ -470,7 +470,7 @@ export default function TranscriptionView({
           >
             <div
               className="text-3xl mb-3 select-none"
-              style={{ filter: "drop-shadow(0 0 10px rgba(52,211,153,0.4))" }}
+              style={{ filter: "drop-shadow(0 0 10px var(--accent-glow))" }}
             >
               ॐ
             </div>

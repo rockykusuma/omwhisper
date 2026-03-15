@@ -5,6 +5,7 @@ import {
   Sliders, Mic, FileText, CreditCard, Info, Sparkles
 } from "lucide-react";
 import { logger } from "../utils/logger";
+import { useTheme, THEMES } from "../hooks/useTheme";
 import type { AppSettings, BuiltInStyle, CustomStyle, OllamaStatus, StorageInfo } from "../types";
 
 type Settings = AppSettings;
@@ -37,8 +38,8 @@ function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: bool
         className="absolute top-1 w-4 h-4 rounded-full transition-all duration-200"
         style={{
           transform: value ? "translateX(20px)" : "translateX(4px)",
-          background: value ? "rgb(52,211,153)" : "rgba(255,255,255,0.25)",
-          boxShadow: value ? "0 0 6px rgba(52,211,153,0.5), var(--nm-raised-sm)" : "var(--nm-raised-sm)",
+          background: value ? "var(--accent)" : "var(--t4)",
+          boxShadow: value ? "0 0 6px var(--accent-glow), var(--nm-raised-sm)" : "var(--nm-raised-sm)",
         }}
       />
     </button>
@@ -55,7 +56,7 @@ function SettingRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-3 last:border-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+    <div className="flex items-center justify-between gap-4 py-3 last:border-0" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
       <div>
         <p className="text-white/80 text-sm">{label}</p>
         {description && <p className="text-white/50 text-xs mt-0.5">{description}</p>}
@@ -81,6 +82,7 @@ export default function SettingsPanel() {
   const [newStylePrompt, setNewStylePrompt] = useState("");
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
+  const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     Promise.all([
@@ -176,7 +178,7 @@ export default function SettingsPanel() {
               className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs transition-all duration-200 cursor-pointer text-left"
               style={{
                 boxShadow: isActive ? "var(--nm-pressed-sm)" : "var(--nm-raised-sm)",
-                color: isActive ? "rgb(52,211,153)" : "rgba(255,255,255,0.45)",
+                color: isActive ? "var(--accent)" : "var(--t3)",
                 background: "var(--bg)",
               }}
             >
@@ -196,7 +198,46 @@ export default function SettingsPanel() {
 
         {activeTab === "general" && (
           <div>
-            <h3 className="text-white/50 text-[10px] uppercase tracking-widest mb-4 font-mono">General</h3>
+            {/* Theme picker */}
+            <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Appearance</h3>
+            <div className="card px-5 py-4 mb-6">
+              <p className="text-t3 text-xs mb-4">Theme</p>
+              <div className="flex items-center gap-3 flex-wrap">
+                {THEMES.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTheme(t.id)}
+                    title={t.label}
+                    className="flex flex-col items-center gap-1.5 cursor-pointer group"
+                    aria-pressed={theme === t.id}
+                  >
+                    <div
+                      className="w-11 h-11 rounded-xl transition-all duration-200 relative"
+                      style={{
+                        background: t.bg,
+                        boxShadow: theme === t.id
+                          ? `0 0 0 2.5px ${t.accent}, 0 0 14px ${t.accent}55`
+                          : "inset 2px 2px 5px rgba(0,0,0,0.25), inset -2px -2px 5px rgba(255,255,255,0.12)",
+                      }}
+                    >
+                      {/* Accent dot */}
+                      <span
+                        className="absolute bottom-1.5 right-1.5 w-2 h-2 rounded-full"
+                        style={{ background: t.accent }}
+                      />
+                    </div>
+                    <span
+                      className="text-[10px] font-mono transition-colors"
+                      style={{ color: theme === t.id ? "var(--accent)" : "var(--t3)" }}
+                    >
+                      {t.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">General</h3>
             <div className="card px-5">
               <SettingRow label="Global Hotkey" description="Toggle recording from anywhere">
                 <div className="px-3 py-1.5 rounded-lg bg-white/[0.06] text-white/60 text-xs font-mono">
@@ -211,8 +252,8 @@ export default function SettingsPanel() {
                       onClick={() => update({ recording_mode: mode })}
                       className="px-3 py-1.5 text-xs transition-all duration-150 cursor-pointer"
                       style={{
-                        background: settings.recording_mode === mode ? "rgba(52,211,153,0.15)" : "transparent",
-                        color: settings.recording_mode === mode ? "rgb(52,211,153)" : "rgba(255,255,255,0.40)",
+                        background: settings.recording_mode === mode ? "var(--accent-bg)" : "transparent",
+                        color: settings.recording_mode === mode ? "var(--accent)" : "var(--t3)",
                       }}
                       aria-pressed={settings.recording_mode === mode}
                     >
@@ -260,7 +301,7 @@ export default function SettingsPanel() {
               </SettingRow>
             </div>
 
-            <h3 className="text-white/50 text-[10px] uppercase tracking-widest mt-6 mb-4 font-mono">Storage</h3>
+            <h3 className="text-t3 text-[10px] uppercase tracking-widest mt-6 mb-4 font-mono">Storage</h3>
             <div className="card px-5">
               <SettingRow label="Auto-Delete History" description="Remove transcriptions older than">
                 <select
@@ -289,7 +330,7 @@ export default function SettingsPanel() {
 
         {activeTab === "audio" && (
           <div>
-            <h3 className="text-white/50 text-[10px] uppercase tracking-widest mb-4 font-mono">Audio</h3>
+            <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Audio</h3>
             <div className="card px-5">
               <SettingRow label="Microphone" description="Input device for recording">
                 <select
@@ -347,7 +388,7 @@ export default function SettingsPanel() {
 
         {activeTab === "transcription" && (
           <div>
-            <h3 className="text-white/50 text-[10px] uppercase tracking-widest mb-4 font-mono">Transcription</h3>
+            <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Transcription</h3>
             <div className="card px-5">
               <SettingRow label="Active Model" description="Whisper model used for transcription">
                 <div className="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-mono">
@@ -377,7 +418,7 @@ export default function SettingsPanel() {
 
         {activeTab === "ai" && (
           <div>
-            <h3 className="text-white/50 text-[10px] uppercase tracking-widest mb-4 font-mono">AI Processing</h3>
+            <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">AI Processing</h3>
 
             {/* Backend selector */}
             <div className="card px-5 mb-5">
@@ -390,7 +431,7 @@ export default function SettingsPanel() {
                       className="px-3 py-1.5 text-xs transition-all duration-150 cursor-pointer"
                       style={{
                         background: settings.ai_backend === b ? "rgba(139,92,246,0.15)" : "transparent",
-                        color: settings.ai_backend === b ? "rgb(167,139,250)" : "rgba(255,255,255,0.40)",
+                        color: settings.ai_backend === b ? "rgb(167,139,250)" : "var(--t3)",
                       }}
                     >
                       {b === "ollama" ? "On-Device" : b === "cloud" ? "Cloud API" : "Disabled"}
@@ -523,7 +564,7 @@ export default function SettingsPanel() {
             )}
 
             {/* Smart Dictation shortcut + style */}
-            <h3 className="text-white/50 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Smart Dictation</h3>
+            <h3 className="text-t3 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Smart Dictation</h3>
             <div className="card px-5 mb-5">
               <SettingRow label="Shortcut" description="Hotkey for Smart Dictation">
                 <div className="px-3 py-1.5 rounded-lg bg-white/[0.06] text-white/60 text-xs font-mono">⌘⇧B</div>
@@ -565,7 +606,7 @@ export default function SettingsPanel() {
             </div>
 
             {/* Polish styles */}
-            <h3 className="text-white/50 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Polish Styles</h3>
+            <h3 className="text-t3 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Polish Styles</h3>
             <div className="card px-5 mb-5">
               {builtInStyles.map((s) => (
                 <div key={s.id} className="flex items-center justify-between py-2.5 border-b border-white/[0.04] last:border-0">
@@ -579,7 +620,7 @@ export default function SettingsPanel() {
             </div>
 
             {/* Custom styles */}
-            <h3 className="text-white/50 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Custom Styles</h3>
+            <h3 className="text-t3 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Custom Styles</h3>
             <div className="card px-5 mb-4">
               {customStyles.length === 0 && (
                 <p className="text-white/35 text-xs py-3">No custom styles yet.</p>
@@ -661,7 +702,7 @@ function AboutSection() {
 
   return (
     <div>
-      <h3 className="text-white/50 text-[10px] uppercase tracking-widest mb-4 font-mono">About</h3>
+      <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">About</h3>
       <div className="card px-5">
         <SettingRow label="Version">
           <span className="text-white/50 text-xs font-mono">{version}</span>
@@ -772,7 +813,7 @@ function LicenseSection() {
 
   return (
     <div>
-      <h3 className="text-white/50 text-[10px] uppercase tracking-widest mb-4 font-mono">License</h3>
+      <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">License</h3>
       <div className="card p-5 space-y-3">
         {isActive ? (
           <>

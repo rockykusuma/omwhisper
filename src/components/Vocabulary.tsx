@@ -67,7 +67,7 @@ export default function Vocabulary() {
 
       {/* Custom Words */}
       <div>
-        <h3 className="text-white/50 text-[10px] uppercase tracking-widest mb-3 font-mono">
+        <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-3 font-mono">
           Custom Words
         </h3>
         <p className="text-white/40 text-xs mb-3 leading-relaxed">
@@ -121,7 +121,7 @@ export default function Vocabulary() {
 
       {/* Auto-Replacements */}
       <div>
-        <h3 className="text-white/50 text-[10px] uppercase tracking-widest mb-3 font-mono">
+        <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-3 font-mono">
           Auto-Replacements
         </h3>
         <p className="text-white/40 text-xs mb-3 leading-relaxed">

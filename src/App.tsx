@@ -9,7 +9,11 @@ import Onboarding from "./components/Onboarding";
 import TranscriptionHistory from "./components/TranscriptionHistory";
 import Vocabulary from "./components/Vocabulary";
 import { logger } from "./utils/logger";
+import { initTheme } from "./hooks/useTheme";
 import type { UpdateInfo } from "./types";
+
+// Apply saved theme before first render
+initTheme();
 
 function App() {
   const [isRecording, setIsRecording] = useState(false);

@@ -3,6 +3,12 @@
 @theme {
   --font-sans: 'DM Sans', sans-serif;
   --font-mono: 'DM Mono', monospace;
+
+  /* Semantic text colors — adapt per theme */
+  --color-t1: var(--t1);
+  --color-t2: var(--t2);
+  --color-t3: var(--t3);
+  --color-t4: var(--t4);
 }
 
 /* Ensure Devanagari glyphs (ॐ U+0950) render with macOS system fonts */
@@ -12,27 +18,139 @@
   unicode-range: U+0950;
 }
 
-/* ── Neumorphic design tokens ───────────────────────────────────── */
+/* ── Design tokens shared by all themes ──────────────────────────────── */
 :root {
-  --bg:            #1c2821;
-  --shadow-dark:   #0e1812;
-  --shadow-light:  #2a3a30;
-
+  /* ── Neumorphic shadows (computed from --bg) */
   --nm-raised:     6px 6px 18px var(--shadow-dark), -6px -6px 18px var(--shadow-light);
   --nm-raised-sm:  3px 3px 9px  var(--shadow-dark), -3px -3px 9px  var(--shadow-light);
   --nm-pressed:    inset 5px 5px 12px var(--shadow-dark), inset -5px -5px 12px var(--shadow-light);
   --nm-pressed-sm: inset 2px 2px 6px  var(--shadow-dark), inset -2px -2px 6px  var(--shadow-light);
 }
 
+/* ══ THEME 1 — Forest Dark (default) ════════════════════════════════════ */
+:root,
+[data-theme="forest-dark"] {
+  --bg:           #1c2821;
+  --shadow-dark:  #0e1812;
+  --shadow-light: #2a3a30;
+
+  --t1: rgba(255, 255, 255, 0.90);
+  --t2: rgba(255, 255, 255, 0.55);
+  --t3: rgba(255, 255, 255, 0.35);
+  --t4: rgba(255, 255, 255, 0.20);
+
+  --accent:           #34d399;
+  --accent-glow:      rgba(52, 211, 153, 0.50);
+  --accent-glow-weak: rgba(52, 211, 153, 0.25);
+  --accent-bg:        rgba(52, 211, 153, 0.12);
+  --accent-grad-from: #3de0a8;
+  --accent-grad-to:   #25b87e;
+}
+
+/* ══ THEME 2 — Sage Light ════════════════════════════════════════════════ */
+[data-theme="sage-light"] {
+  --bg:           #d4e2d8;
+  --shadow-dark:  #b0c2b8;
+  --shadow-light: #f0f8f4;
+
+  --t1: rgba(14, 26, 18, 0.88);
+  --t2: rgba(14, 26, 18, 0.55);
+  --t3: rgba(14, 26, 18, 0.38);
+  --t4: rgba(14, 26, 18, 0.22);
+
+  --accent:           #059669;
+  --accent-glow:      rgba(5, 150, 105, 0.45);
+  --accent-glow-weak: rgba(5, 150, 105, 0.22);
+  --accent-bg:        rgba(5, 150, 105, 0.12);
+  --accent-grad-from: #10b981;
+  --accent-grad-to:   #059669;
+
+  /* Adapt Tailwind emerald palette to a darker shade for contrast on light bg */
+  --color-emerald-300: #10b981;
+  --color-emerald-400: #059669;
+  --color-emerald-500: #047857;
+}
+
+/* ══ THEME 3 — Ocean Blue ════════════════════════════════════════════════ */
+[data-theme="ocean-blue"] {
+  --bg:           #ccd8e8;
+  --shadow-dark:  #aabccc;
+  --shadow-light: #eaf4ff;
+
+  --t1: rgba(8, 18, 32, 0.88);
+  --t2: rgba(8, 18, 32, 0.55);
+  --t3: rgba(8, 18, 32, 0.38);
+  --t4: rgba(8, 18, 32, 0.22);
+
+  --accent:           #0284c7;
+  --accent-glow:      rgba(2, 132, 199, 0.45);
+  --accent-glow-weak: rgba(2, 132, 199, 0.22);
+  --accent-bg:        rgba(2, 132, 199, 0.12);
+  --accent-grad-from: #38bdf8;
+  --accent-grad-to:   #0284c7;
+
+  --color-emerald-300: #38bdf8;
+  --color-emerald-400: #0284c7;
+  --color-emerald-500: #0369a1;
+}
+
+/* ══ THEME 4 — Warm Amber ════════════════════════════════════════════════ */
+[data-theme="warm-amber"] {
+  --bg:           #e2d8c8;
+  --shadow-dark:  #c4baa8;
+  --shadow-light: #fcf4e4;
+
+  --t1: rgba(28, 18, 8, 0.88);
+  --t2: rgba(28, 18, 8, 0.55);
+  --t3: rgba(28, 18, 8, 0.38);
+  --t4: rgba(28, 18, 8, 0.22);
+
+  --accent:           #b45309;
+  --accent-glow:      rgba(180, 83, 9, 0.45);
+  --accent-glow-weak: rgba(180, 83, 9, 0.22);
+  --accent-bg:        rgba(180, 83, 9, 0.12);
+  --accent-grad-from: #fbbf24;
+  --accent-grad-to:   #d97706;
+
+  --color-emerald-300: #fbbf24;
+  --color-emerald-400: #d97706;
+  --color-emerald-500: #b45309;
+}
+
+/* ══ THEME 5 — Slate Night ═══════════════════════════════════════════════ */
+[data-theme="slate-night"] {
+  --bg:           #1a2038;
+  --shadow-dark:  #0c1224;
+  --shadow-light: #283050;
+
+  --t1: rgba(255, 255, 255, 0.90);
+  --t2: rgba(255, 255, 255, 0.55);
+  --t3: rgba(255, 255, 255, 0.35);
+  --t4: rgba(255, 255, 255, 0.20);
+
+  --accent:           #60a5fa;
+  --accent-glow:      rgba(96, 165, 250, 0.50);
+  --accent-glow-weak: rgba(96, 165, 250, 0.25);
+  --accent-bg:        rgba(96, 165, 250, 0.12);
+  --accent-grad-from: #93c5fd;
+  --accent-grad-to:   #3b82f6;
+
+  --color-emerald-300: #93c5fd;
+  --color-emerald-400: #60a5fa;
+  --color-emerald-500: #3b82f6;
+}
+
+/* ── Base styles ─────────────────────────────────────────────────────── */
 @layer base {
   html, body {
     font-family: 'OmGlyph', var(--font-sans);
     background: var(--bg);
-    color: rgba(255,255,255,0.90);
+    color: var(--t1);
     -webkit-font-smoothing: antialiased;
   }
 }
 
+/* ── Component classes ───────────────────────────────────────────────── */
 @layer components {
   /* Raised panel */
   .card {
@@ -53,13 +171,13 @@
     @apply px-4 py-2 rounded-xl font-semibold text-sm
            disabled:opacity-40 disabled:cursor-not-allowed
            transition-all duration-150 cursor-pointer;
-    background: linear-gradient(145deg, #3de0a8, #25b87e);
+    background: linear-gradient(145deg, var(--accent-grad-from), var(--accent-grad-to));
     color: #0a1a12;
     box-shadow: var(--nm-raised-sm);
   }
   .btn-primary:hover:not(:disabled) {
     box-shadow: 4px 4px 12px var(--shadow-dark), -4px -4px 12px var(--shadow-light),
-                0 0 20px rgba(52,211,153,0.30);
+                0 0 20px var(--accent-glow-weak);
   }
   .btn-primary:active:not(:disabled) {
     box-shadow: var(--nm-pressed-sm);
@@ -69,16 +187,72 @@
   .btn-ghost {
     @apply px-3 py-1.5 rounded-lg text-sm
            transition-all duration-150 cursor-pointer;
-    color: rgba(255,255,255,0.60);
+    color: var(--t2);
     background: var(--bg);
     box-shadow: var(--nm-raised-sm);
   }
   .btn-ghost:hover {
-    color: rgba(255,255,255,0.85);
+    color: var(--t1);
     box-shadow: 4px 4px 10px var(--shadow-dark), -4px -4px 10px var(--shadow-light);
   }
   .btn-ghost:active {
     box-shadow: var(--nm-pressed-sm);
-    color: rgba(255,255,255,0.85);
+    color: var(--t1);
   }
 }
+
+/* ── Light-theme overrides for Tailwind text-white/XX utilities ──────── */
+/*
+   These selectors have higher specificity than the generated utilities,
+   so they win without !important. All three light themes share the same
+   override block — each defines its own --t1..--t4 values.
+*/
+html.theme-light .text-white\/90,
+html.theme-light .text-white\/85,
+html.theme-light .text-white\/80,
+html.theme-light .text-white\/75 { color: var(--t1); }
+
+html.theme-light .text-white\/70,
+html.theme-light .text-white\/65,
+html.theme-light .text-white\/60,
+html.theme-light .text-white\/55,
+html.theme-light .text-white\/50 { color: var(--t2); }
+
+html.theme-light .text-white\/45,
+html.theme-light .text-white\/40,
+html.theme-light .text-white\/35 { color: var(--t3); }
+
+html.theme-light .text-white\/30,
+html.theme-light .text-white\/25,
+html.theme-light .text-white\/20,
+html.theme-light .text-white\/15,
+html.theme-light .text-white\/10 { color: var(--t4); }
+
+/* Hover variants */
+html.theme-light .hover\:text-white\/90:hover,
+html.theme-light .hover\:text-white\/80:hover,
+html.theme-light .hover\:text-white\/70:hover { color: var(--t1); }
+
+html.theme-light .hover\:text-white\/65:hover,
+html.theme-light .hover\:text-white\/60:hover,
+html.theme-light .hover\:text-white\/55:hover,
+html.theme-light .hover\:text-white\/50:hover { color: var(--t2); }
+
+html.theme-light .hover\:text-white\/40:hover { color: var(--t3); }
+
+/* Placeholder variants */
+html.theme-light .placeholder\:text-white\/25::placeholder,
+html.theme-light .placeholder\:text-white\/30::placeholder,
+html.theme-light .placeholder\:text-white\/35::placeholder { color: var(--t4); }
+
+/* White background opacity (waveform inactive bars, overlays) */
+html.theme-light .bg-white\/\[0\.08\] { background: color-mix(in srgb, var(--t1) 8%, transparent); }
+html.theme-light .bg-white\/\[0\.04\] { background: color-mix(in srgb, var(--t1) 4%, transparent); }
+html.theme-light .bg-white\/\[0\.06\] { background: color-mix(in srgb, var(--t1) 6%, transparent); }
+html.theme-light .bg-white\/10       { background: color-mix(in srgb, var(--t1) 10%, transparent); }
+html.theme-light .bg-white\/20       { background: color-mix(in srgb, var(--t1) 20%, transparent); }
+
+/* Border white opacity */
+html.theme-light .border-white\/\[0\.04\] { border-color: color-mix(in srgb, var(--t1) 4%, transparent); }
+html.theme-light .border-white\/\[0\.06\] { border-color: color-mix(in srgb, var(--t1) 6%, transparent); }
+html.theme-light .border-white\/10        { border-color: color-mix(in srgb, var(--t1) 10%, transparent); }

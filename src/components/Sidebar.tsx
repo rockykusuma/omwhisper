@@ -67,12 +67,12 @@ export default function Sidebar({ activeView, onNavigate, appVersion }: Props) {
           className="flex items-center gap-2.5 px-3 py-2.5 rounded-2xl"
           style={{ boxShadow: "var(--nm-raised-sm)" }}
         >
-          <span className="text-emerald-400 text-[22px] leading-none select-none drop-shadow-[0_0_8px_rgba(52,211,153,0.6)]">ॐ</span>
+          <span className="text-emerald-400 text-[22px] leading-none select-none drop-shadow-[0_0_8px_var(--accent-glow)]">ॐ</span>
           <span className="text-white/90 font-semibold text-sm tracking-tight">OmWhisper</span>
           {isLicensed && (
             <span
               className="text-[9px] px-1.5 py-0.5 rounded-full text-emerald-300 font-mono leading-none ml-auto"
-              style={{ background: "rgba(52,211,153,0.12)", boxShadow: "var(--nm-pressed-sm)" }}
+              style={{ background: "var(--accent-bg)", boxShadow: "var(--nm-pressed-sm)" }}
             >
               PRO
             </span>
@@ -92,7 +92,7 @@ export default function Sidebar({ activeView, onNavigate, appVersion }: Props) {
               className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 cursor-pointer text-left"
               style={{
                 boxShadow: isActive ? "var(--nm-pressed-sm)" : "var(--nm-raised-sm)",
-                color: isActive ? "rgb(52,211,153)" : "rgba(255,255,255,0.55)",
+                color: isActive ? "var(--accent)" : "var(--t2)",
                 background: "var(--bg)",
               }}
             >
@@ -105,7 +105,7 @@ export default function Sidebar({ activeView, onNavigate, appVersion }: Props) {
               {isActive && (
                 <span
                   className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400"
-                  style={{ boxShadow: "0 0 6px rgba(52,211,153,0.8)" }}
+                  style={{ boxShadow: "0 0 6px var(--accent-glow)" }}
                 />
               )}
             </button>
@@ -134,7 +134,7 @@ export default function Sidebar({ activeView, onNavigate, appVersion }: Props) {
                 }`}
                 style={{
                   width: `${usagePct}%`,
-                  boxShadow: usagePct > 0 ? "0 0 6px rgba(52,211,153,0.6)" : "none",
+                  boxShadow: usagePct > 0 ? "0 0 6px var(--accent-glow)" : "none",
                 }}
               />
             </div>
