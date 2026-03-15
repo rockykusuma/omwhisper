@@ -75,6 +75,21 @@ pub struct Settings {
     /// Smart Dictation hotkey
     #[serde(default = "default_smart_dictation_hotkey")]
     pub smart_dictation_hotkey: String,
+    /// Dedicated Push-to-Talk hotkey combo (used when ptt_key == "custom")
+    #[serde(default = "default_push_to_talk_hotkey")]
+    pub push_to_talk_hotkey: String,
+    /// Which key triggers PTT: "fn" | "control" | "left_option" | "right_option" | "custom"
+    #[serde(default = "default_ptt_key")]
+    pub ptt_key: String,
+    /// Double-press the PTT key quickly to lock recording (hold not required).
+    #[serde(default)]
+    pub double_press_lock: bool,
+    /// Overlay placement: "top-center" | "top-left" | "top-right" | "bottom-center" | "bottom-left" | "bottom-right"
+    #[serde(default = "default_overlay_placement")]
+    pub overlay_placement: String,
+    /// Overlay visual style: "micro" (compact bars-only pill) | "waveform" (larger bars + Listening label)
+    #[serde(default = "default_overlay_style")]
+    pub overlay_style: String,
     /// User-created custom polish styles.
     #[serde(default)]
     pub custom_polish_styles: Vec<crate::styles::CustomStyle>,
@@ -82,6 +97,8 @@ pub struct Settings {
 
 fn default_clipboard_restore_delay_ms() -> u64 { 2000 }
 fn default_recording_mode() -> String { "toggle".to_string() }
+fn default_overlay_placement() -> String { "top-center".to_string() }
+fn default_overlay_style() -> String { "micro".to_string() }
 fn default_ai_backend() -> String { "disabled".to_string() }
 fn default_ai_ollama_model() -> String { "llama3.2".to_string() }
 fn default_ai_ollama_url() -> String { "http://localhost:11434".to_string() }
@@ -91,6 +108,8 @@ fn default_ai_timeout_seconds() -> u32 { 30 }
 fn default_active_polish_style() -> String { "professional".to_string() }
 fn default_translate_target_language() -> String { "English".to_string() }
 fn default_smart_dictation_hotkey() -> String { "CmdOrCtrl+Shift+B".to_string() }
+fn default_push_to_talk_hotkey() -> String { "CmdOrCtrl+Shift+X".to_string() }
+fn default_ptt_key() -> String { "custom".to_string() }
 
 fn default_true() -> bool { true }
 fn default_sound_volume() -> f32 { 0.7 }
@@ -131,6 +150,11 @@ impl Default for Settings {
             active_polish_style: "professional".to_string(),
             translate_target_language: "English".to_string(),
             smart_dictation_hotkey: "CmdOrCtrl+Shift+B".to_string(),
+            push_to_talk_hotkey: "CmdOrCtrl+Shift+X".to_string(),
+            ptt_key: "custom".to_string(),
+            double_press_lock: false,
+            overlay_placement: "top-center".to_string(),
+            overlay_style: "micro".to_string(),
             custom_polish_styles: Vec::new(),
         }
     }

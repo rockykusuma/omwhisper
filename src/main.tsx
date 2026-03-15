@@ -18,17 +18,10 @@ getWindowLabel().then(label => {
   const root = document.getElementById("root") as HTMLElement;
 
   if (label === "overlay") {
-    // Overlay: transparent, no padding, full height
-    document.body.style.background = "transparent";
-    document.body.style.margin = "0";
-    document.body.style.height = "72px";
-    document.body.style.overflow = "hidden";
-    document.documentElement.style.background = "transparent";
-    ReactDOM.createRoot(root).render(
-      <div style={{ height: "72px", padding: 0 }}>
-        <OverlayWindow />
-      </div>
-    );
+    // Overlay: fully transparent chrome, content-sized pill
+    document.documentElement.style.cssText = "background: transparent !important; margin: 0; padding: 0;";
+    document.body.style.cssText = "background: transparent !important; margin: 0; padding: 0; height: 100vh; overflow: hidden; display: flex; align-items: center; justify-content: center;";
+    ReactDOM.createRoot(root).render(<OverlayWindow />);
   } else {
     ReactDOM.createRoot(root).render(
       <ErrorBoundary>

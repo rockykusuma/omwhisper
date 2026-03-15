@@ -387,8 +387,10 @@ pub async fn get_settings() -> Result<Settings, String> {
 }
 
 #[tauri::command]
-pub async fn update_settings(new_settings: Settings) -> Result<(), String> {
-    settings::save_settings(&new_settings).await.map_err(|e| e.to_string())
+pub async fn update_settings(app: tauri::AppHandle, new_settings: Settings) -> Result<(), String> {
+    settings::save_settings(&new_settings).await.map_err(|e| e.to_string())?;
+    let _ = app.emit("settings-changed", ());
+    Ok(())
 }
 
 #[tauri::command]
@@ -425,17 +427,27 @@ pub async fn complete_onboarding() -> Result<(), String> {
 #[tauri::command]
 pub async fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
     use tauri::Manager;
+    let settings = crate::settings::load_settings().await;
     if let Some(win) = app.get_webview_window("overlay") {
-        // Position near top-center of screen
         if let Ok(Some(monitor)) = win.current_monitor() {
-            let screen_size = monitor.size();
-            let win_width = 320u32;
-            let x = (screen_size.width as i32 - win_width as i32) / 2;
-            let y = 60i32;
+            let screen = monitor.size();
+            let (win_w, win_h) = if settings.overlay_style == "waveform" {
+                (280i32, 100i32)
+            } else {
+                (110i32, 44i32)
+            };
+            let margin = 60i32;
+            let (x, y) = match settings.overlay_placement.as_str() {
+                "top-left"      => (margin, margin),
+                "top-right"     => (screen.width as i32 - win_w - margin, margin),
+                "bottom-center" => ((screen.width as i32 - win_w) / 2, screen.height as i32 - win_h - margin),
+                "bottom-left"   => (margin, screen.height as i32 - win_h - margin),
+                "bottom-right"  => (screen.width as i32 - win_w - margin, screen.height as i32 - win_h - margin),
+                _               => ((screen.width as i32 - win_w) / 2, margin), // top-center default
+            };
             let _ = win.set_position(tauri::PhysicalPosition { x, y });
         }
         win.show().map_err(|e| e.to_string())?;
-        // Don't steal focus — user must keep typing in their dictation target
     }
     Ok(())
 }
@@ -828,4 +840,85 @@ pub fn get_cloud_api_key_status() -> bool {
 #[tauri::command]
 pub fn delete_cloud_api_key_cmd() -> Result<(), String> {
     crate::ai::delete_cloud_api_key().map_err(|e| e.to_string())
+}
+
+// ─── Model Recommendation ────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct SystemSpec {
+    pub total_ram_gb: f64,
+    pub cpu_brand: String,
+    pub cpu_cores: usize,
+    pub is_apple_silicon: bool,
+}
+
+#[derive(serde::Serialize)]
+pub struct ModelRecommendation {
+    pub recommended_model: String,
+    pub reason: String,
+    pub spec: SystemSpec,
+}
+
+#[tauri::command]
+pub fn get_model_recommendation() -> ModelRecommendation {
+    use sysinfo::System;
+
+    let mut sys = System::new_all();
+    sys.refresh_all();
+
+    let total_ram_bytes = sys.total_memory();
+    let total_ram_gb = total_ram_bytes as f64 / 1_073_741_824.0; // bytes → GB
+
+    let cpu_brand = sys.cpus().first().map(|c| c.brand().to_string()).unwrap_or_default();
+    let cpu_cores = sys.cpus().len();
+
+    // Apple Silicon: brand string contains "Apple"
+    let is_apple_silicon = cpu_brand.contains("Apple");
+
+    let (recommended_model, reason) = recommend_model(total_ram_gb, is_apple_silicon, cpu_cores);
+
+    ModelRecommendation {
+        recommended_model,
+        reason,
+        spec: SystemSpec {
+            total_ram_gb: (total_ram_gb * 10.0).round() / 10.0,
+            cpu_brand,
+            cpu_cores,
+            is_apple_silicon,
+        },
+    }
+}
+
+fn recommend_model(ram_gb: f64, is_apple_silicon: bool, _cores: usize) -> (String, String) {
+    if is_apple_silicon {
+        // Apple Silicon — Metal acceleration makes larger models practical
+        if ram_gb >= 24.0 {
+            ("large-v3".to_string(),
+             format!("Your Apple Silicon Mac with {:.0}GB unified memory can run the highest-quality model at full speed via Metal GPU acceleration.", ram_gb))
+        } else if ram_gb >= 16.0 {
+            ("medium.en".to_string(),
+             format!("Your Apple Silicon Mac with {:.0}GB unified memory is ideal for medium.en — excellent accuracy with fast Metal inference.", ram_gb))
+        } else if ram_gb >= 8.0 {
+            ("small.en".to_string(),
+             format!("Your Apple Silicon Mac with {:.0}GB unified memory runs small.en beautifully — a great balance of speed and accuracy.", ram_gb))
+        } else {
+            ("base.en".to_string(),
+             format!("Your Apple Silicon Mac with {:.0}GB unified memory will run base.en quickly — solid accuracy for everyday use.", ram_gb))
+        }
+    } else {
+        // Intel / other — CPU-only inference, RAM is more limiting
+        if ram_gb >= 32.0 {
+            ("medium.en".to_string(),
+             format!("Your Mac with {:.0}GB RAM can comfortably run medium.en — high accuracy for important recordings.", ram_gb))
+        } else if ram_gb >= 16.0 {
+            ("small.en".to_string(),
+             format!("Your Mac with {:.0}GB RAM is well-suited for small.en — a reliable mix of speed and accuracy.", ram_gb))
+        } else if ram_gb >= 8.0 {
+            ("base.en".to_string(),
+             format!("Your Mac with {:.0}GB RAM is a good fit for base.en — faster than small.en with solid results.", ram_gb))
+        } else {
+            ("tiny.en".to_string(),
+             format!("Your Mac has {:.0}GB RAM; tiny.en keeps resource usage low while still delivering usable transcription.", ram_gb))
+        }
+    }
 }
