@@ -257,20 +257,30 @@ export default function TranscriptionView({
     <div className="flex flex-col h-full px-8 py-6">
       {/* Active model badge */}
       <div className="flex items-center justify-between mb-6">
-        <span className="text-white/35 text-xs font-mono">{activeModel} model</span>
+        <span
+          className="text-[11px] font-mono px-2.5 py-1 rounded-lg"
+          style={{ color: "rgba(255,255,255,0.40)", boxShadow: "var(--nm-pressed-sm)", background: "var(--bg)" }}
+        >
+          {activeModel}
+        </span>
         <button
           onClick={() => setShowFileMode((v) => !v)}
-          className="flex items-center gap-1.5 text-white/40 hover:text-white/50 text-xs transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 text-xs transition-all duration-150 cursor-pointer px-2.5 py-1 rounded-lg"
+          style={{
+            color: showFileMode ? "rgb(52,211,153)" : "rgba(255,255,255,0.40)",
+            boxShadow: showFileMode ? "var(--nm-pressed-sm)" : "var(--nm-raised-sm)",
+            background: "var(--bg)",
+          }}
           aria-label="Toggle file transcription mode"
         >
           <FileAudio size={13} />
-          <span>Transcribe file</span>
+          <span>File</span>
         </button>
       </div>
 
       {/* File mode */}
       {showFileMode && (
-        <div className="mb-5 p-4 card">
+        <div className="mb-5 p-4 rounded-2xl" style={{ boxShadow: "var(--nm-pressed-sm)", background: "var(--bg)" }}>
           <div className="flex items-center gap-3">
             <button
               onClick={handleSelectFile}
@@ -289,31 +299,52 @@ export default function TranscriptionView({
 
       {/* Central record area */}
       <div className="flex flex-col items-center gap-5 py-6">
-        {/* Circular record button */}
+        {/* Circular record button — neumorphic: raised idle, pressed when active */}
         <div className="relative">
           <button
             onClick={isRecording ? handleStopRecording : handleStartRecording}
             aria-label={isRecording ? "Stop recording" : "Start recording"}
-            className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0f0d] ${
+            className="relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 cursor-pointer focus-visible:outline-none"
+            style={
               isRecording
                 ? isSmartDictation
-                  ? "bg-violet-500 shadow-[0_0_32px_rgba(139,92,246,0.45)]"
-                  : "bg-red-500 shadow-[0_0_32px_rgba(239,68,68,0.45)]"
-                : "bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-[0_0_28px_rgba(52,211,153,0.3)] hover:shadow-[0_0_40px_rgba(52,211,153,0.5)] hover:scale-105"
-            }`}
+                  ? {
+                      background: "var(--bg)",
+                      boxShadow: "var(--nm-pressed), 0 0 20px rgba(139,92,246,0.25)",
+                    }
+                  : {
+                      background: "var(--bg)",
+                      boxShadow: "var(--nm-pressed), 0 0 20px rgba(239,68,68,0.20)",
+                    }
+                : {
+                    background: "linear-gradient(145deg, #3de0a8, #1d9e6e)",
+                    boxShadow: "var(--nm-raised), 0 0 28px rgba(52,211,153,0.25)",
+                  }
+            }
           >
             {isRecording && (
-              <span className={`absolute inset-0 rounded-full animate-ping opacity-20 ${isSmartDictation ? "bg-violet-400" : "bg-red-400"}`} />
+              <span
+                className={`absolute inset-0 rounded-full animate-ping opacity-15 ${isSmartDictation ? "bg-violet-400" : "bg-red-400"}`}
+              />
             )}
-            {isRecording
-              ? <MicOff size={28} color="white" strokeWidth={2} />
-              : <Mic size={28} color="black" strokeWidth={2} />
-            }
+            {isRecording ? (
+              isSmartDictation ? (
+                <Sparkles size={26} style={{ color: "rgba(167,139,250,0.85)" }} strokeWidth={1.75} />
+              ) : (
+                <MicOff size={26} style={{ color: "rgba(248,113,113,0.85)" }} strokeWidth={1.75} />
+              )
+            ) : (
+              <Mic size={26} color="#0a1a12" strokeWidth={2} />
+            )}
           </button>
           {/* Smart Dictation badge */}
           {isSmartDictation && isRecording && (
-            <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-violet-500 flex items-center justify-center shadow-lg" title="Smart Dictation active">
-              <Sparkles size={12} color="white" />
+            <div
+              className="absolute -top-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center"
+              style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm), 0 0 8px rgba(139,92,246,0.4)" }}
+              title="Smart Dictation active"
+            >
+              <Sparkles size={11} style={{ color: "rgb(167,139,250)" }} />
             </div>
           )}
         </div>
@@ -321,18 +352,18 @@ export default function TranscriptionView({
         {/* Status / level meter */}
         <div className="flex flex-col items-center gap-2 h-10 justify-center">
           {isPolishing ? (
-            <p className="text-violet-400/80 text-[11px] font-mono animate-pulse">✦ Polishing with AI…</p>
+            <p className="text-violet-400/70 text-[11px] font-mono animate-pulse">✦ Polishing with AI…</p>
           ) : isRecording ? (
             <>
               <WaveformMeter level={audioLevel} />
-              <p className={`text-[11px] font-mono ${isSmartDictation ? "text-violet-400/60" : "text-emerald-400/60"}`}>
+              <p className={`text-[11px] font-mono ${isSmartDictation ? "text-violet-400/55" : "text-emerald-400/55"}`}>
                 {isSmartDictation ? "Smart Dictation…" : "Listening…"}
               </p>
             </>
           ) : (
             !hasContent && (
-              <p className="text-white/35 text-[11px] font-mono">
-                Press <kbd className="font-sans text-white/50">⌘⇧V</kbd> or tap the button
+              <p className="text-white/30 text-[11px] font-mono">
+                Press <kbd className="font-sans text-white/45">⌘⇧V</kbd> or tap the button
               </p>
             )
           )}
@@ -341,7 +372,11 @@ export default function TranscriptionView({
 
       {/* Error */}
       {error && (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-red-400 text-sm mb-4" role="alert">
+        <div
+          className="rounded-xl p-4 text-red-400/80 text-sm mb-4"
+          style={{ boxShadow: "var(--nm-pressed-sm)", background: "var(--bg)" }}
+          role="alert"
+        >
           {error.includes("no input device") || error.includes("permission")
             ? "Microphone access denied. Grant permission in System Settings → Privacy → Microphone."
             : error}
@@ -350,16 +385,25 @@ export default function TranscriptionView({
 
       {/* Transcription output */}
       {hasContent && (
-        <div className="card overflow-hidden flex-1 min-h-0">
-          <div className="flex items-center gap-2 px-5 py-3 border-b border-white/[0.04]">
-            <div className={`w-2 h-2 rounded-full ${isRecording ? (isSmartDictation ? "bg-violet-400 animate-pulse" : "bg-red-400 animate-pulse") : "bg-emerald-400"}`} />
-            <span className="text-white/50 text-xs font-mono">
+        <div className="card-inset overflow-hidden flex-1 min-h-0">
+          <div
+            className="flex items-center gap-2 px-5 py-3"
+            style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+          >
+            <div
+              className={`w-2 h-2 rounded-full ${isRecording ? (isSmartDictation ? "bg-violet-400 animate-pulse" : "bg-red-400 animate-pulse") : "bg-emerald-400"}`}
+              style={isRecording ? undefined : { boxShadow: "0 0 5px rgba(52,211,153,0.6)" }}
+            />
+            <span className="text-white/45 text-xs font-mono">
               {loading
-                ? "Running Whisper inference…"
+                ? "Running Whisper…"
                 : `${segments.length} segment${segments.length !== 1 ? "s" : ""}`}
             </span>
             {polishedLabel && (
-              <span className="flex items-center gap-1 ml-1 px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-400 text-[10px] font-mono">
+              <span
+                className="flex items-center gap-1 ml-1 px-2 py-0.5 rounded-full text-violet-400 text-[10px] font-mono"
+                style={{ background: "rgba(139,92,246,0.12)", boxShadow: "var(--nm-pressed-sm)" }}
+              >
                 <Sparkles size={9} />
                 {polishedLabel}
               </span>
@@ -367,7 +411,8 @@ export default function TranscriptionView({
             {segments.length > 0 && !isRecording && (
               <button
                 onClick={() => setSegments([])}
-                className="ml-auto text-white/35 hover:text-white/50 text-[10px] font-sans cursor-pointer"
+                className="ml-auto text-[10px] font-sans cursor-pointer transition-colors duration-150"
+                style={{ color: "rgba(255,255,255,0.30)" }}
                 aria-label="Clear transcription"
               >
                 Clear
@@ -377,10 +422,10 @@ export default function TranscriptionView({
           <div ref={scrollRef} className="p-5 space-y-3 overflow-y-auto max-h-80">
             {segments.map((seg) => (
               <div key={`${seg.start_ms}-${seg.end_ms}`} className="flex gap-4">
-                <span className="text-emerald-500/40 text-xs shrink-0 mt-0.5 font-mono">
+                <span className="text-emerald-500/35 text-xs shrink-0 mt-0.5 font-mono">
                   {formatTime(seg.start_ms)}
                 </span>
-                <p className="text-white/80 text-sm leading-relaxed">{seg.text}</p>
+                <p className="text-white/75 text-sm leading-relaxed">{seg.text}</p>
               </div>
             ))}
           </div>
@@ -390,9 +435,17 @@ export default function TranscriptionView({
       {/* Empty state */}
       {!hasContent && !error && !isRecording && (
         <div className="flex-1 flex flex-col items-center justify-center gap-5 pb-8">
-          <div className="flex flex-col items-center gap-3 opacity-40 select-none">
-            <span className="text-6xl text-white/10">ॐ</span>
-            <p className="text-white/40 text-sm">Your transcription will appear here</p>
+          <div className="flex flex-col items-center gap-3 select-none">
+            <span
+              className="text-5xl"
+              style={{
+                color: "rgba(255,255,255,0.06)",
+                filter: "drop-shadow(0 0 12px rgba(52,211,153,0.08))",
+              }}
+            >
+              ॐ
+            </span>
+            <p className="text-white/25 text-sm">Your transcription will appear here</p>
           </div>
           <StatsCard refreshTrigger={statsRefresh} />
         </div>
@@ -400,16 +453,27 @@ export default function TranscriptionView({
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono pointer-events-none z-50">
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl text-emerald-400 text-xs font-mono pointer-events-none z-50"
+          style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm), 0 0 16px rgba(52,211,153,0.15)" }}
+        >
           {toast}
         </div>
       )}
 
       {/* Upgrade modal */}
       {showUpgradePrompt && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/60" role="dialog" aria-modal="true" aria-label="Upgrade to Pro">
-          <div className="bg-[#0a1210] border border-white/10 rounded-2xl p-7 max-w-sm w-full mx-4 shadow-2xl text-center">
-            <div className="text-3xl mb-3 select-none">ॐ</div>
+        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/50" role="dialog" aria-modal="true" aria-label="Upgrade to Pro">
+          <div
+            className="rounded-2xl p-7 max-w-sm w-full mx-4 text-center"
+            style={{ background: "var(--bg)", boxShadow: "var(--nm-raised), 0 0 60px rgba(0,0,0,0.5)" }}
+          >
+            <div
+              className="text-3xl mb-3 select-none"
+              style={{ filter: "drop-shadow(0 0 10px rgba(52,211,153,0.4))" }}
+            >
+              ॐ
+            </div>
             <h3 className="text-white/90 font-bold text-lg mb-2">
               You've used your 30 free minutes today
             </h3>
@@ -417,12 +481,10 @@ export default function TranscriptionView({
               Upgrade for unlimited transcription — just $12, one time.
               Your usage resets at midnight.
             </p>
-            <LicenseActivation onActivated={() => {
-              setShowUpgradePrompt(false);
-            }} />
+            <LicenseActivation onActivated={() => setShowUpgradePrompt(false)} />
             <button
               onClick={() => setShowUpgradePrompt(false)}
-              className="mt-3 w-full py-2 text-white/50 hover:text-white/60 text-sm transition-colors cursor-pointer"
+              className="mt-3 w-full py-2 text-white/40 hover:text-white/55 text-sm transition-colors cursor-pointer"
             >
               Dismiss
             </button>

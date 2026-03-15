@@ -83,7 +83,7 @@ function App() {
 
   // Unknown state — blank screen while checking
   if (showOnboarding === null) {
-    return <div className="min-h-screen" style={{ background: "#0a0f0d" }} />;
+    return <div className="min-h-screen" style={{ background: "var(--bg)" }} />;
   }
 
   // First launch — show onboarding
@@ -92,7 +92,7 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen text-white overflow-hidden" style={{ background: "#0a0f0d" }}>
+    <div className="flex h-screen text-white overflow-hidden" style={{ background: "var(--bg)" }}>
       <Sidebar
         activeView={activeView}
         onNavigate={setActiveView}
@@ -102,7 +102,7 @@ function App() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Banners */}
         {runningFromDmg && (
-          <div className="flex items-center justify-between px-5 py-2 bg-amber-500/10 border-b border-amber-500/20 shrink-0">
+          <div className="flex items-center justify-between px-5 py-2 shrink-0" style={{ background: "rgba(245,158,11,0.07)", boxShadow: "0 2px 8px var(--shadow-dark)" }}>
             <span className="text-amber-400 text-xs">
               You're running OmWhisper from the disk image. Drag it to Applications first.
             </span>
@@ -117,7 +117,7 @@ function App() {
         )}
 
         {updateInfo && (
-          <div className="flex items-center justify-between px-5 py-2 bg-emerald-500/10 border-b border-emerald-500/20 shrink-0">
+          <div className="flex items-center justify-between px-5 py-2 shrink-0" style={{ background: "rgba(52,211,153,0.07)", boxShadow: "0 2px 8px var(--shadow-dark)" }}>
             <span className="text-emerald-400 text-xs">
               OmWhisper v{updateInfo.latest} is available — {updateInfo.release_notes}
             </span>
@@ -143,7 +143,7 @@ function App() {
 
         {/* Mic error toast */}
         {micError && (
-          <div className="absolute top-12 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-mono pointer-events-none">
+          <div className="absolute top-12 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl text-red-400/80 text-xs font-mono pointer-events-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}>
             {micError}
           </div>
         )}

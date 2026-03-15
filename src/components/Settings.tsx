@@ -27,13 +27,20 @@ function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: bool
       role="switch"
       aria-checked={value}
       aria-label={label}
-      className={`relative w-10 h-6 rounded-full transition-colors duration-200 cursor-pointer ${
-        value ? "bg-emerald-500" : "bg-white/10"
-      }`}
+      className="relative w-10 h-6 rounded-full transition-all duration-200 cursor-pointer"
+      style={{
+        background: "var(--bg)",
+        boxShadow: "var(--nm-pressed-sm)",
+      }}
     >
-      <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform duration-200 ${
-        value ? "translate-x-5" : "translate-x-1"
-      }`} />
+      <div
+        className="absolute top-1 w-4 h-4 rounded-full transition-all duration-200"
+        style={{
+          transform: value ? "translateX(20px)" : "translateX(4px)",
+          background: value ? "rgb(52,211,153)" : "rgba(255,255,255,0.25)",
+          boxShadow: value ? "0 0 6px rgba(52,211,153,0.5), var(--nm-raised-sm)" : "var(--nm-raised-sm)",
+        }}
+      />
     </button>
   );
 }
@@ -48,7 +55,7 @@ function SettingRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-3 border-b border-white/[0.04] last:border-0">
+    <div className="flex items-center justify-between gap-4 py-3 last:border-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
       <div>
         <p className="text-white/80 text-sm">{label}</p>
         {description && <p className="text-white/50 text-xs mt-0.5">{description}</p>}
@@ -156,21 +163,25 @@ export default function SettingsPanel() {
   return (
     <div className="flex h-full">
       {/* Sub-navigation */}
-      <div className="w-40 shrink-0 px-2 py-4 border-r border-white/[0.05] space-y-0.5">
+      <div
+        className="w-40 shrink-0 px-2 py-4 space-y-1.5"
+        style={{ boxShadow: "4px 0 12px var(--shadow-dark)" }}
+      >
         {TABS.map(({ id, icon: Icon, label }) => {
           const isActive = activeTab === id;
           return (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs transition-all duration-150 cursor-pointer text-left ${
-                isActive
-                  ? "bg-emerald-500/10 text-emerald-400"
-                  : "text-white/35 hover:text-white/65 hover:bg-white/[0.04]"
-              }`}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs transition-all duration-200 cursor-pointer text-left"
+              style={{
+                boxShadow: isActive ? "var(--nm-pressed-sm)" : "var(--nm-raised-sm)",
+                color: isActive ? "rgb(52,211,153)" : "rgba(255,255,255,0.45)",
+                background: "var(--bg)",
+              }}
             >
-              <Icon size={13} strokeWidth={isActive ? 2 : 1.75} />
-              <span>{label}</span>
+              <Icon size={13} strokeWidth={isActive ? 2.25 : 1.75} />
+              <span className={isActive ? "font-medium" : ""}>{label}</span>
             </button>
           );
         })}
@@ -193,16 +204,16 @@ export default function SettingsPanel() {
                 </div>
               </SettingRow>
               <SettingRow label="Recording Mode" description="How the hotkey triggers recording">
-                <div className="flex rounded-lg overflow-hidden border border-white/[0.08]">
+                <div className="flex rounded-xl overflow-hidden" style={{ boxShadow: "var(--nm-pressed-sm)" }}>
                   {(["toggle", "push_to_talk"] as const).map((mode) => (
                     <button
                       key={mode}
                       onClick={() => update({ recording_mode: mode })}
-                      className={`px-3 py-1.5 text-xs transition-colors cursor-pointer ${
-                        settings.recording_mode === mode
-                          ? "bg-emerald-500/20 text-emerald-400"
-                          : "bg-white/[0.04] text-white/40 hover:text-white/60"
-                      }`}
+                      className="px-3 py-1.5 text-xs transition-all duration-150 cursor-pointer"
+                      style={{
+                        background: settings.recording_mode === mode ? "rgba(52,211,153,0.15)" : "transparent",
+                        color: settings.recording_mode === mode ? "rgb(52,211,153)" : "rgba(255,255,255,0.40)",
+                      }}
                       aria-pressed={settings.recording_mode === mode}
                     >
                       {mode === "toggle" ? "Toggle" : "Push to Talk"}
@@ -224,7 +235,7 @@ export default function SettingsPanel() {
                   <select
                     value={settings.clipboard_restore_delay_ms}
                     onChange={(e) => update({ clipboard_restore_delay_ms: parseInt(e.target.value) })}
-                    className="bg-white/[0.06] text-white/60 text-xs rounded-lg px-3 py-1.5 border border-white/[0.08] cursor-pointer outline-none"
+                    className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                     aria-label="Clipboard restore delay"
                   >
                     <option value={1000}>1 second</option>
@@ -240,7 +251,7 @@ export default function SettingsPanel() {
                 <select
                   value={settings.log_level ?? "normal"}
                   onChange={(e) => update({ log_level: e.target.value })}
-                  className="bg-white/[0.06] text-white/60 text-xs rounded-lg px-3 py-1.5 border border-white/[0.08] cursor-pointer outline-none"
+                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                   aria-label="Log level"
                 >
                   <option value="normal">Normal</option>
@@ -255,7 +266,7 @@ export default function SettingsPanel() {
                 <select
                   value={settings.auto_delete_after_days ?? ""}
                   onChange={(e) => update({ auto_delete_after_days: e.target.value ? parseInt(e.target.value) : null })}
-                  className="bg-white/[0.06] text-white/60 text-xs rounded-lg px-3 py-1.5 border border-white/[0.08] cursor-pointer outline-none"
+                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                   aria-label="Auto-delete after days"
                 >
                   <option value="">Never</option>
@@ -284,7 +295,7 @@ export default function SettingsPanel() {
                 <select
                   value={settings.audio_input_device ?? ""}
                   onChange={(e) => update({ audio_input_device: e.target.value || null })}
-                  className="bg-white/[0.06] text-white/60 text-xs rounded-lg px-3 py-1.5 border border-white/[0.08] cursor-pointer outline-none max-w-[160px]"
+                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none max-w-[160px]" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                   aria-label="Microphone device"
                 >
                   <option value="">Default</option>
@@ -347,7 +358,7 @@ export default function SettingsPanel() {
                 <select
                   value={settings.language}
                   onChange={(e) => update({ language: e.target.value })}
-                  className="bg-white/[0.06] text-white/60 text-xs rounded-lg px-3 py-1.5 border border-white/[0.08] cursor-pointer outline-none"
+                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                   aria-label="Transcription language"
                 >
                   <option value="en">English</option>
@@ -371,16 +382,16 @@ export default function SettingsPanel() {
             {/* Backend selector */}
             <div className="card px-5 mb-5">
               <SettingRow label="Backend" description="Where text is sent for polishing">
-                <div className="flex rounded-lg overflow-hidden border border-white/[0.08]">
+                <div className="flex rounded-xl overflow-hidden" style={{ boxShadow: "var(--nm-pressed-sm)" }}>
                   {(["disabled", "ollama", "cloud"] as const).map((b) => (
                     <button
                       key={b}
                       onClick={() => { update({ ai_backend: b }); setTestResult(null); }}
-                      className={`px-3 py-1.5 text-xs capitalize transition-colors cursor-pointer ${
-                        settings.ai_backend === b
-                          ? "bg-violet-500/20 text-violet-400"
-                          : "bg-white/[0.04] text-white/40 hover:text-white/60"
-                      }`}
+                      className="px-3 py-1.5 text-xs transition-all duration-150 cursor-pointer"
+                      style={{
+                        background: settings.ai_backend === b ? "rgba(139,92,246,0.15)" : "transparent",
+                        color: settings.ai_backend === b ? "rgb(167,139,250)" : "rgba(255,255,255,0.40)",
+                      }}
                     >
                       {b === "ollama" ? "On-Device" : b === "cloud" ? "Cloud API" : "Disabled"}
                     </button>
@@ -411,7 +422,7 @@ export default function SettingsPanel() {
                   <select
                     value={settings.ai_ollama_model}
                     onChange={(e) => update({ ai_ollama_model: e.target.value })}
-                    className="bg-white/[0.06] text-white/60 text-xs rounded-lg px-3 py-1.5 border border-white/[0.08] cursor-pointer outline-none max-w-[160px]"
+                    className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none max-w-[160px]" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                   >
                     {(ollamaStatus?.models.length ? ollamaStatus.models : [settings.ai_ollama_model]).map((m) => (
                       <option key={m} value={m}>{m}</option>
@@ -459,7 +470,7 @@ export default function SettingsPanel() {
                       const p = presets[e.target.value];
                       update({ ai_cloud_api_url: p.url, ai_cloud_model: p.model });
                     }}
-                    className="bg-white/[0.06] text-white/60 text-xs rounded-lg px-3 py-1.5 border border-white/[0.08] cursor-pointer outline-none"
+                    className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                   >
                     <option value="openai">OpenAI</option>
                     <option value="groq">Groq</option>
@@ -479,7 +490,7 @@ export default function SettingsPanel() {
                         value={apiKeyInput}
                         onChange={(e) => setApiKeyInput(e.target.value)}
                         placeholder="sk-…"
-                        className="bg-white/[0.06] border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none focus:border-violet-500/40 w-32 font-mono"
+                        className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-32 font-mono" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                         onKeyDown={(e) => e.key === "Enter" && handleSaveApiKey()}
                       />
                       <button onClick={() => setShowApiKey((v) => !v)} className="text-white/50 hover:text-white/60 text-xs cursor-pointer">{showApiKey ? "Hide" : "Show"}</button>
@@ -492,7 +503,7 @@ export default function SettingsPanel() {
                     type="text"
                     value={settings.ai_cloud_model}
                     onChange={(e) => update({ ai_cloud_model: e.target.value })}
-                    className="bg-white/[0.06] border border-white/[0.08] rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none focus:border-violet-500/40 w-32 font-mono"
+                    className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-32 font-mono" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                   />
                 </SettingRow>
                 <div className="py-3 flex items-center gap-3">
@@ -521,7 +532,7 @@ export default function SettingsPanel() {
                 <select
                   value={settings.active_polish_style}
                   onChange={(e) => update({ active_polish_style: e.target.value })}
-                  className="bg-white/[0.06] text-white/60 text-xs rounded-lg px-3 py-1.5 border border-white/[0.08] cursor-pointer outline-none"
+                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                 >
                   {builtInStyles.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   {customStyles.map((s) => <option key={s.name} value={`custom:${s.system_prompt}`}>{s.name}</option>)}
@@ -532,7 +543,7 @@ export default function SettingsPanel() {
                   <select
                     value={settings.translate_target_language}
                     onChange={(e) => update({ translate_target_language: e.target.value })}
-                    className="bg-white/[0.06] text-white/60 text-xs rounded-lg px-3 py-1.5 border border-white/[0.08] cursor-pointer outline-none"
+                    className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                   >
                     {["English","Spanish","French","German","Japanese","Chinese","Hindi","Portuguese","Korean","Arabic","Russian"].map((l) => (
                       <option key={l} value={l}>{l}</option>
@@ -544,7 +555,7 @@ export default function SettingsPanel() {
                 <select
                   value={settings.ai_timeout_seconds}
                   onChange={(e) => update({ ai_timeout_seconds: parseInt(e.target.value) })}
-                  className="bg-white/[0.06] text-white/60 text-xs rounded-lg px-3 py-1.5 border border-white/[0.08] cursor-pointer outline-none"
+                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                 >
                   <option value={15}>15s</option>
                   <option value={30}>30s</option>
@@ -588,14 +599,14 @@ export default function SettingsPanel() {
                   value={newStyleName}
                   onChange={(e) => setNewStyleName(e.target.value)}
                   placeholder="Style name…"
-                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-white/70 text-xs outline-none focus:border-violet-500/30"
+                  className="w-full rounded-lg px-3 py-2 text-white/70 text-xs outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                 />
                 <textarea
                   value={newStylePrompt}
                   onChange={(e) => setNewStylePrompt(e.target.value)}
                   placeholder="System prompt…"
                   rows={3}
-                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-white/70 text-xs outline-none focus:border-violet-500/30 resize-none font-mono"
+                  className="w-full rounded-lg px-3 py-2 text-white/70 text-xs outline-none resize-none font-mono" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                 />
                 <button
                   onClick={handleAddCustomStyle}
@@ -803,7 +814,7 @@ function LicenseSection() {
                 value={key}
                 onChange={(e) => { setKey(e.target.value); setError(null); }}
                 placeholder="Enter license key…"
-                className="flex-1 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white/80 text-sm placeholder:text-white/35 outline-none focus:border-emerald-500/40 transition-colors font-mono"
+                className="flex-1 rounded-xl px-3 py-2 text-white/80 text-sm placeholder:text-white/30 outline-none font-mono" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                 aria-label="License key"
               />
               <button

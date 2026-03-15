@@ -82,7 +82,7 @@ export default function Vocabulary() {
               onChange={(e) => setNewWord(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAddWord()}
               placeholder="e.g. OmWhisper, Rakesh, CUDA…"
-              className="flex-1 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white/80 text-sm placeholder:text-white/35 outline-none focus:border-emerald-500/40 transition-colors font-mono"
+              className="flex-1 rounded-xl px-3 py-2 text-white/75 text-sm placeholder:text-white/25 outline-none font-mono" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
               aria-label="Add custom word"
             />
             <button
@@ -100,7 +100,7 @@ export default function Vocabulary() {
               {data.words.map((word) => (
                 <span
                   key={word}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.06] border border-white/[0.08] text-white/70 text-xs font-mono"
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-full text-white/65 text-xs font-mono" style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
                 >
                   {word}
                   <button
@@ -135,7 +135,7 @@ export default function Vocabulary() {
               value={newFrom}
               onChange={(e) => setNewFrom(e.target.value)}
               placeholder="Replace…"
-              className="flex-1 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white/80 text-sm placeholder:text-white/35 outline-none focus:border-emerald-500/40 transition-colors font-mono"
+              className="flex-1 rounded-xl px-3 py-2 text-white/75 text-sm placeholder:text-white/25 outline-none font-mono" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
               aria-label="Word to replace"
             />
             <span className="text-white/35 text-sm shrink-0">→</span>
@@ -145,7 +145,7 @@ export default function Vocabulary() {
               onChange={(e) => setNewTo(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAddReplacement()}
               placeholder="With…"
-              className="flex-1 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white/80 text-sm placeholder:text-white/35 outline-none focus:border-emerald-500/40 transition-colors font-mono"
+              className="flex-1 rounded-xl px-3 py-2 text-white/75 text-sm placeholder:text-white/25 outline-none font-mono" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
               aria-label="Replacement word"
             />
             <button
@@ -163,7 +163,7 @@ export default function Vocabulary() {
               {replacementEntries.map(([from, to]) => (
                 <div
                   key={from}
-                  className="flex items-center gap-3 py-1.5 px-3 rounded-xl bg-white/[0.03] border border-white/[0.05]"
+                  className="flex items-center gap-3 py-1.5 px-3 rounded-xl" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                 >
                   <span className="text-white/50 text-xs font-mono flex-1">{from}</span>
                   <span className="text-white/35 text-xs">→</span>
@@ -191,7 +191,7 @@ export default function Vocabulary() {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono pointer-events-none z-50">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl text-emerald-400 text-xs font-mono pointer-events-none z-50" style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm), 0 0 16px rgba(52,211,153,0.15)" }}>
           {toast}
         </div>
       )}

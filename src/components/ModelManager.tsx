@@ -35,7 +35,7 @@ export default function ModelManager({ activeModel, onModelChange }: Props) {
   const [downloading, setDownloading] = useState<Record<string, number>>({}); // name → progress 0-1
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [diskUsage, setDiskUsage] = useState(0);
-  const [isLicensed, setIsLicensed] = useState(false);
+  const [_isLicensed, setIsLicensed] = useState(false);
 
   async function loadModels() {
     const [list, usage] = await Promise.all([
@@ -103,18 +103,19 @@ export default function ModelManager({ activeModel, onModelChange }: Props) {
           const isDownloading = model.name in downloading;
           const progress = downloading[model.name] ?? 0;
           const error = errors[model.name];
-          const isLocked = !isLicensed && model.name !== "tiny.en";
+          const isLocked = false;
 
           return (
             <div
               key={model.name}
-              className={`rounded-2xl border p-5 transition-all duration-300 ${
-                isLocked
-                  ? "border-white/[0.04] bg-white/[0.01] opacity-60"
-                  : isActive
-                  ? "border-emerald-500/30 bg-emerald-500/[0.04]"
-                  : "border-white/[0.06] bg-white/[0.02]"
-              }`}
+              className="rounded-2xl p-5 transition-all duration-300"
+              style={{
+                background: "var(--bg)",
+                boxShadow: isActive
+                  ? "var(--nm-pressed-sm), 0 0 16px rgba(52,211,153,0.08)"
+                  : "var(--nm-raised-sm)",
+                opacity: isLocked ? 0.5 : 1,
+              }}
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">

@@ -12,26 +12,73 @@
   unicode-range: U+0950;
 }
 
+/* ── Neumorphic design tokens ───────────────────────────────────── */
+:root {
+  --bg:            #1c2821;
+  --shadow-dark:   #0e1812;
+  --shadow-light:  #2a3a30;
+
+  --nm-raised:     6px 6px 18px var(--shadow-dark), -6px -6px 18px var(--shadow-light);
+  --nm-raised-sm:  3px 3px 9px  var(--shadow-dark), -3px -3px 9px  var(--shadow-light);
+  --nm-pressed:    inset 5px 5px 12px var(--shadow-dark), inset -5px -5px 12px var(--shadow-light);
+  --nm-pressed-sm: inset 2px 2px 6px  var(--shadow-dark), inset -2px -2px 6px  var(--shadow-light);
+}
+
 @layer base {
   html, body {
     font-family: 'OmGlyph', var(--font-sans);
-    background: #0a0f0d;
-    color: white;
+    background: var(--bg);
+    color: rgba(255,255,255,0.90);
     -webkit-font-smoothing: antialiased;
   }
 }
 
 @layer components {
+  /* Raised panel */
   .card {
-    @apply rounded-2xl border border-white/[0.06] bg-white/[0.02];
+    border-radius: 1rem;
+    background: var(--bg);
+    box-shadow: var(--nm-raised);
   }
+
+  /* Inset well — transcript pane, text areas */
+  .card-inset {
+    border-radius: 1rem;
+    background: var(--bg);
+    box-shadow: var(--nm-pressed);
+  }
+
+  /* Primary action button */
   .btn-primary {
-    @apply px-4 py-2 rounded-xl bg-emerald-500 text-black font-semibold text-sm
-           hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed
-           transition-colors cursor-pointer;
+    @apply px-4 py-2 rounded-xl font-semibold text-sm
+           disabled:opacity-40 disabled:cursor-not-allowed
+           transition-all duration-150 cursor-pointer;
+    background: linear-gradient(145deg, #3de0a8, #25b87e);
+    color: #0a1a12;
+    box-shadow: var(--nm-raised-sm);
   }
+  .btn-primary:hover:not(:disabled) {
+    box-shadow: 4px 4px 12px var(--shadow-dark), -4px -4px 12px var(--shadow-light),
+                0 0 20px rgba(52,211,153,0.30);
+  }
+  .btn-primary:active:not(:disabled) {
+    box-shadow: var(--nm-pressed-sm);
+  }
+
+  /* Ghost / secondary button */
   .btn-ghost {
-    @apply px-3 py-1.5 rounded-lg bg-white/[0.06] text-white/50
-           hover:bg-white/[0.1] hover:text-white/80 transition-colors cursor-pointer text-sm;
+    @apply px-3 py-1.5 rounded-lg text-sm
+           transition-all duration-150 cursor-pointer;
+    color: rgba(255,255,255,0.60);
+    background: var(--bg);
+    box-shadow: var(--nm-raised-sm);
+  }
+  .btn-ghost:hover {
+    color: rgba(255,255,255,0.85);
+    box-shadow: 4px 4px 10px var(--shadow-dark), -4px -4px 10px var(--shadow-light);
+  }
+  .btn-ghost:active {
+    box-shadow: var(--nm-pressed-sm);
+    color: rgba(255,255,255,0.85);
   }
 }
