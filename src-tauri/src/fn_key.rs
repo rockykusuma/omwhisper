@@ -19,8 +19,6 @@ const kCGHeadInsertEventTap: c_int = 0;
 const kCGEventTapOptionDefault: c_int = 0;
 // CGEventType values
 const kCGEventFlagsChanged: u32 = 12;
-const kCGEventKeyDown: u32 = 10;
-const kCGEventKeyUp: u32 = 11;
 // CGEventField: kCGKeyboardEventKeycode
 const kCGKeyboardEventKeycode: u32 = 8;
 // CGEventFlags
@@ -32,9 +30,6 @@ const kCGEventFlagMaskControl: u64 = 0x00040000;     // Control key
 pub const KEYCODE_RIGHT_OPTION: u64 = 61;
 pub const KEYCODE_RIGHT_CONTROL: u64 = 60;
 pub const KEYCODE_CAPS_LOCK: u64 = 57;
-pub const KEYCODE_F13: u64 = 105;
-pub const KEYCODE_F14: u64 = 107;
-pub const KEYCODE_F15: u64 = 113;
 
 type CGEventRef = *const c_void;
 type CFMachPortRef = *mut c_void;
@@ -218,60 +213,6 @@ pub fn spawn_capslock_tap(
             on_release: Box::new(on_release),
         })) as *mut c_void,
         "capslock",
-    );
-}
-
-// ─── Function keys (F13, F14, F15) ─────────────────────────────────────────
-
-struct FunctionKeyTapState {
-    target_keycode: u64,
-    on_press: Box<dyn Fn() + Send + Sync>,
-    on_release: Box<dyn Fn() + Send + Sync>,
-}
-
-unsafe extern "C" fn function_key_tap_callback(
-    _proxy: *const c_void,
-    event_type: u32,
-    event: CGEventRef,
-    user_info: *mut c_void,
-) -> CGEventRef {
-    if !user_info.is_null() && (event_type == kCGEventKeyDown || event_type == kCGEventKeyUp) {
-        let keycode = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) as u64;
-        let state = &*(user_info as *const FunctionKeyTapState);
-        if keycode == state.target_keycode {
-            if event_type == kCGEventKeyDown {
-                (state.on_press)();
-            } else {
-                (state.on_release)();
-            }
-        }
-    }
-    event
-}
-
-/// Spawns a CGEventTap for a function key used as PTT (F13=105, F14=107, F15=113).
-/// Auto-repeat keyDown events while held are harmless — the on_press callback
-/// checks `is_recording` and no-ops if already recording.
-pub fn spawn_function_key_tap(
-    target_keycode: u64,
-    on_press: impl Fn() + Send + Sync + 'static,
-    on_release: impl Fn() + Send + Sync + 'static,
-) {
-    let label = match target_keycode {
-        KEYCODE_F13 => "f13",
-        KEYCODE_F14 => "f14",
-        KEYCODE_F15 => "f15",
-        _ => "fN",
-    };
-    spawn_tap(
-        (1u64 << kCGEventKeyDown) | (1u64 << kCGEventKeyUp),
-        function_key_tap_callback,
-        move || Box::into_raw(Box::new(FunctionKeyTapState {
-            target_keycode,
-            on_press: Box::new(on_press),
-            on_release: Box::new(on_release),
-        })) as *mut c_void,
-        label,
     );
 }
 

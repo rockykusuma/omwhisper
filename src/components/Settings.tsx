@@ -574,7 +574,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                 <>
                   <SettingRow label="Push to Talk Key" description="Hold this key to record, release to stop">
                     <select
-                      value={["Fn","CapsLock","Right Option","Right Control","F13","F14","F15"].includes(settings.push_to_talk_hotkey ?? "") ? settings.push_to_talk_hotkey : "Fn"}
+                      value={["Fn","CapsLock","Right Option","Right Control"].includes(settings.push_to_talk_hotkey ?? "") ? settings.push_to_talk_hotkey : "Fn"}
                       onChange={(e) => update({ push_to_talk_hotkey: e.target.value })}
                       className="text-xs rounded-xl px-3 py-1.5 cursor-pointer"
                       style={{
@@ -589,9 +589,6 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                       <option value="CapsLock">CapsLock ⇪</option>
                       <option value="Right Option">Right Option ⌥</option>
                       <option value="Right Control">Right Control ⌃</option>
-                      <option value="F13">F13</option>
-                      <option value="F14">F14</option>
-                      <option value="F15">F15</option>
                     </select>
                   </SettingRow>
                   <SettingRow label="Double-press to Lock" description="Press twice quickly to keep recording without holding">

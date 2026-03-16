@@ -361,7 +361,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 const SINGLE_PTT_KEYS: &[&str] = &[
-                    "Fn", "CapsLock", "Right Option", "Right Control", "F13", "F14", "F15",
+                    "Fn", "CapsLock", "Right Option", "Right Control",
                 ];
                 let ptt_key = initial_settings.push_to_talk_hotkey.clone();
                 if initial_settings.recording_mode == "push_to_talk"
@@ -441,18 +441,6 @@ pub fn run() {
                                 0x00040000, // kCGEventFlagMaskControl
                                 on_press, on_release,
                             );
-                        }
-                        "F13" => {
-                            let (on_press, on_release) = ptt_callbacks!();
-                            crate::fn_key::spawn_function_key_tap(crate::fn_key::KEYCODE_F13, on_press, on_release);
-                        }
-                        "F14" => {
-                            let (on_press, on_release) = ptt_callbacks!();
-                            crate::fn_key::spawn_function_key_tap(crate::fn_key::KEYCODE_F14, on_press, on_release);
-                        }
-                        "F15" => {
-                            let (on_press, on_release) = ptt_callbacks!();
-                            crate::fn_key::spawn_function_key_tap(crate::fn_key::KEYCODE_F15, on_press, on_release);
                         }
                         _ => {}
                     }
