@@ -307,7 +307,9 @@ function App() {
                 }
               />
             )}
-            {activeView === "settings" && <SettingsPanel initialTab={settingsInitialTab as any} onNavigate={navigate} />}
+            <div className={activeView === "settings" ? "h-full" : "hidden"}>
+              <SettingsPanel initialTab={settingsInitialTab as any} onNavigate={navigate} />
+            </div>
             {activeView === "history" && <TranscriptionHistory />}
             {activeView === "vocabulary" && <Vocabulary />}
             {activeView === "license" && <LicensePage />}
