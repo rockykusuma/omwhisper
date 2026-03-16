@@ -718,6 +718,42 @@ function SmartDictationTab() {
             </select>
           </SettingRow>
         )}
+        <SettingRow
+          label="Apply AI polish to regular recording"
+          description={
+            settings.ai_backend === "disabled"
+              ? "Enable an AI backend above to use this feature."
+              : "⌘⇧V recordings are polished using Professional style before pasting. Falls back to raw paste if AI is unavailable."
+          }
+        >
+          <button
+            onClick={() => {
+              if (settings.ai_backend !== "disabled") {
+                update({ apply_polish_to_regular: !settings.apply_polish_to_regular });
+              }
+            }}
+            role="switch"
+            aria-checked={settings.apply_polish_to_regular}
+            aria-label="Apply AI polish to regular recording"
+            disabled={settings.ai_backend === "disabled"}
+            className="relative w-10 h-6 rounded-full transition-all duration-200"
+            style={{
+              cursor: settings.ai_backend === "disabled" ? "not-allowed" : "pointer",
+              background: "var(--bg)",
+              boxShadow: "var(--nm-pressed-sm)",
+              opacity: settings.ai_backend === "disabled" ? 0.4 : 1,
+            }}
+          >
+            <div
+              className="absolute top-1 w-4 h-4 rounded-full transition-all duration-200"
+              style={{
+                transform: settings.apply_polish_to_regular ? "translateX(20px)" : "translateX(4px)",
+                background: settings.apply_polish_to_regular ? "var(--accent)" : "var(--t4)",
+                boxShadow: settings.apply_polish_to_regular ? "0 0 6px var(--accent-glow), var(--nm-raised-sm)" : "var(--nm-raised-sm)",
+              }}
+            />
+          </button>
+        </SettingRow>
       </div>
 
       {/* Polish styles — built-in */}
