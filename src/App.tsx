@@ -196,8 +196,7 @@ function App() {
               .catch((e) => logger.error("save_transcription failed:", e));
           } catch (e) {
             if (String(e) === "llm_not_ready") {
-              showToast("⚠ Built-in model not ready — download it in AI Models → Smart Dictation");
-              setTimeout(() => {}, 0); // keep toast visible
+              showToast("AI model not ready — check AI Models settings.");
               return;
             }
             showToast("⚠ AI polish failed — pasting raw text");
