@@ -28,20 +28,24 @@ Reuses the existing `polish_text_cmd` Tauri command with `style = "professional"
 
 Current `transcription-complete` logic:
 ```
-if smartDictation → polish with active style → paste
-else → paste raw
+if smartDictation → polish with active style → paste → save(source: "smart_dictation", rawText, polishStyle)
+else → paste raw → save(source: "regular")
 ```
 
 New logic:
 ```
-if smartDictation → polish with active style → paste
-else if apply_polish_to_regular → polish with "professional" → paste (with fallback)
-else → paste raw
+if smartDictation → polish with active style → paste → save(source: "smart_dictation", rawText, polishStyle)
+else if apply_polish_to_regular → polish with "professional" → paste → save(source: "regular_polished", rawText, polishStyle: "professional")
+  [on error] → toast("AI not ready — pasting raw text") → paste raw → save(source: "regular")
+else → paste raw → save(source: "regular")
 ```
 
-**Fallback behavior:** If `polish_text_cmd` throws (e.g., `llm_not_ready`, network error):
+**Fallback behavior:** All `polish_text_cmd` errors — including `llm_not_ready` — must fall back to raw paste for regular recording. This differs intentionally from Smart Dictation, where `llm_not_ready` drops the paste entirely (Smart Dictation has no value without AI). For regular recording, the raw transcription is still useful, so it must always paste.
+
+Specifically:
 1. Show toast: `"AI not ready — pasting raw text"`
 2. Call `paste_transcription(rawText)` with the original unpolished text
+3. Save with `source: "regular"` (not `"regular_polished"`)
 
 The `pendingIsSmartDictation` ref stays unchanged. The new flag is read from the settings object already loaded in App.tsx state.
 
@@ -56,18 +60,18 @@ When `apply_polish_to_regular` is on and a regular ⌘⇧V recording is active, 
 
 This preserves the visual language: violet = Smart Dictation, teal sparkle = regular + AI polish.
 
-**Data flow:** The `apply_polish_to_regular` setting is emitted as part of the `recording-state` event payload when recording starts, so `OverlayWindow.tsx` receives it without needing to fetch settings independently.
+**Data flow:** `OverlayWindow.tsx` has an existing `recording-state` listener that, when it fires `true`, calls `invoke("get_settings")` to refresh `overlay_style`. `apply_polish_to_regular` should be read from that same `get_settings` call, inside the existing `recording-state: true` branch. No new listeners, no Rust payload changes needed.
 
 ---
 
-## Settings UI (Settings.tsx — AI Tab)
+## Settings UI (AiModelsView.tsx — Smart Dictation sub-tab)
 
-New toggle row added in the AI tab, after the active style dropdown, before the translate language picker:
+New toggle row added in the **Smart Dictation sub-tab** of `AiModelsView.tsx`, after the entire active style + translate language block (i.e., after the conditional translate language picker). Place it after the last item in that group, before the Timeout row.
 
 **Label:** Apply AI polish to regular recording
 **Sub-text:** ⌘⇧V recordings are polished using the Professional style before pasting. Falls back to raw paste if AI is unavailable.
 
-**Disabled state:** Toggle is grayed out (non-interactive) when `ai_backend === "disabled"`. A hint appears: *"Enable an AI backend above to use this feature."*
+**Disabled state:** Toggle is grayed out (non-interactive) when `settings.ai_backend === "disabled"`. A hint appears: *"Enable an AI backend above to use this feature."*
 
 ---
 
@@ -77,9 +81,9 @@ New toggle row added in the AI tab, after the active style dropdown, before the 
 |------|--------|
 | `src-tauri/src/settings.rs` | Add `apply_polish_to_regular: bool` field, default `false` |
 | `src/types/index.ts` | Add `apply_polish_to_regular: boolean` to `AppSettings` interface |
-| `src/App.tsx` | Add second polish branch in `transcription-complete` handler with fallback toast |
-| `src/components/OverlayWindow.tsx` | Accept `applyPolishRegular` prop/event, render teal sparkle badge |
-| `src/components/Settings.tsx` | Add toggle row in AI tab |
+| `src/App.tsx` | Add second polish branch in `transcription-complete` handler with fallback toast and correct `save_transcription` arguments |
+| `src/components/OverlayWindow.tsx` | Read `apply_polish_to_regular` from `get_settings` on `hotkey-toggle-recording`, render teal sparkle badge when true |
+| `src/components/AiModelsView.tsx` | Add toggle row in Smart Dictation sub-tab, after active style dropdown |
 
 ---
 
