@@ -314,40 +314,21 @@ pub fn run() {
             // --- Push-to-talk shortcut: hold to record, release to stop ---
             if let Some(ptt_sc) = parse_hotkey(&initial_settings.push_to_talk_hotkey) {
                 let state_ptt = shared_state.clone();
-                let ptt_last_ms = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
-                let ptt_locked  = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
                 if let Err(e) = app.global_shortcut().on_shortcut(ptt_sc, move |app, _shortcut, event| {
-                    let settings = crate::settings::load_settings_sync();
                     let is_recording = state_ptt.lock().unwrap().capture.is_some();
-                    let now_ms = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis() as u64;
                     match event.state {
                         ShortcutState::Pressed => {
                             if !is_recording {
-                                if settings.double_press_lock {
-                                    let last = ptt_last_ms.load(std::sync::atomic::Ordering::SeqCst);
-                                    if now_ms.saturating_sub(last) < 500 {
-                                        ptt_locked.store(true, std::sync::atomic::Ordering::SeqCst);
-                                    } else {
-                                        ptt_locked.store(false, std::sync::atomic::Ordering::SeqCst);
-                                    }
-                                }
-                                ptt_last_ms.store(now_ms, std::sync::atomic::Ordering::SeqCst);
                                 let focused = crate::paste::get_frontmost_app();
                                 tracing::info!("ptt pressed: captured frontmost app = {:?}", focused);
                                 *crate::commands::get_previous_app().lock().unwrap() = focused;
                                 let _ = app.emit("hotkey-toggle-recording", ());
-                            } else if settings.double_press_lock && ptt_locked.load(std::sync::atomic::Ordering::SeqCst) {
-                                ptt_locked.store(false, std::sync::atomic::Ordering::SeqCst);
-                                let _ = app.emit("hotkey-stop-recording", ());
                             }
                         }
+                        // Always emit stop on release — avoids the race where the key is
+                        // released before the 500 ms sound delay finishes setting `capture`.
                         ShortcutState::Released => {
-                            if is_recording && !ptt_locked.load(std::sync::atomic::Ordering::SeqCst) {
-                                let _ = app.emit("hotkey-stop-recording", ());
-                            }
+                            let _ = app.emit("hotkey-stop-recording", ());
                         }
                     }
                 }) {
@@ -374,44 +355,18 @@ pub fn run() {
                             let app_press = app.handle().clone();
                             let app_release = app.handle().clone();
                             let state_press = shared_state.clone();
-                            let state_release = shared_state.clone();
-                            let ptt_last_ms = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
-                            let ptt_locked  = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-                            let last_clone  = ptt_last_ms.clone();
-                            let locked_press  = ptt_locked.clone();
-                            let locked_release = ptt_locked.clone();
                             let on_press = move || {
-                                let settings = crate::settings::load_settings_sync();
                                 let is_recording = state_press.lock().unwrap().capture.is_some();
-                                let now_ms = std::time::SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .unwrap_or_default()
-                                    .as_millis() as u64;
                                 if !is_recording {
-                                    if settings.double_press_lock {
-                                        let last = last_clone.load(std::sync::atomic::Ordering::SeqCst);
-                                        if now_ms.saturating_sub(last) < 500 {
-                                            locked_press.store(true, std::sync::atomic::Ordering::SeqCst);
-                                        } else {
-                                            locked_press.store(false, std::sync::atomic::Ordering::SeqCst);
-                                        }
-                                    }
-                                    last_clone.store(now_ms, std::sync::atomic::Ordering::SeqCst);
                                     let focused = crate::paste::get_frontmost_app();
                                     *crate::commands::get_previous_app().lock().unwrap() = focused;
                                     let _ = app_press.emit("hotkey-toggle-recording", ());
-                                } else if settings.double_press_lock
-                                    && locked_press.load(std::sync::atomic::Ordering::SeqCst)
-                                {
-                                    locked_press.store(false, std::sync::atomic::Ordering::SeqCst);
-                                    let _ = app_press.emit("hotkey-stop-recording", ());
                                 }
                             };
+                            // Always emit stop on release — avoids the race where the key is
+                            // released before the 500 ms sound delay finishes setting `capture`.
                             let on_release = move || {
-                                let is_recording = state_release.lock().unwrap().capture.is_some();
-                                if is_recording && !locked_release.load(std::sync::atomic::Ordering::SeqCst) {
-                                    let _ = app_release.emit("hotkey-stop-recording", ());
-                                }
+                                let _ = app_release.emit("hotkey-stop-recording", ());
                             };
                             (on_press, on_release)
                         }};

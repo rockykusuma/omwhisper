@@ -14,6 +14,9 @@ pub struct TranscriptionState {
     pub usage_running: Arc<AtomicBool>,
     /// True when the current recording was started via the Smart Dictation hotkey.
     pub is_smart_dictation: bool,
+    /// Set by stop_transcription when capture is None (key released during startup delay).
+    /// Causes start_transcription to abort after the sound delay.
+    pub start_cancelled: bool,
 }
 
 impl TranscriptionState {
@@ -22,6 +25,7 @@ impl TranscriptionState {
             capture: None,
             usage_running: Arc::new(AtomicBool::new(false)),
             is_smart_dictation: false,
+            start_cancelled: false,
         }
     }
 }
@@ -99,6 +103,29 @@ pub async fn start_transcription(
         }
     }
 
+    // Clear any cancellation from a previous quick tap before we begin.
+    state.lock().unwrap().start_cancelled = false;
+
+    // Load settings and play start chime BEFORE the mic starts,
+    // then wait briefly so the chime finishes and room echo clears.
+    let settings = crate::settings::load_settings().await;
+    let initial_prompt = build_initial_prompt(&settings.custom_vocabulary);
+    let word_replacements = settings.word_replacements.clone();
+    let language = settings.language.clone();
+    let sound_enabled = settings.sound_enabled;
+    let sound_volume = settings.sound_volume;
+
+    if sound_enabled {
+        crate::sounds::play(crate::sounds::Sound::Start, sound_volume);
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+
+    // PTT: if the key was released during the sound delay, abort.
+    if state.lock().unwrap().start_cancelled {
+        state.lock().unwrap().start_cancelled = false;
+        return Ok(());
+    }
+
     // Build capture object and start the audio pipeline.
     let capture = AudioCapture::new();
     let (speech_rx, level_rx) = capture.start().map_err(|e| e.to_string())?;
@@ -112,17 +139,6 @@ pub async fn start_transcription(
     };
 
     let model_path = resolve_model_path(&model);
-    let settings = crate::settings::load_settings().await;
-    let initial_prompt = build_initial_prompt(&settings.custom_vocabulary);
-    let word_replacements = settings.word_replacements.clone();
-    let language = settings.language.clone();
-    let sound_enabled = settings.sound_enabled;
-    let sound_volume = settings.sound_volume;
-
-    // Play start chime
-    if sound_enabled {
-        crate::sounds::play(crate::sounds::Sound::Start, sound_volume);
-    }
 
     // Spawn a thread to forward RMS level events to the frontend.
     let app_for_level = app.clone();
@@ -205,6 +221,9 @@ pub async fn stop_transcription(state: tauri::State<'_, SharedState>) -> Result<
         s.usage_running.store(false, Ordering::SeqCst);
         if let Some(capture) = s.capture.take() {
             capture.stop();
+        } else {
+            // Key released before capture started (during sound delay) — signal start to abort.
+            s.start_cancelled = true;
         }
     } // MutexGuard dropped here before the await below
 
