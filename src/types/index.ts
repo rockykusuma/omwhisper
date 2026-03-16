@@ -77,6 +77,21 @@ export interface OllamaStatus {
   models: string[];
 }
 
+export interface LlmModelInfo {
+  name: string;
+  size_bytes: number;
+  size_label: string;
+  is_downloaded: boolean;
+  is_active: boolean;
+}
+
+export interface LlmDownloadProgress {
+  name: string;
+  progress: number;
+  done: boolean;
+  error: string | null;
+}
+
 export interface BuiltInStyle {
   id: string;
   name: string;

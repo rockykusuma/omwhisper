@@ -195,6 +195,11 @@ function App() {
             invoke("save_transcription", { text: polished, durationSeconds, modelUsed, source: "smart_dictation", rawText, polishStyle: style })
               .catch((e) => logger.error("save_transcription failed:", e));
           } catch (e) {
+            if (String(e) === "llm_not_ready") {
+              showToast("⚠ Built-in model not ready — download it in AI Models → Smart Dictation");
+              setTimeout(() => {}, 0); // keep toast visible
+              return;
+            }
             showToast("⚠ AI polish failed — pasting raw text");
             invoke("paste_transcription", { text: rawText }).catch(() => {});
             invoke("save_transcription", { text: rawText, durationSeconds, modelUsed }).catch(() => {});
