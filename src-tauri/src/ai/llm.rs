@@ -204,6 +204,137 @@ pub async fn import_custom_llm_model(source_path: &Path) -> Result<String> {
     Ok(filename)
 }
 
+// ─── Inference Engine ─────────────────────────────────────────────────────────
+
+use llama_cpp_2::{
+    context::params::LlamaContextParams,
+    llama_backend::LlamaBackend,
+    llama_batch::LlamaBatch,
+    model::{params::LlamaModelParams, AddBos, LlamaModel},
+    sampling::LlamaSampler,
+};
+
+pub struct LlmEngine {
+    backend: LlamaBackend,
+    model: LlamaModel,
+}
+
+// Safety: llama-cpp-2 wraps C++ that is not Send by default, but we only call
+// inference from within a spawn_blocking context (one thread at a time) and the
+// managed Mutex prevents concurrent access. This is safe for our usage pattern.
+unsafe impl Send for LlmEngine {}
+unsafe impl Sync for LlmEngine {}
+
+impl LlmEngine {
+    /// Load a GGUF model from disk. Enables Metal GPU on Apple Silicon.
+    pub fn new(model_path: &Path) -> anyhow::Result<Self> {
+        let backend = LlamaBackend::init()
+            .map_err(|e| anyhow::anyhow!("failed to init llama backend: {:?}", e))?;
+
+        let model_params = LlamaModelParams::default()
+            .with_n_gpu_layers(u32::MAX); // offload all layers to Metal
+
+        let model = LlamaModel::load_from_file(&backend, model_path, &model_params)
+            .map_err(|e| anyhow::anyhow!("failed to load LLM model: {:?}", e))?;
+
+        Ok(Self { backend, model })
+    }
+
+    /// Polish raw transcription text using the LLM.
+    pub fn polish(&self, raw: &str, style: &str, vocab: &[String]) -> anyhow::Result<String> {
+        let system_prompt = build_polish_system_prompt(style, vocab);
+        let prompt = format!(
+            "<|im_start|>system\n{}<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
+            system_prompt, raw
+        );
+
+        let ctx_params = LlamaContextParams::default()
+            .with_n_ctx(std::num::NonZeroU32::new(2048))
+            .with_n_threads(4)
+            .with_n_threads_batch(4);
+
+        let mut ctx = self.model
+            .new_context(&self.backend, ctx_params)
+            .map_err(|e| anyhow::anyhow!("failed to create llama context: {:?}", e))?;
+
+        let tokens = self.model
+            .str_to_token(&prompt, AddBos::Always)
+            .map_err(|e| anyhow::anyhow!("tokenization failed: {:?}", e))?;
+
+        let n_prompt = tokens.len();
+        let mut batch = LlamaBatch::new(n_prompt.max(512), 1);
+
+        for (i, token) in tokens.iter().enumerate() {
+            let is_last = i == n_prompt - 1;
+            batch.add(*token, i as i32, &[0], is_last)
+                .map_err(|e| anyhow::anyhow!("batch add failed: {:?}", e))?;
+        }
+
+        ctx.decode(&mut batch)
+            .map_err(|e| anyhow::anyhow!("decode failed: {:?}", e))?;
+
+        let mut output = String::new();
+        let mut n_cur = n_prompt as i32;
+        let eos_token = self.model.token_eos();
+        let mut sampler = LlamaSampler::greedy();
+
+        for _ in 0..256 {
+            let token = sampler.sample(&ctx, batch.n_tokens() - 1);
+
+            if token == eos_token || self.model.is_eog_token(token) {
+                break;
+            }
+
+            let bytes = self.model
+                .token_to_piece_bytes(token, 8, false, None)
+                .or_else(|_| self.model.token_to_piece_bytes(token, 64, false, None))
+                .map_err(|e| anyhow::anyhow!("token decode failed: {:?}", e))?;
+            output.push_str(&String::from_utf8_lossy(&bytes));
+
+            batch.clear();
+            batch.add(token, n_cur, &[0], true)
+                .map_err(|e| anyhow::anyhow!("batch add token failed: {:?}", e))?;
+
+            ctx.decode(&mut batch)
+                .map_err(|e| anyhow::anyhow!("decode token failed: {:?}", e))?;
+
+            n_cur += 1;
+        }
+
+        Ok(output.trim().to_string())
+    }
+}
+
+fn build_polish_system_prompt(style: &str, vocab: &[String]) -> String {
+    let style_instruction = match style {
+        "casual" => "Keep the tone casual and conversational.",
+        "email" => "Format as a professional email. Use proper greeting and sign-off structure if appropriate.",
+        "meeting_notes" => "Format as structured meeting notes with bullet points for action items.",
+        "concise" => "Make it as concise as possible while preserving all key information.",
+        _ => "Use professional, clear language suitable for business communication.",
+    };
+
+    let vocab_section = if vocab.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\nCustom vocabulary — use these exact spellings: {}",
+            vocab.join(", ")
+        )
+    };
+
+    format!(
+        "You are a dictation cleanup assistant. Take raw speech-to-text output and produce clean, natural text.\n\
+         Rules:\n\
+         - Fix punctuation and capitalization\n\
+         - Remove filler words (um, uh, like, you know) unless intentional\n\
+         - Do NOT add or remove content — preserve the user's intent exactly\n\
+         - {}{}\n\
+         - Output ONLY the cleaned text. No explanations, no preamble.",
+        style_instruction, vocab_section
+    )
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -253,5 +384,20 @@ mod tests {
     fn llm_model_url_unknown_returns_empty() {
         let url = llm_model_url("unknown-model.gguf");
         assert!(url.is_empty());
+    }
+
+    #[test]
+    fn polish_prompt_contains_style_instruction() {
+        let prompt = build_polish_system_prompt("casual", &[]);
+        assert!(prompt.contains("casual"), "casual style should affect prompt");
+        assert!(prompt.contains("Output ONLY"), "prompt must end with output-only instruction");
+    }
+
+    #[test]
+    fn polish_prompt_includes_vocabulary() {
+        let vocab = vec!["OmWhisper".to_string(), "Tauri".to_string()];
+        let prompt = build_polish_system_prompt("professional", &vocab);
+        assert!(prompt.contains("OmWhisper"));
+        assert!(prompt.contains("Tauri"));
     }
 }
