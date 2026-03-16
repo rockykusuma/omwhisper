@@ -308,7 +308,7 @@ export default function Onboarding({ onComplete }: Props) {
         <div className="flex items-center justify-between">
           <span className="text-white/60 text-sm" style={{ fontFamily: "'DM Sans', sans-serif" }}>Global Hotkey</span>
           <kbd className="px-3 py-1 rounded-lg bg-white/[0.08] text-white text-sm" style={{ fontFamily: "'DM Mono', monospace" }}>
-            ⌘ Shift V
+            {platform === "windows" ? "Ctrl Shift V" : "⌘ Shift V"}
           </kbd>
         </div>
       </div>
