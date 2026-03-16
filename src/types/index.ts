@@ -68,6 +68,7 @@ export interface AppSettings {
   translate_to_english: boolean;
   llm_model_name: string;
   llm_nudge_shown: boolean;
+  apply_polish_to_regular: boolean;
 }
 
 // ─── AI ────────────────────────────────────────────────────────────────────────

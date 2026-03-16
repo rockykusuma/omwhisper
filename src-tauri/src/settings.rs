@@ -96,6 +96,9 @@ pub struct Settings {
     /// One-time nudge shown flag — prevents re-showing the "Enable AI cleanup" banner.
     #[serde(default)]
     pub llm_nudge_shown: bool,
+    /// Apply AI polish to regular ⌘⇧V recordings using the Professional style.
+    #[serde(default)]
+    pub apply_polish_to_regular: bool,
 }
 
 fn default_clipboard_restore_delay_ms() -> u64 { 2000 }
@@ -161,6 +164,7 @@ impl Default for Settings {
             translate_to_english: false,
             llm_model_name: "qwen2.5-0.5b-instruct-q4_k_m.gguf".to_string(),
             llm_nudge_shown: false,
+            apply_polish_to_regular: false,
         }
     }
 }
