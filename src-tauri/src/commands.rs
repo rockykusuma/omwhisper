@@ -975,11 +975,6 @@ pub async fn polish_text_cmd(
     if settings.ai_backend == "built_in" {
         let engine_state = app.state::<LlmEngineState>();
         let vocab = settings.custom_vocabulary.clone();
-        // Note: The mutex guard is held for the duration of inference (several seconds).
-        // This is safe because LlmEngineState is a SEPARATE state from SharedState —
-        // shortcut handlers and other commands never lock LlmEngineState during normal
-        // operation. load_llm_engine will block briefly if called mid-inference, which
-        // is acceptable (load is a user-initiated action, not a hotkey handler).
         let result: anyhow::Result<String> = {
             let guard = engine_state.lock().unwrap();
             match guard.as_ref() {
