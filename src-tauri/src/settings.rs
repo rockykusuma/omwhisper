@@ -32,9 +32,6 @@ pub struct Settings {
     /// Volume for start/stop chimes (0.0–1.0).
     #[serde(default = "default_sound_volume")]
     pub sound_volume: f32,
-    /// Play the Om chant once on app launch.
-    #[serde(default = "default_true")]
-    pub launch_sound_enabled: bool,
     /// Restore previous clipboard contents after pasting transcription.
     #[serde(default = "default_true")]
     pub restore_clipboard: bool,
@@ -90,6 +87,9 @@ pub struct Settings {
     /// User-created custom polish styles.
     #[serde(default)]
     pub custom_polish_styles: Vec<crate::styles::CustomStyle>,
+    /// When true, Whisper translates speech to English regardless of input language.
+    #[serde(default)]
+    pub translate_to_english: bool,
 }
 
 fn default_clipboard_restore_delay_ms() -> u64 { 2000 }
@@ -109,7 +109,7 @@ fn default_push_to_talk_hotkey() -> String { "Fn".to_string() }
 fn default_ptt_key() -> String { "custom".to_string() }
 
 fn default_true() -> bool { true }
-fn default_sound_volume() -> f32 { 0.7 }
+fn default_sound_volume() -> f32 { 0.2 }
 
 fn default_log_level() -> String {
     "normal".to_string()
@@ -132,8 +132,7 @@ impl Default for Settings {
             custom_vocabulary: Vec::new(),
             word_replacements: HashMap::new(),
             sound_enabled: true,
-            sound_volume: 0.7,
-            launch_sound_enabled: true,
+            sound_volume: 0.2,
             restore_clipboard: true,
             clipboard_restore_delay_ms: 2000,
             recording_mode: "toggle".to_string(),
@@ -152,6 +151,7 @@ impl Default for Settings {
             overlay_placement: "top-center".to_string(),
             overlay_style: "micro".to_string(),
             custom_polish_styles: Vec::new(),
+            translate_to_english: false,
         }
     }
 }

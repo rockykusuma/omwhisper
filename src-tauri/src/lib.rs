@@ -36,6 +36,47 @@ use tauri::{
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
+/// Bring the app to the foreground on macOS.
+///
+/// `app.show()` only calls `[NSApp unhide:nil]` which is for un-hiding a deliberately
+/// hidden app. To actually raise the app above other applications we need
+/// `[NSApp activateIgnoringOtherApps:YES]`.
+#[cfg(target_os = "macos")]
+fn activate_app_macos() {
+    use std::os::raw::{c_char, c_void};
+    extern "C" {
+        fn objc_getClass(name: *const c_char) -> *const c_void;
+        fn sel_registerName(str: *const c_char) -> *const c_void;
+        #[link_name = "objc_msgSend"]
+        fn msg_send_no_args(receiver: *const c_void, sel: *const c_void) -> *mut c_void;
+        #[link_name = "objc_msgSend"]
+        fn msg_send_bool(receiver: *mut c_void, sel: *const c_void, val: i32);
+    }
+    unsafe {
+        let cls = objc_getClass(b"NSApplication\0".as_ptr() as *const c_char);
+        if cls.is_null() { return; }
+        let sel_shared = sel_registerName(b"sharedApplication\0".as_ptr() as *const c_char);
+        let app = msg_send_no_args(cls, sel_shared);
+        if app.is_null() { return; }
+        let sel_activate = sel_registerName(b"activateIgnoringOtherApps:\0".as_ptr() as *const c_char);
+        msg_send_bool(app, sel_activate, 1);
+    }
+}
+
+/// Center the main window on the primary monitor before showing it.
+/// This ensures the app always appears on the main screen even when an extended monitor is connected.
+fn center_on_primary_monitor(win: &tauri::WebviewWindow) {
+    if let Ok(Some(monitor)) = win.primary_monitor() {
+        let screen = monitor.size();
+        let origin = monitor.position();
+        if let Ok(win_size) = win.outer_size() {
+            let x = origin.x + ((screen.width as i32 - win_size.width as i32) / 2);
+            let y = origin.y + ((screen.height as i32 - win_size.height as i32) / 2);
+            let _ = win.set_position(tauri::PhysicalPosition { x, y });
+        }
+    }
+}
+
 /// Ensure only one instance runs. Returns false if another instance is already running.
 fn ensure_single_instance() -> bool {
     let lock_path = dirs::data_local_dir()
@@ -164,7 +205,8 @@ pub fn run() {
                         "show" => {
                             if let Some(win) = app.get_webview_window("main") {
                                 #[cfg(target_os = "macos")]
-                                let _ = app.show();
+                                activate_app_macos();
+                                center_on_primary_monitor(&win);
                                 let _ = win.show();
                                 let _ = win.set_focus();
                             }
@@ -172,7 +214,8 @@ pub fn run() {
                         "settings" => {
                             if let Some(win) = app.get_webview_window("main") {
                                 #[cfg(target_os = "macos")]
-                                let _ = app.show();
+                                activate_app_macos();
+                                center_on_primary_monitor(&win);
                                 let _ = win.show();
                                 let _ = win.set_focus();
                             }
@@ -222,7 +265,8 @@ pub fn run() {
                                 let _ = win.hide();
                             } else {
                                 #[cfg(target_os = "macos")]
-                                let _ = app.show();
+                                activate_app_macos();
+                                center_on_primary_monitor(&win);
                                 let _ = win.show();
                                 let _ = win.set_focus();
                             }
@@ -449,6 +493,18 @@ pub fn run() {
                 }
             })?;
 
+            // Intercept the close button — hide instead of destroying the window
+            // so "Show Window" from the tray always works.
+            if let Some(win) = app.get_webview_window("main") {
+                let win_for_close = win.clone();
+                win.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = win_for_close.hide();
+                    }
+                });
+            }
+
             // Show window for first-time users (onboarding)
             let is_first = {
                 let path = crate::settings::settings_path();
@@ -456,6 +512,7 @@ pub fn run() {
             };
             if is_first {
                 if let Some(win) = app.get_webview_window("main") {
+                    center_on_primary_monitor(&win);
                     let _ = win.show();
                 }
             }

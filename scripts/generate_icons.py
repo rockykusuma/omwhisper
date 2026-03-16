@@ -56,6 +56,32 @@ def make_tray_icon(src: Image.Image, size: int) -> Image.Image:
     return canvas.resize((size, size), Image.LANCZOS)
 
 
+def apply_squircle_mask(img: Image.Image) -> Image.Image:
+    """
+    Clip the image to a macOS-style squircle (rounded square).
+    Corner radius ≈ 22.37 % of the icon size — matches the macOS dock shape.
+    Renders the mask at 4× for smooth anti-aliased corners then downscales.
+    """
+    from PIL import ImageDraw
+    size = img.size[0]          # assume square input
+    scale = 4                   # supersample factor
+    big = size * scale
+    radius = int(big * 0.2237)  # macOS squircle corner ratio
+
+    # Draw a white rounded-rectangle on a black mask at 4×
+    mask_big = Image.new("L", (big, big), 0)
+    draw = ImageDraw.Draw(mask_big)
+    draw.rounded_rectangle([0, 0, big - 1, big - 1], radius=radius, fill=255)
+
+    # Downsample the mask to icon size for smooth edges
+    mask = mask_big.resize((size, size), Image.LANCZOS)
+
+    # Apply mask to a transparent canvas
+    result = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    result.paste(img.resize((size, size), Image.LANCZOS), (0, 0), mask)
+    return result
+
+
 def main():
     print("Generating OmWhisper icons from Square310x310Logo.png …")
 
@@ -64,8 +90,8 @@ def main():
 
     # ── App icon sizes ────────────────────────────────────────────────────────
 
-    # 1024×1024 master (upscaled with LANCZOS — best quality for the .icns pipeline)
-    icon_1024 = src.resize((1024, 1024), Image.LANCZOS)
+    # 1024×1024 master with macOS squircle shape applied
+    icon_1024 = apply_squircle_mask(src.resize((1024, 1024), Image.LANCZOS))
     icon_1024.save(str(ICONS_DIR / "icon.png"))
     print("  Saved icon.png (1024×1024)")
 

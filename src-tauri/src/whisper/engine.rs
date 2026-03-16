@@ -19,9 +19,11 @@ pub struct Segment {
 
 impl WhisperEngine {
     pub fn new(model_path: &Path) -> Result<Self> {
+        let mut ctx_params = WhisperContextParameters::default();
+        ctx_params.use_gpu(true);
         let ctx = WhisperContext::new_with_params(
             model_path.to_str().context("invalid model path")?,
-            WhisperContextParameters::default(),
+            ctx_params,
         )
         .context("failed to load whisper model")?;
 
@@ -35,12 +37,16 @@ impl WhisperEngine {
         &self,
         audio: &[f32],
         language: &str,
+        translate_to_english: bool,
         initial_prompt: Option<&str>,
         word_replacements: &HashMap<String, String>,
     ) -> Result<Vec<Segment>> {
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
         let lang = if language == "auto" { None } else { Some(language) };
         params.set_language(lang);
+        if translate_to_english {
+            params.set_translate(true);
+        }
         params.set_print_special(false);
         params.set_print_progress(false);
         params.set_print_realtime(false);

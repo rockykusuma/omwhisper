@@ -142,7 +142,11 @@ function WhisperTab({ activeModel, onModelChange }: { activeModel: string; onMod
               {specExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
           </div>
-          <p className="text-xs mt-2 leading-relaxed" style={{ color: "var(--t2)" }}>{recommendation.reason}</p>
+          <p className="text-xs mt-2 leading-relaxed" style={{ color: "var(--t2)" }}>
+            {recModel && recModel === activeModel
+              ? "You're already on the recommended model."
+              : recommendation.reason}
+          </p>
           {recModel && recModel !== activeModel && (
             <button
               onClick={() => {

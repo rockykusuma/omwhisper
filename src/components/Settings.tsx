@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import {
   Sliders, Mic, FileText, Info, ShieldCheck, ShieldAlert, Keyboard
 } from "lucide-react";
@@ -187,6 +188,12 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
     invoke<string[]>("get_audio_devices").then(setDevices).catch(() => {});
     invoke<StorageInfo>("get_storage_info").then(setStorageInfo).catch(() => {});
     invoke<boolean>("check_accessibility_permission").then(setAccessibilityGranted).catch(() => {});
+
+    // Re-sync when settings are changed from another view (e.g. model selection in Models tab)
+    const unlisten = listen("settings-changed", () => {
+      invoke<Settings>("get_settings").then(setSettings);
+    });
+    return () => { unlisten.then(fn => fn()); };
   }, []);
 
   async function update(patch: Partial<Settings>) {
@@ -488,9 +495,6 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                   aria-label="Sound volume"
                 />
               </SettingRow>
-              <SettingRow label="Launch Om Sound" description="Play Om chant on app start">
-                <Toggle value={settings.launch_sound_enabled} onChange={(v) => update({ launch_sound_enabled: v })} label="Launch Om sound" />
-              </SettingRow>
             </div>
           </div>
         )}
@@ -536,6 +540,9 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                     <option value="zh">Chinese</option>
                     <option value="hi">Hindi</option>
                   </select>
+                </SettingRow>
+                <SettingRow label="Translate to English" description="Convert any language to English on paste">
+                  <Toggle value={settings.translate_to_english} onChange={(v) => update({ translate_to_english: v })} label="Translate to English" />
                 </SettingRow>
               </div>
             </div>

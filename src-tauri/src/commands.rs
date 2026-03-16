@@ -69,7 +69,7 @@ pub async fn transcribe_file(path: String, model_path: String) -> Result<Vec<Seg
         let engine = WhisperEngine::new(&resolved).map_err(|e| e.to_string())?;
         let audio = load_wav_as_f32(Path::new(&path)).map_err(|e| e.to_string())?;
         let prompt = if initial_prompt.is_empty() { None } else { Some(initial_prompt.as_str()) };
-        engine.transcribe(&audio, "en", prompt, &replacements).map_err(|e| e.to_string())
+        engine.transcribe(&audio, "en", false, prompt, &replacements).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -114,6 +114,7 @@ pub async fn start_transcription(
     let language = settings.language.clone();
     let sound_enabled = settings.sound_enabled;
     let sound_volume = settings.sound_volume;
+    let translate_to_english = settings.translate_to_english;
 
     if sound_enabled {
         crate::sounds::play(crate::sounds::Sound::Start, sound_volume);
@@ -121,9 +122,10 @@ pub async fn start_transcription(
     }
 
     // PTT: if the key was released during the sound delay, abort.
+    // Return a sentinel error so the frontend knows not to set isRecording=true.
     if state.lock().unwrap().start_cancelled {
         state.lock().unwrap().start_cancelled = false;
-        return Ok(());
+        return Err("cancelled".to_string());
     }
 
     // Build capture object and start the audio pipeline.
@@ -192,7 +194,7 @@ pub async fn start_transcription(
 
         for chunk in speech_rx {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                engine.transcribe(&chunk, &language, prompt_ref, &word_replacements)
+                engine.transcribe(&chunk, &language, translate_to_english, prompt_ref, &word_replacements)
             }));
             match result {
                 Ok(Ok(segments)) => {
@@ -448,7 +450,14 @@ pub async fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
     use tauri::Manager;
     let settings = crate::settings::load_settings().await;
     if let Some(win) = app.get_webview_window("overlay") {
-        if let Ok(Some(monitor)) = win.current_monitor() {
+        // The overlay window is hidden, so current_monitor() may return None.
+        // Fall back to the main window's monitor so positioning always works.
+        let monitor_opt = win.current_monitor().ok().flatten().or_else(|| {
+            app.get_webview_window("main")
+                .and_then(|m| m.current_monitor().ok().flatten())
+        });
+
+        if let Some(monitor) = monitor_opt {
             let scale  = monitor.scale_factor();
             let screen = monitor.size();    // physical pixels
             let origin = monitor.position(); // physical top-left of this monitor
@@ -910,8 +919,8 @@ pub fn get_model_recommendation() -> ModelRecommendation {
     let cpu_brand = sys.cpus().first().map(|c| c.brand().to_string()).unwrap_or_default();
     let cpu_cores = sys.cpus().len();
 
-    // Apple Silicon: brand string contains "Apple"
-    let is_apple_silicon = cpu_brand.contains("Apple");
+    // Apple Silicon: use architecture (aarch64) as the reliable signal
+    let is_apple_silicon = std::env::consts::ARCH == "aarch64";
 
     let (recommended_model, reason) = recommend_model(total_ram_gb, is_apple_silicon, cpu_cores);
 
@@ -929,16 +938,15 @@ pub fn get_model_recommendation() -> ModelRecommendation {
 
 fn recommend_model(ram_gb: f64, is_apple_silicon: bool, _cores: usize) -> (String, String) {
     if is_apple_silicon {
-        // Apple Silicon — Metal acceleration makes larger models practical
+        // Apple Silicon — Metal acceleration makes larger models practical.
+        // For a quick-dictation/paste app, latency matters more than accuracy,
+        // so we cap large-v3-turbo at 24GB+ where users expect best quality.
         if ram_gb >= 24.0 {
-            ("large-v3".to_string(),
-             format!("Your Apple Silicon Mac with {:.0}GB unified memory can run the highest-quality model at full speed via Metal GPU acceleration.", ram_gb))
-        } else if ram_gb >= 16.0 {
-            ("medium.en".to_string(),
-             format!("Your Apple Silicon Mac with {:.0}GB unified memory is ideal for medium.en — excellent accuracy with fast Metal inference.", ram_gb))
+            ("large-v3-turbo".to_string(),
+             format!("Your Apple Silicon Mac with {:.0}GB unified memory can run large-v3-turbo — near large-v3 accuracy at 8× the speed via Metal GPU acceleration.", ram_gb))
         } else if ram_gb >= 8.0 {
             ("small.en".to_string(),
-             format!("Your Apple Silicon Mac with {:.0}GB unified memory runs small.en beautifully — a great balance of speed and accuracy.", ram_gb))
+             format!("Your Apple Silicon Mac with {:.0}GB unified memory is a great fit for small.en — fast, accurate, and snappy for quick dictation.", ram_gb))
         } else {
             ("base.en".to_string(),
              format!("Your Apple Silicon Mac with {:.0}GB unified memory will run base.en quickly — solid accuracy for everyday use.", ram_gb))

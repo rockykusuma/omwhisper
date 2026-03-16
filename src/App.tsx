@@ -74,6 +74,8 @@ function App() {
         if (settings.show_overlay) await invoke("show_overlay");
       } catch {}
     } catch (e) {
+      // "cancelled" means the PTT key was released before the mic started — silent no-op.
+      if (String(e) === "cancelled") return;
       logger.error("Failed to start transcription:", e);
       setMicError(String(e));
       setTimeout(() => setMicError(null), 5000);
@@ -81,8 +83,11 @@ function App() {
   }, []);
 
   const stopRecording = useCallback(async () => {
-    pendingIsSmartDictation.current = isSmartDictationRef.current;
-    isPendingPaste.current = true;
+    // Only arm the paste machinery if we were actually recording.
+    if (isRecordingRef.current) {
+      pendingIsSmartDictation.current = isSmartDictationRef.current;
+      isPendingPaste.current = true;
+    }
     try {
       await invoke("stop_transcription");
     } catch (e) {

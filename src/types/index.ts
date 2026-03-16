@@ -48,7 +48,6 @@ export interface AppSettings {
   log_level: string;
   sound_enabled: boolean;
   sound_volume: number;
-  launch_sound_enabled: boolean;
   restore_clipboard: boolean;
   clipboard_restore_delay_ms: number;
   recording_mode: string;
@@ -66,6 +65,7 @@ export interface AppSettings {
   ptt_key: string;
   overlay_placement: string;
   overlay_style: string;
+  translate_to_english: boolean;
 }
 
 // ─── AI ────────────────────────────────────────────────────────────────────────

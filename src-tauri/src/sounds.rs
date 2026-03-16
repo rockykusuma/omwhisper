@@ -2,12 +2,10 @@ use std::io::Cursor;
 
 static START_WAV: &[u8] = include_bytes!("../resources/sounds/start.wav");
 static STOP_WAV: &[u8] = include_bytes!("../resources/sounds/stop.wav");
-static LAUNCH_WAV: &[u8] = include_bytes!("../resources/sounds/launch.wav");
 
 pub enum Sound {
     Start,
     Stop,
-    Launch,
 }
 
 /// Play a sound effect non-blocking at the given volume (0.0–1.0).
@@ -15,7 +13,6 @@ pub fn play(sound: Sound, volume: f32) {
     let bytes: &'static [u8] = match sound {
         Sound::Start => START_WAV,
         Sound::Stop => STOP_WAV,
-        Sound::Launch => LAUNCH_WAV,
     };
 
     std::thread::spawn(move || {
