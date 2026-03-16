@@ -316,6 +316,132 @@ pub async fn get_models_disk_usage() -> Result<u64, String> {
     Ok(models::models_disk_usage())
 }
 
+// ─── LLM Model Management ─────────────────────────────────────────────────────
+
+use crate::ai::llm as llm_models;
+
+#[derive(Clone, serde::Serialize)]
+pub struct LlmDownloadProgress {
+    pub name: String,
+    pub progress: f64,
+    pub done: bool,
+    pub error: Option<String>,
+}
+
+#[tauri::command]
+pub async fn get_llm_models(_app: tauri::AppHandle) -> Result<Vec<llm_models::LlmModelInfo>, String> {
+    let settings = crate::settings::load_settings().await;
+    Ok(llm_models::list_llm_models(&settings.llm_model_name))
+}
+
+#[tauri::command]
+pub async fn get_llm_models_disk_usage() -> Result<u64, String> {
+    Ok(llm_models::llm_models_disk_usage())
+}
+
+#[tauri::command]
+pub async fn download_llm_model(name: String, app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Emitter;
+    let name_clone = name.clone();
+    let app_clone = app.clone();
+
+    tokio::spawn(async move {
+        let name_for_cb = name_clone.clone();
+        let app_for_cb = app_clone.clone();
+
+        let result = llm_models::download_llm_model(&name_clone, move |progress| {
+            let _ = app_for_cb.emit(
+                "llm-download-progress",
+                LlmDownloadProgress {
+                    name: name_for_cb.clone(),
+                    progress,
+                    done: false,
+                    error: None,
+                },
+            );
+        })
+        .await;
+
+        match result {
+            Ok(_) => {
+                let _ = app_clone.emit(
+                    "llm-download-progress",
+                    LlmDownloadProgress {
+                        name: name_clone,
+                        progress: 1.0,
+                        done: true,
+                        error: None,
+                    },
+                );
+            }
+            Err(e) => {
+                let _ = app_clone.emit(
+                    "llm-download-progress",
+                    LlmDownloadProgress {
+                        name: name_clone,
+                        progress: 0.0,
+                        done: true,
+                        error: Some(e.to_string()),
+                    },
+                );
+            }
+        }
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_llm_model(name: String) -> Result<(), String> {
+    llm_models::delete_llm_model(&name)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+// Plan extension (not in spec command table — added to support "Add custom model" UI in Task 8)
+#[tauri::command]
+pub async fn import_llm_model(source_path: String) -> Result<String, String> {
+    use std::path::Path;
+    llm_models::import_custom_llm_model(Path::new(&source_path))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+type LlmEngineState = std::sync::Arc<std::sync::Mutex<Option<crate::ai::llm::LlmEngine>>>;
+
+#[tauri::command]
+pub async fn load_llm_engine(
+    name: String,
+    engine_state: tauri::State<'_, LlmEngineState>,
+) -> Result<(), String> {
+    let model_path = crate::ai::llm::llm_model_path(&name);
+    if !model_path.exists() {
+        return Err(format!("Model file not found: {}", name));
+    }
+
+    // Load is blocking (reads ~400MB from disk) — run on a blocking thread
+    let engine = tokio::task::spawn_blocking(move || {
+        crate::ai::llm::LlmEngine::new(&model_path)
+    })
+    .await
+    .map_err(|e| format!("spawn_blocking error: {}", e))?
+    .map_err(|e| e.to_string())?;
+
+    let mut guard = engine_state.lock().unwrap();
+    *guard = Some(engine);
+    Ok(())
+}
+
+// Plan extension (not in spec — added for completeness to allow backend switching without restart)
+#[tauri::command]
+pub async fn unload_llm_engine(
+    engine_state: tauri::State<'_, LlmEngineState>,
+) -> Result<(), String> {
+    let mut guard = engine_state.lock().unwrap();
+    *guard = None;
+    Ok(())
+}
+
 use crate::paste;
 use std::sync::OnceLock;
 
@@ -837,8 +963,34 @@ pub async fn get_ollama_models() -> Vec<String> {
 }
 
 #[tauri::command]
-pub async fn polish_text_cmd(text: String, style: String) -> Result<String, String> {
+pub async fn polish_text_cmd(
+    text: String,
+    style: String,
+    app: tauri::AppHandle,
+) -> Result<String, String> {
+    use tauri::Manager;
     let settings = crate::settings::load_settings().await;
+
+    // built_in is intercepted here — ai::polish has no access to managed state
+    if settings.ai_backend == "built_in" {
+        let engine_state = app.state::<LlmEngineState>();
+        let vocab = settings.custom_vocabulary.clone();
+        // Note: The mutex guard is held for the duration of inference (several seconds).
+        // This is safe because LlmEngineState is a SEPARATE state from SharedState —
+        // shortcut handlers and other commands never lock LlmEngineState during normal
+        // operation. load_llm_engine will block briefly if called mid-inference, which
+        // is acceptable (load is a user-initiated action, not a hotkey handler).
+        let result: anyhow::Result<String> = {
+            let guard = engine_state.lock().unwrap();
+            match guard.as_ref() {
+                Some(engine) => engine.polish(&text, &style, &vocab),
+                None => return Err("llm_not_ready".to_string()),
+            }
+        };
+        return result.map_err(|e: anyhow::Error| e.to_string());
+    }
+
+    // ollama / cloud path — unchanged
     let system_prompt = crate::styles::system_prompt_for(&style, &settings.translate_target_language);
     let request = crate::ai::PolishRequest { text, system_prompt };
     crate::ai::polish(request, &settings)

@@ -26,6 +26,8 @@ use commands::{
     check_ollama_status, get_ollama_models, polish_text_cmd, test_ai_connection,
     save_cloud_api_key, get_cloud_api_key_status, delete_cloud_api_key_cmd,
     get_model_recommendation,
+    get_llm_models, get_llm_models_disk_usage, download_llm_model, delete_llm_model, import_llm_model,
+    load_llm_engine, unload_llm_engine,
     SharedState, TranscriptionState,
 };
 use std::sync::{Arc, Mutex};
@@ -138,6 +140,11 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(shared_state.clone())
+        // Separate managed state for LlmEngine — must NOT be inside SharedState
+        // because inference blocks the calling thread for several seconds — holding the shared mutex during inference would deadlock the shortcut handlers.
+        .manage(std::sync::Arc::new(std::sync::Mutex::new(
+            Option::<crate::ai::llm::LlmEngine>::None,
+        )))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -552,6 +559,33 @@ pub fn run() {
                 }
             });
 
+            // Eagerly load LlmEngine on launch if built_in backend is configured
+            {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let settings = crate::settings::load_settings().await;
+                    if settings.ai_backend == "built_in" {
+                        let model_path = crate::ai::llm::llm_model_path(&settings.llm_model_name);
+                        if model_path.exists() {
+                            let engine_state = app_handle.state::<std::sync::Arc<std::sync::Mutex<Option<crate::ai::llm::LlmEngine>>>>();
+                            match tokio::task::spawn_blocking(move || {
+                                crate::ai::llm::LlmEngine::new(&model_path)
+                            })
+                            .await
+                            {
+                                Ok(Ok(engine)) => {
+                                    let mut guard = engine_state.lock().unwrap();
+                                    *guard = Some(engine);
+                                    tracing::info!("LlmEngine loaded at launch");
+                                }
+                                Ok(Err(e)) => tracing::warn!("LlmEngine load failed: {}", e),
+                                Err(e) => tracing::warn!("LlmEngine spawn_blocking failed: {}", e),
+                            }
+                        }
+                    }
+                });
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -605,6 +639,13 @@ pub fn run() {
             get_cloud_api_key_status,
             delete_cloud_api_key_cmd,
             get_model_recommendation,
+            get_llm_models,
+            get_llm_models_disk_usage,
+            download_llm_model,
+            delete_llm_model,
+            import_llm_model,
+            load_llm_engine,
+            unload_llm_engine,
             styles::get_polish_styles,
             styles::add_custom_style,
             styles::remove_custom_style,
