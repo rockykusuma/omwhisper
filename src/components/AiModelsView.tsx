@@ -55,6 +55,12 @@ function SettingRow({ label, description, children }: { label: string; descripti
   );
 }
 
+const MODEL_PRESETS: Record<string, string[]> = {
+  openai: ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
+  groq: ["llama3-8b-8192", "llama3-70b-8192", "mixtral-8x7b-32768", "gemma-7b-it"],
+  custom: [],
+};
+
 // ── Whisper sub-tab ───────────────────────────────────────────────────────────
 function WhisperTab({ activeModel, onModelChange }: { activeModel: string; onModelChange: (name: string) => void }) {
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -284,6 +290,11 @@ function SmartDictationTab() {
   const [newStylePrompt, setNewStylePrompt] = useState("");
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
+  const [customModelInput, setCustomModelInput] = useState("");
+
+  useEffect(() => {
+    setCustomModelInput("");
+  }, [settings?.ai_cloud_api_url]);
 
   useEffect(() => {
     invoke<AppSettings>("get_settings").then(setSettings).catch(() => {});
@@ -471,13 +482,57 @@ function SmartDictationTab() {
             )}
           </SettingRow>
           <SettingRow label="Model" description="Model name">
-            <input
-              type="text"
-              value={settings.ai_cloud_model}
-              onChange={(e) => update({ ai_cloud_model: e.target.value })}
-              className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-32 font-mono"
-              style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-            />
+            <div className="flex flex-col items-end gap-1.5">
+              {(() => {
+                const activeProvider = settings.ai_cloud_api_url.includes("openai.com") ? "openai"
+                  : settings.ai_cloud_api_url.includes("groq.com") ? "groq"
+                  : "custom";
+                const presets = MODEL_PRESETS[activeProvider] ?? [];
+                const isCustomValue = presets.length > 0 && !presets.includes(settings.ai_cloud_model);
+                const selectValue = isCustomValue ? "__custom__" : settings.ai_cloud_model;
+                return (
+                  <>
+                    <select
+                      value={selectValue}
+                      onChange={(e) => {
+                        if (e.target.value === "__custom__") {
+                          setCustomModelInput(settings.ai_cloud_model);
+                        } else {
+                          setCustomModelInput("");
+                          update({ ai_cloud_model: e.target.value });
+                        }
+                      }}
+                      className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none w-40 font-mono"
+                      style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                    >
+                      {presets.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                      {presets.length === 0 ? null : <option value="__custom__">Custom…</option>}
+                      {presets.length === 0 && (
+                        <option value={settings.ai_cloud_model}>{settings.ai_cloud_model || "Enter model…"}</option>
+                      )}
+                    </select>
+                    {(selectValue === "__custom__" || presets.length === 0) && (
+                      <input
+                        type="text"
+                        value={customModelInput || (presets.length === 0 ? settings.ai_cloud_model : "")}
+                        onChange={(e) => setCustomModelInput(e.target.value)}
+                        onBlur={() => { if (customModelInput.trim()) update({ ai_cloud_model: customModelInput.trim() }); }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && customModelInput.trim()) {
+                            update({ ai_cloud_model: customModelInput.trim() });
+                          }
+                        }}
+                        placeholder="model-name"
+                        className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-40 font-mono"
+                        style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                      />
+                    )}
+                  </>
+                );
+              })()}
+            </div>
           </SettingRow>
           <div className="py-3 flex items-center gap-3">
             <button onClick={() => handleTestConnection("cloud")} disabled={testLoading || !apiKeySet} className="btn-ghost text-xs py-1 px-3">
