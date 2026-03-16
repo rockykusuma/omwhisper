@@ -1,21 +1,20 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  Sliders, Mic, FileText, Info, Sparkles, ShieldCheck, ShieldAlert, Keyboard
+  Sliders, Mic, FileText, Info, ShieldCheck, ShieldAlert, Keyboard
 } from "lucide-react";
 import { logger } from "../utils/logger";
 import { useTheme, THEMES } from "../hooks/useTheme";
-import type { AppSettings, BuiltInStyle, CustomStyle, OllamaStatus, StorageInfo } from "../types";
+import type { AppSettings, StorageInfo } from "../types";
 
 type Settings = AppSettings;
 
-type Tab = "general" | "audio" | "transcription" | "ai" | "shortcuts" | "about";
+type Tab = "general" | "audio" | "transcription" | "shortcuts" | "about";
 
 const TABS: { id: Tab; icon: React.ElementType; label: string }[] = [
   { id: "general",       icon: Sliders,    label: "General"       },
   { id: "audio",         icon: Mic,        label: "Audio"         },
   { id: "transcription", icon: FileText,   label: "Transcription" },
-  { id: "ai",            icon: Sparkles,   label: "AI"            },
   { id: "shortcuts",     icon: Keyboard,   label: "Shortcuts"     },
   { id: "about",         icon: Info,       label: "About"         },
 ];
@@ -167,22 +166,12 @@ function SettingRow({
   );
 }
 
-export default function SettingsPanel({ initialTab }: { initialTab?: Tab }) {
+export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?: Tab; onNavigate?: (target: string) => void }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [devices, setDevices] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? "general");
   const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
-  const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
-  const [builtInStyles, setBuiltInStyles] = useState<BuiltInStyle[]>([]);
-  const [customStyles, setCustomStyles] = useState<CustomStyle[]>([]);
-  const [apiKeySet, setApiKeySet] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState("");
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [newStyleName, setNewStyleName] = useState("");
-  const [newStylePrompt, setNewStylePrompt] = useState("");
-  const [testResult, setTestResult] = useState<string | null>(null);
-  const [testLoading, setTestLoading] = useState(false);
   const [accessibilityGranted, setAccessibilityGranted] = useState<boolean | null>(null);
   const { theme, setTheme } = useTheme();
 
@@ -193,56 +182,8 @@ export default function SettingsPanel({ initialTab }: { initialTab?: Tab }) {
     // Slower calls populate lazily in parallel
     invoke<string[]>("get_audio_devices").then(setDevices).catch(() => {});
     invoke<StorageInfo>("get_storage_info").then(setStorageInfo).catch(() => {});
-    invoke<boolean>("get_cloud_api_key_status").then(setApiKeySet).catch(() => {});
     invoke<boolean>("check_accessibility_permission").then(setAccessibilityGranted).catch(() => {});
-    invoke<{ built_in: BuiltInStyle[]; custom: CustomStyle[] }>("get_polish_styles")
-      .then((styles) => { setBuiltInStyles(styles.built_in); setCustomStyles(styles.custom); })
-      .catch(() => {});
   }, []);
-
-  async function refreshOllamaStatus() {
-    const status = await invoke<OllamaStatus>("check_ollama_status");
-    setOllamaStatus(status);
-  }
-
-  async function handleSaveApiKey() {
-    if (!apiKeyInput.trim()) return;
-    await invoke("save_cloud_api_key", { key: apiKeyInput.trim() });
-    setApiKeySet(true);
-    setApiKeyInput("");
-  }
-
-  async function handleDeleteApiKey() {
-    await invoke("delete_cloud_api_key_cmd").catch((e) => logger.debug("delete_cloud_api_key_cmd:", e));
-    setApiKeySet(false);
-  }
-
-  async function handleTestConnection(backend: string) {
-    setTestLoading(true);
-    setTestResult(null);
-    try {
-      const result = await invoke<string>("test_ai_connection", { backend });
-      setTestResult("✓ " + result);
-    } catch (e) {
-      setTestResult("✗ " + String(e));
-    } finally {
-      setTestLoading(false);
-    }
-  }
-
-  async function handleAddCustomStyle() {
-    if (!newStyleName.trim() || !newStylePrompt.trim()) return;
-    await invoke("add_custom_style", { name: newStyleName.trim(), systemPrompt: newStylePrompt.trim() });
-    const styles = await invoke<{ built_in: BuiltInStyle[]; custom: CustomStyle[] }>("get_polish_styles");
-    setCustomStyles(styles.custom);
-    setNewStyleName("");
-    setNewStylePrompt("");
-  }
-
-  async function handleRemoveCustomStyle(name: string) {
-    await invoke("remove_custom_style", { name });
-    setCustomStyles((prev) => prev.filter((s) => s.name !== name));
-  }
 
   async function update(patch: Partial<Settings>) {
     if (!settings) return;
@@ -566,11 +507,26 @@ export default function SettingsPanel({ initialTab }: { initialTab?: Tab }) {
             <div>
               <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Transcription</h3>
               <div className="card px-5">
-                <SettingRow label="Active Model" description="Whisper model used for transcription">
-                  <div className="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-mono">
-                    {settings.active_model}
+                <div className="flex items-center justify-between gap-4 py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
+                  <div>
+                    <p className="text-white/80 text-sm">Active Model</p>
+                    <p className="text-white/50 text-xs mt-0.5">Whisper model used for transcription</p>
                   </div>
-                </SettingRow>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-mono">
+                      {settings.active_model}
+                    </span>
+                    <button
+                      onClick={() => onNavigate?.("models:whisper")}
+                      className="text-xs cursor-pointer transition-colors"
+                      style={{ color: "var(--t4)" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = "var(--accent)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = "var(--t4)")}
+                    >
+                      Manage models →
+                    </button>
+                  </div>
+                </div>
                 <SettingRow label="Language" description="Transcription language">
                   <select
                     value={settings.language}
@@ -591,251 +547,6 @@ export default function SettingsPanel({ initialTab }: { initialTab?: Tab }) {
               </div>
             </div>
             <FileTranscriptionSection activeModel={settings.active_model} />
-          </div>
-        )}
-
-        {activeTab === "ai" && (
-          <div>
-            <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">AI Processing</h3>
-
-            {/* Backend selector */}
-            <div className="card px-5 mb-5">
-              <SettingRow label="Backend" description="Where text is sent for polishing">
-                <div className="flex rounded-xl overflow-hidden" style={{ boxShadow: "var(--nm-pressed-sm)" }}>
-                  {(["disabled", "ollama", "cloud"] as const).map((b) => (
-                    <button
-                      key={b}
-                      onClick={() => { update({ ai_backend: b }); setTestResult(null); }}
-                      className="px-3 py-1.5 text-xs transition-all duration-150 cursor-pointer"
-                      style={{
-                        background: settings.ai_backend === b ? "rgba(139,92,246,0.15)" : "transparent",
-                        color: settings.ai_backend === b ? "rgb(167,139,250)" : "var(--t3)",
-                      }}
-                    >
-                      {b === "ollama" ? "On-Device" : b === "cloud" ? "Cloud API" : "Disabled"}
-                    </button>
-                  ))}
-                </div>
-              </SettingRow>
-              {settings.ai_backend === "disabled" && (
-                <p className="text-white/40 text-xs pb-3">Smart Dictation shortcut (⌘⇧B) will paste raw transcription.</p>
-              )}
-            </div>
-
-            {/* Ollama section */}
-            {settings.ai_backend === "ollama" && (
-              <div className="card px-5 mb-5">
-                <div className="flex items-center justify-between py-3 border-b border-white/[0.04]">
-                  <div>
-                    <p className="text-white/80 text-sm">Ollama Status</p>
-                    {ollamaStatus === null
-                      ? <p className="text-white/50 text-xs mt-0.5">Not checked yet</p>
-                      : <p className={`text-xs mt-0.5 ${ollamaStatus.running ? "text-emerald-400" : "text-red-400/70"}`}>
-                          {ollamaStatus.running ? `Running · ${ollamaStatus.models.length} model(s)` : "Not running"}
-                        </p>
-                    }
-                  </div>
-                  <button onClick={refreshOllamaStatus} className="btn-ghost text-xs py-1 px-3">Refresh</button>
-                </div>
-                <SettingRow label="Model" description="Ollama model for text polishing">
-                  <select
-                    value={settings.ai_ollama_model}
-                    onChange={(e) => update({ ai_ollama_model: e.target.value })}
-                    className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none max-w-[160px]" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                  >
-                    {(ollamaStatus?.models.length ? ollamaStatus.models : [settings.ai_ollama_model]).map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
-                </SettingRow>
-                <div className="py-3 flex items-center gap-3">
-                  <button
-                    onClick={() => handleTestConnection("ollama")}
-                    disabled={testLoading}
-                    className="btn-ghost text-xs py-1 px-3"
-                  >
-                    {testLoading ? "Testing…" : "Test Connection"}
-                  </button>
-                  {testResult && <span className={`text-xs font-mono ${testResult.startsWith("✓") ? "text-emerald-400" : "text-red-400/70"}`}>{testResult}</span>}
-                </div>
-                {ollamaStatus && !ollamaStatus.running && (
-                  <div className="pb-4 space-y-1.5 text-white/40 text-xs leading-relaxed">
-                    <p className="text-white/60 font-medium text-sm">Setup Ollama</p>
-                    <p>1. Download from <button onClick={() => invoke("plugin:opener|open_url", { url: "https://ollama.com" }).catch(() => {})} className="text-violet-400 underline cursor-pointer">ollama.com</button></p>
-                    <p>2. Install and open Ollama (it runs in the menu bar)</p>
-                    <p>3. Open Terminal and run: <code className="bg-white/[0.06] px-1.5 py-0.5 rounded font-mono text-white/60">ollama pull llama3.2</code></p>
-                    <p>4. Click Refresh above to detect it</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Cloud API section */}
-            {settings.ai_backend === "cloud" && (
-              <div className="card px-5 mb-5">
-                <SettingRow label="Provider" description="OpenAI-compatible API">
-                  <select
-                    value={
-                      settings.ai_cloud_api_url.includes("openai.com") ? "openai"
-                      : settings.ai_cloud_api_url.includes("groq.com") ? "groq"
-                      : "custom"
-                    }
-                    onChange={(e) => {
-                      const presets: Record<string, { url: string; model: string }> = {
-                        openai: { url: "https://api.openai.com/v1", model: "gpt-4o-mini" },
-                        groq: { url: "https://api.groq.com/openai/v1", model: "llama3-8b-8192" },
-                        custom: { url: settings.ai_cloud_api_url, model: settings.ai_cloud_model },
-                      };
-                      const p = presets[e.target.value];
-                      update({ ai_cloud_api_url: p.url, ai_cloud_model: p.model });
-                    }}
-                    className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                  >
-                    <option value="openai">OpenAI</option>
-                    <option value="groq">Groq</option>
-                    <option value="custom">Custom</option>
-                  </select>
-                </SettingRow>
-                <SettingRow label="API Key" description={apiKeySet ? "Key stored in macOS Keychain" : "Paste your API key"}>
-                  {apiKeySet ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-emerald-400 text-xs font-mono">●●●●●●●●</span>
-                      <button onClick={handleDeleteApiKey} className="text-red-400/60 hover:text-red-400 text-xs cursor-pointer">Remove</button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type={showApiKey ? "text" : "password"}
-                        value={apiKeyInput}
-                        onChange={(e) => setApiKeyInput(e.target.value)}
-                        placeholder="sk-…"
-                        className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-32 font-mono" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                        onKeyDown={(e) => e.key === "Enter" && handleSaveApiKey()}
-                      />
-                      <button onClick={() => setShowApiKey((v) => !v)} className="text-white/50 hover:text-white/60 text-xs cursor-pointer">{showApiKey ? "Hide" : "Show"}</button>
-                      <button onClick={handleSaveApiKey} disabled={!apiKeyInput.trim()} className="btn-ghost text-xs py-1 px-2">Save</button>
-                    </div>
-                  )}
-                </SettingRow>
-                <SettingRow label="Model" description="Model name">
-                  <input
-                    type="text"
-                    value={settings.ai_cloud_model}
-                    onChange={(e) => update({ ai_cloud_model: e.target.value })}
-                    className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-32 font-mono" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                  />
-                </SettingRow>
-                <div className="py-3 flex items-center gap-3">
-                  <button
-                    onClick={() => handleTestConnection("cloud")}
-                    disabled={testLoading || !apiKeySet}
-                    className="btn-ghost text-xs py-1 px-3"
-                  >
-                    {testLoading ? "Testing…" : "Test Connection"}
-                  </button>
-                  {testResult && <span className={`text-xs font-mono ${testResult.startsWith("✓") ? "text-emerald-400" : "text-red-400/70"}`}>{testResult}</span>}
-                </div>
-                <p className="text-white/35 text-xs pb-3 leading-relaxed">
-                  When using Cloud API, your transcription text is sent to the provider. Audio never leaves your device.
-                </p>
-              </div>
-            )}
-
-            {/* Smart Dictation shortcut + style */}
-            <h3 className="text-t3 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Smart Dictation</h3>
-            <div className="card px-5 mb-5">
-              <SettingRow label="Shortcut" description="Hotkey for Smart Dictation">
-                <div className="px-3 py-1.5 rounded-lg bg-white/[0.06] text-white/60 text-xs font-mono">⌘⇧B</div>
-              </SettingRow>
-              <SettingRow label="Default Style" description="Polish style applied on stop">
-                <select
-                  value={settings.active_polish_style}
-                  onChange={(e) => update({ active_polish_style: e.target.value })}
-                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                >
-                  {builtInStyles.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  {customStyles.map((s) => <option key={s.name} value={`custom:${s.system_prompt}`}>{s.name}</option>)}
-                </select>
-              </SettingRow>
-              {settings.active_polish_style === "translate" && (
-                <SettingRow label="Target Language" description="Language to translate into">
-                  <select
-                    value={settings.translate_target_language}
-                    onChange={(e) => update({ translate_target_language: e.target.value })}
-                    className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                  >
-                    {["English","Spanish","French","German","Japanese","Chinese","Hindi","Portuguese","Korean","Arabic","Russian"].map((l) => (
-                      <option key={l} value={l}>{l}</option>
-                    ))}
-                  </select>
-                </SettingRow>
-              )}
-              <SettingRow label="Timeout" description="Max seconds to wait for AI response">
-                <select
-                  value={settings.ai_timeout_seconds}
-                  onChange={(e) => update({ ai_timeout_seconds: parseInt(e.target.value) })}
-                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                >
-                  <option value={15}>15s</option>
-                  <option value={30}>30s</option>
-                  <option value={60}>60s</option>
-                </select>
-              </SettingRow>
-            </div>
-
-            {/* Polish styles */}
-            <h3 className="text-t3 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Polish Styles</h3>
-            <div className="card px-5 mb-5">
-              {builtInStyles.map((s) => (
-                <div key={s.id} className="flex items-center justify-between py-2.5 border-b border-white/[0.04] last:border-0">
-                  <div>
-                    <p className="text-white/70 text-xs font-medium">{s.name}</p>
-                    <p className="text-white/40 text-xs">{s.description}</p>
-                  </div>
-                  <span className="text-white/50 text-[10px] font-mono">built-in</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Custom styles */}
-            <h3 className="text-t3 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Custom Styles</h3>
-            <div className="card px-5 mb-4">
-              {customStyles.length === 0 && (
-                <p className="text-white/35 text-xs py-3">No custom styles yet.</p>
-              )}
-              {customStyles.map((s) => (
-                <div key={s.name} className="flex items-start justify-between py-2.5 border-b border-white/[0.04] last:border-0 gap-3">
-                  <div className="min-w-0">
-                    <p className="text-white/70 text-xs font-medium truncate">{s.name}</p>
-                    <p className="text-white/40 text-xs truncate">{s.system_prompt.slice(0, 60)}…</p>
-                  </div>
-                  <button onClick={() => handleRemoveCustomStyle(s.name)} className="text-red-400/40 hover:text-red-400 text-xs shrink-0 cursor-pointer">Remove</button>
-                </div>
-              ))}
-              <div className="pt-3 space-y-2">
-                <input
-                  type="text"
-                  value={newStyleName}
-                  onChange={(e) => setNewStyleName(e.target.value)}
-                  placeholder="Style name…"
-                  className="w-full rounded-lg px-3 py-2 text-white/70 text-xs outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                />
-                <textarea
-                  value={newStylePrompt}
-                  onChange={(e) => setNewStylePrompt(e.target.value)}
-                  placeholder="System prompt…"
-                  rows={3}
-                  className="w-full rounded-lg px-3 py-2 text-white/70 text-xs outline-none resize-none font-mono" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                />
-                <button
-                  onClick={handleAddCustomStyle}
-                  disabled={!newStyleName.trim() || !newStylePrompt.trim()}
-                  className="btn-primary text-xs py-1.5 w-full"
-                >
-                  Add Style
-                </button>
-              </div>
-            </div>
           </div>
         )}
 
