@@ -19,10 +19,10 @@ Nine targeted UX issues across the app reduce usability, discoverability, and cl
 **Problem:** The Home screen shows a 4-stat strip (today's count, total words, streak, total time) and the last 2 recent transcriptions below the record button. This competes for attention with the core job of the screen: recording. Additionally, the live transcript auto-hides after 5 seconds — exactly when the user most wants to read it.
 
 **Changes:**
-- Remove the stats strip (`StatsCard`) entirely from `HomeView.tsx`
-- Remove the "recent 2" transcriptions section from `HomeView.tsx`
-- Change the transcript clear behaviour: instead of a 5-second `setTimeout`, clear `segments` (and hide the transcript panel) only when a new recording starts (i.e., on `startRecording`)
-- The "Clear" button remains for manual dismissal
+- Remove the inline stats grid (4-column grid, implemented directly in `HomeView.tsx` — not a separate component) entirely, along with the `stats` state, `loadStats` function, and all calls to `loadStats` (including the mount call and the post-recording call inside the 5-second timer `useEffect`)
+- Remove the "recent 2" transcriptions section from `HomeView.tsx`, along with the `recentItems` state, `loadRecent` function, and all calls to `loadRecent` — including any call inside the Clear button's `onClick` handler (strip it down to just clearing `segments`)
+- Change the transcript clear behaviour: instead of a 5-second `setTimeout`, clear `segments` (and hide the transcript panel) only when a new recording starts (i.e., on `startRecording`). Remove the `postRecordingTimerRef`, the `setTimeout`, and the cleanup `useEffect` for that timer entirely.
+- The "Clear" button remains for manual dismissal (its `onClick` clears `segments` only — `loadRecent` call removed as above)
 
 **Result:** Home is the record button, waveform meter, and live transcript. Nothing else.
 
@@ -40,10 +40,10 @@ Nine targeted UX issues across the app reduce usability, discoverability, and cl
   - Each entry row shows a checkbox (left side). Clicking the row toggles selection instead of expanding
   - A sticky action bar appears at the bottom: **"X selected · Delete selected"** button + **"Cancel"** button
   - "Cancel" sets `selecting = false` and clears `selected`
-  - "Delete selected" calls `delete_transcription` for each selected ID sequentially, then sets `selecting = false`, clears `selected`, refreshes list
+  - "Delete selected" calls `invoke("cmd_delete_transcription", { id })` for each selected ID sequentially, then sets `selecting = false`, clears `selected`, refreshes list
 - When not selecting, existing expand/collapse behaviour is unchanged
 
-**No new Tauri commands needed** — reuses existing `delete_transcription`.
+**No new Tauri commands needed** — reuses existing `cmd_delete_transcription`.
 
 ---
 
@@ -62,8 +62,8 @@ Model presets per provider:
 
 Implementation:
 - Derive active provider from `settings.ai_cloud_api_url` (same logic already used for the Provider `<select>`)
-- When provider changes, reset `ai_cloud_model` to the first preset for that provider
-- When user selects "Custom…", show the text input below the dropdown
+- The existing Provider `<select>` `onChange` handler already resets `ai_cloud_model` when switching providers (OpenAI → `gpt-4o-mini`, Groq → `llama3-8b-8192`, Custom → current value). This behaviour is preserved. The new model `<select>` reads its value from `settings.ai_cloud_model` — it stays in sync automatically because `update()` writes through to settings state.
+- When user selects "Custom…" from the model dropdown, show the free-text input below the dropdown. The "Custom…" option value should be a sentinel (e.g., `"__custom__"`) distinct from any real model name.
 - The custom model value is stored as-is in settings
 
 ---
@@ -77,7 +77,7 @@ Implementation:
 **Custom Words chips:**
 - Add `editingWord: string | null` state (the word currently being edited)
 - Clicking a chip sets `editingWord = word` — the chip re-renders as a small `<input>` pre-filled with the word
-- Pressing Enter: calls `remove_custom_word(old)` then `add_custom_word(new)`, clears `editingWord`
+- Pressing Enter: calls `invoke("remove_vocabulary_word", { word: old })` then `invoke("add_vocabulary_word", { word: new })`, clears `editingWord`
 - Pressing Esc: clears `editingWord` (no change)
 - Clicking outside (onBlur): same as Esc
 
@@ -94,7 +94,7 @@ Implementation:
 **Problem:** Most users never visit Vocabulary. The feature is invisible until they stumble upon it.
 
 **Change in `HomeView.tsx`:**
-- On mount, invoke `get_settings` and check `custom_vocabulary` (array of words) and `word_replacements` (array of pairs)
+- On mount, invoke `get_vocabulary` (returns `{ words: string[], replacements: Record<string, string> }`) and check if `words.length === 0 && Object.keys(replacements).length === 0`
 - If both are empty, render a small dismissible nudge below the record button (above the empty state if no recent transcriptions):
 
 ```
@@ -116,7 +116,7 @@ Implementation:
 
 **Changes:**
 - In `Settings.tsx`, remove the `SettingRow` for `log_level` from the **General** tab
-- Add it to the **About** tab, above the "Copy Debug Info" button, with label "Log Level" and description "Increase for troubleshooting"
+- Add it to the **About** tab, above the "Copy Debug Info" button, with label "Log Level" and description "Increase for troubleshooting" (the existing description "Verbosity of log file" also changes to this new text)
 
 ---
 
@@ -126,16 +126,13 @@ Implementation:
 
 **Change in `Sidebar.tsx`:**
 
-Replace the two-line display:
-```
-Free today          28m 12s
-```
-With a single descriptive line:
+The current expanded layout is a single-line flex row with two `<span>` elements: `"Free today"` (left) and `"Xm Ys"` (right). Replace both spans with a single span containing the combined text:
+
 ```
 28m 12s left · resets at midnight
 ```
 
-Implementation: format `remaining` seconds as before, append `· resets at midnight` as static text. The amber/red colour thresholds remain unchanged.
+Implementation: replace the `<div className="flex justify-between ...">` with the two spans with a single `<span>` formatted as `` `${Math.floor(remaining / 60)}m ${remaining % 60}s left · resets at midnight` ``. The amber/red colour thresholds remain unchanged. This change only affects the **expanded** sidebar (`isOpen = true`) label — the collapsed sidebar shows only the Sparkles icon and is unaffected.
 
 ---
 
