@@ -18,8 +18,8 @@ This sub-project covers:
 - Auto-paste via Win32 `SendInput` (Ctrl+V) on Windows
 - Accessibility permission stubs on Windows (no permission system needed)
 - Machine ID via Windows registry `MachineGuid` for license validation
-- Onboarding Accessibility step skipped on Windows
-- New `is_macos` Tauri command for frontend platform detection
+- Platform-aware onboarding copy (macOS text strings updated to be platform-neutral)
+- New `get_platform` Tauri command for frontend platform detection
 
 **Out of scope (addressed in other sub-projects):**
 - PTT/Fn key on Windows (Sub-project 2)
@@ -31,83 +31,135 @@ This sub-project covers:
 
 ## Architecture
 
-All platform-specific code stays in `paste.rs` and `license/mod.rs` using `#[cfg(target_os)]` guards — the same pattern already used throughout the codebase. No new files. One new lightweight crate (`winreg`). The frontend detects platform via a new `is_macos` Tauri command and adjusts onboarding accordingly.
+All platform-specific code stays in `paste.rs` and `license/mod.rs` using `#[cfg(target_os)]` guards — the same pattern already used throughout the codebase. No new files. One new lightweight crate (`winreg`) for registry access. The frontend detects platform via a new `get_platform` Tauri command and adjusts platform-specific text strings in onboarding.
 
 ---
 
 ## paste.rs — Windows Implementation
 
-Add `#[cfg(target_os = "windows")]` blocks for all four platform-specific functions:
+### cfg guard pattern
 
-### `paste_to_app()`
-Uses Win32 `SendInput` to inject a Ctrl+V keypress:
-1. Build two `INPUT` structs: VK_CONTROL keydown + `0x56` (V) keydown
-2. Build two `INPUT` structs: `0x56` keyup + VK_CONTROL keyup
-3. Call `SendInput` with all four events in sequence
+The existing `paste.rs` uses `#[cfg(not(target_os = "macos"))]` stubs for the non-macOS path. These stubs must be **replaced** (not supplemented) with a three-way split to avoid duplicate definitions on Windows:
 
-No Accessibility permission needed. `SendInput` works from any process on Windows without special permissions.
+```rust
+#[cfg(target_os = "macos")]
+fn paste_to_app(...) { /* CoreGraphics implementation */ }
 
-### `has_accessibility_permission()`
-Returns `true` unconditionally. Windows has no equivalent to macOS TCC Accessibility permission for `SendInput`.
+#[cfg(target_os = "windows")]
+fn paste_to_app(...) { /* SendInput implementation */ }
 
-### `open_accessibility_settings()`
-Returns `Ok(())` as a no-op. No settings to open.
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn paste_to_app(...) { /* stub for Linux/other */ }
+```
 
-### `get_frontmost_app()`
-Returns `"Windows"` as a stub string. The focused app capture is macOS-specific and is only used for logging — the actual paste targets the frontmost window regardless.
+Apply this three-way pattern to all four platform-specific functions: `paste_to_app`, `has_accessibility_permission`, `open_accessibility_settings`, `get_frontmost_app`.
+
+### `paste_to_app()` — Windows
+
+Uses Win32 `SendInput` with a single call containing 4 `INPUT` events (atomic — no interleaved input from other processes):
+
+```rust
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+    SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
+    VK_CONTROL,
+};
+
+// Build 4 INPUT structs:
+// 1. VK_CONTROL (0x11) keydown: wVk=VK_CONTROL, dwFlags=0
+// 2. 'V' (0x56) keydown:        wVk=0x56, dwFlags=0
+// 3. 'V' (0x56) keyup:          wVk=0x56, dwFlags=KEYEVENTF_KEYUP (0x0002)
+// 4. VK_CONTROL (0x11) keyup:   wVk=VK_CONTROL, dwFlags=KEYEVENTF_KEYUP
+// All events: type=INPUT_KEYBOARD (1), wScan=0, time=0, dwExtraInfo=0
+SendInput(4, inputs.as_ptr(), size_of::<INPUT>() as i32);
+```
+
+`windows-sys` is already a transitive dependency in the lock file — no new crate needed for the paste side.
+
+### `has_accessibility_permission()` — Windows
+
+Returns `true` unconditionally. Windows has no equivalent to macOS TCC Accessibility permission for `SendInput`. The existing `#[cfg(not(target_os = "macos"))]` stub returns `false` — this is replaced by the Windows block returning `true`.
+
+### `open_accessibility_settings()` — Windows
+
+Returns `Ok(())` as a no-op.
+
+### `get_frontmost_app()` — Windows
+
+Returns `Ok("Windows".to_string())` as a stub — used for logging only.
 
 ### `read_clipboard()` and `write_clipboard()`
+
 Already use `arboard` which is cross-platform. No changes needed.
 
 ---
 
 ## license/mod.rs — Windows Machine ID
 
-Add a `#[cfg(target_os = "windows")]` block for the `get_machine_id()` function:
+Add a `#[cfg(target_os = "windows")]` block for `get_machine_id()`, replacing the existing `#[cfg(not(target_os = "macos"))]` stub:
 
 Read `MachineGuid` from the Windows registry:
 - Key: `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Cryptography`
-- Value: `MachineGuid`
+- Value name: `MachineGuid`
+- Type: `REG_SZ` (string)
 
-This is a stable UUID assigned at Windows installation, equivalent to macOS `IOPlatformUUID`. Reading via the `winreg` crate — no external process, no WMIC (deprecated in Windows 11).
+```rust
+use winreg::enums::HKEY_LOCAL_MACHINE;
+use winreg::RegKey;
 
-The same SHA-256 hash is applied to the result as on macOS, keeping the license validation logic identical across platforms.
+let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+let key = hklm.open_subkey("SOFTWARE\\Microsoft\\Cryptography")?;
+let guid: String = key.get_value("MachineGuid")?;
+```
 
-`keyring` already supports Windows Credential Manager — no changes to the keyring storage logic.
+If the key is missing (unusual but possible on stripped Windows installs), fall back to a random UUID generated once and stored in the settings directory alongside `settings.json`.
+
+`MachineGuid` is a stable UUID assigned at Windows installation. The same SHA-256 hash applied to the result as on macOS keeps license validation logic identical.
+
+`keyring` already supports Windows Credential Manager — no changes to keyring storage.
 
 ---
 
-## commands.rs — is_macos Command
+## commands.rs — get_platform Command
 
-Add a new Tauri command:
+Add a `get_platform` command returning the current OS as a string. Using a string rather than `is_macos: bool` avoids adding separate `is_windows` / `is_linux` commands for Sub-projects 2 and 3:
 
 ```rust
 #[tauri::command]
-pub fn is_macos() -> bool {
-    cfg!(target_os = "macos")
+pub fn get_platform() -> &'static str {
+    if cfg!(target_os = "macos") { "macos" }
+    else if cfg!(target_os = "windows") { "windows" }
+    else { "linux" }
 }
 ```
 
-Register it in `lib.rs` alongside other commands. Used by the frontend to conditionally render platform-specific UI.
+Register in `lib.rs` alongside other commands.
 
 ---
 
-## Onboarding.tsx — Skip Accessibility Step on Windows
+## Onboarding.tsx — Platform-Neutral Copy
 
-Current 5-step flow: Welcome → Mic → **Accessibility** → Download → Ready.
+The current onboarding has no Accessibility step — it was not implemented in the final UI. The 5 steps are:
+- Step 0: Welcome
+- Step 1: Microphone Access
+- Step 2: Download AI Model
+- Step 3: Say Something! (try it out)
+- Step 4: You're All Set!
 
-On Windows, the Accessibility step is skipped:
-- On mount, call `invoke<boolean>("is_macos")`
-- Filter the steps array to exclude the Accessibility step when `isMacos === false`
-- Step numbering and progress indicator adjust automatically (4 steps on Windows)
+No steps need to be removed. Three strings contain macOS-specific copy that must be updated for Windows:
 
-The Accessibility step content and logic (permission request button, granted state) is unchanged — it simply isn't included in the Windows step sequence.
+**Step 2** (line ~189): `"running locally on your Mac"` → `"running locally on your device"`
+
+**Step 4** (line ~296): `"OmWhisper lives in your menu bar"` → on Windows: `"OmWhisper lives in your system tray"`
+
+**Step 1** (line ~174): The denied-permission help text `"Go to System Settings → Privacy & Security → Microphone"` is macOS-specific → on Windows: `"Go to Settings → Privacy & Security → Microphone Privacy Settings"`
+
+**Implementation:** Call `invoke<string>("get_platform")` on mount (store as `platform` state). Use it to conditionally render the three strings above. All `setStep(N)` calls and `TOTAL_STEPS` remain unchanged.
 
 ---
 
 ## Cargo.toml — winreg Dependency
 
-Add as a Windows-only dependency:
+Add as a Windows-only dependency (verify latest published version at implementation time; `0.52` or later):
 
 ```toml
 [target.'cfg(target_os = "windows")'.dependencies]
@@ -120,12 +172,12 @@ winreg = "0.52"
 
 | File | Change |
 |------|--------|
-| `src-tauri/src/paste.rs` | Add `#[cfg(target_os = "windows")]` blocks for `paste_to_app`, `has_accessibility_permission`, `open_accessibility_settings`, `get_frontmost_app` |
-| `src-tauri/src/license/mod.rs` | Add `#[cfg(target_os = "windows")]` block for `get_machine_id` using `winreg` |
-| `src-tauri/Cargo.toml` | Add `winreg = "0.52"` as Windows-only target dependency |
-| `src-tauri/src/commands.rs` | Add `is_macos` command |
-| `src-tauri/src/lib.rs` | Register `is_macos` command in `.invoke_handler()` |
-| `src/components/Onboarding.tsx` | Read `is_macos` on mount, filter out Accessibility step on Windows |
+| `src-tauri/src/paste.rs` | Replace `#[cfg(not(target_os = "macos"))]` stubs with three-way cfg split; add Windows `SendInput` implementation |
+| `src-tauri/src/license/mod.rs` | Replace `#[cfg(not(target_os = "macos"))]` machine ID stub with three-way cfg split; add Windows `MachineGuid` registry read with fallback |
+| `src-tauri/Cargo.toml` | Add `winreg` as Windows-only target dependency |
+| `src-tauri/src/commands.rs` | Add `get_platform` command |
+| `src-tauri/src/lib.rs` | Register `get_platform` in `.invoke_handler()` |
+| `src/components/Onboarding.tsx` | Read `get_platform` on mount; conditionally render 3 platform-specific strings |
 
 ---
 
