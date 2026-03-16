@@ -206,11 +206,34 @@ function App() {
           }
         })();
       } else {
-        invoke<void>("paste_transcription", { text: rawText })
-          .then(() => showToast("✓ Copied to clipboard"))
-          .catch((e) => logger.error("paste_transcription failed:", e));
-        invoke("save_transcription", { text: rawText, durationSeconds, modelUsed })
-          .catch((e) => logger.error("save_transcription failed:", e));
+        (async () => {
+          try {
+            const settings = await invoke<{ apply_polish_to_regular: boolean }>("get_settings");
+            if (settings.apply_polish_to_regular) {
+              try {
+                const polished = await invoke<string>("polish_text_cmd", { text: rawText, style: "professional" });
+                await invoke("paste_transcription", { text: polished });
+                showToast("✓ AI-polished & copied");
+                invoke("save_transcription", { text: polished, durationSeconds, modelUsed, source: "regular_polished", rawText, polishStyle: "professional" })
+                  .catch((e) => logger.error("save_transcription failed:", e));
+              } catch {
+                showToast("AI not ready — pasting raw text");
+                await invoke("paste_transcription", { text: rawText }).catch(() => {});
+                invoke("save_transcription", { text: rawText, durationSeconds, modelUsed })
+                  .catch((e) => logger.error("save_transcription failed:", e));
+              }
+            } else {
+              await invoke<void>("paste_transcription", { text: rawText });
+              showToast("✓ Copied to clipboard");
+              invoke("save_transcription", { text: rawText, durationSeconds, modelUsed })
+                .catch((e) => logger.error("save_transcription failed:", e));
+            }
+          } catch {
+            // get_settings failed — fall back to raw paste
+            await invoke<void>("paste_transcription", { text: rawText }).catch(() => {});
+            invoke("save_transcription", { text: rawText, durationSeconds, modelUsed }).catch(() => {});
+          }
+        })();
       }
     });
     return () => { unlisten.then((f) => f()); };
