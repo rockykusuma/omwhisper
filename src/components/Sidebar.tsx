@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Clock, Box, Settings, BookMarked, Sparkles, House } from "lucide-react";
+import { Clock, Brain, Settings, BookMarked, Sparkles, House } from "lucide-react";
 
 export type View = "home" | "history" | "models" | "vocabulary" | "license" | "settings";
 
@@ -16,7 +16,7 @@ interface Props {
 const NAV_ITEMS: { id: View; icon: React.ElementType; label: string }[] = [
   { id: "home",       icon: House,      label: "Home"       },
   { id: "history",    icon: Clock,      label: "History"    },
-  { id: "models",     icon: Box,        label: "Models"     },
+  { id: "models",     icon: Brain,      label: "AI Models"  },
   { id: "vocabulary", icon: BookMarked, label: "Vocabulary" },
   { id: "settings",   icon: Settings,   label: "Settings"   },
 ];
