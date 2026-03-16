@@ -449,20 +449,37 @@ pub async fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
     let settings = crate::settings::load_settings().await;
     if let Some(win) = app.get_webview_window("overlay") {
         if let Ok(Some(monitor)) = win.current_monitor() {
-            let screen = monitor.size();
+            let scale  = monitor.scale_factor();
+            let screen = monitor.size();    // physical pixels
+            let origin = monitor.position(); // physical top-left of this monitor
+
+            // Window logical dimensions → physical
             let (win_w, win_h) = if settings.overlay_style == "waveform" {
-                (280i32, 100i32)
+                ((280.0 * scale) as i32, (100.0 * scale) as i32)
             } else {
-                (110i32, 44i32)
+                ((110.0 * scale) as i32, (44.0 * scale) as i32)
             };
-            let margin = 60i32;
+
+            // Logical-pixel margins → physical
+            // top: just below the macOS menu bar (~24 logical px)
+            // bottom: above the macOS Dock (~70 logical px tall by default)
+            // side: small inset from screen edge
+            let top_margin    = (28.0 * scale) as i32;
+            let bottom_margin = (84.0 * scale) as i32;
+            let side_margin   = (16.0 * scale) as i32;
+
+            let sw = screen.width as i32;
+            let sh = screen.height as i32;
+            let ox = origin.x;
+            let oy = origin.y;
+
             let (x, y) = match settings.overlay_placement.as_str() {
-                "top-left"      => (margin, margin),
-                "top-right"     => (screen.width as i32 - win_w - margin, margin),
-                "bottom-center" => ((screen.width as i32 - win_w) / 2, screen.height as i32 - win_h - margin),
-                "bottom-left"   => (margin, screen.height as i32 - win_h - margin),
-                "bottom-right"  => (screen.width as i32 - win_w - margin, screen.height as i32 - win_h - margin),
-                _               => ((screen.width as i32 - win_w) / 2, margin), // top-center default
+                "top-left"      => (ox + side_margin, oy + top_margin),
+                "top-right"     => (ox + sw - win_w - side_margin, oy + top_margin),
+                "bottom-center" => (ox + (sw - win_w) / 2, oy + sh - win_h - bottom_margin),
+                "bottom-left"   => (ox + side_margin, oy + sh - win_h - bottom_margin),
+                "bottom-right"  => (ox + sw - win_w - side_margin, oy + sh - win_h - bottom_margin),
+                _               => (ox + (sw - win_w) / 2, oy + top_margin), // top-center default
             };
             let _ = win.set_position(tauri::PhysicalPosition { x, y });
         }
