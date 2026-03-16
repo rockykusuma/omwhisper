@@ -81,9 +81,6 @@ pub struct Settings {
     /// Which key triggers PTT: "fn" | "control" | "left_option" | "right_option" | "custom"
     #[serde(default = "default_ptt_key")]
     pub ptt_key: String,
-    /// Double-press the PTT key quickly to lock recording (hold not required).
-    #[serde(default)]
-    pub double_press_lock: bool,
     /// Overlay placement: "top-center" | "top-left" | "top-right" | "bottom-center" | "bottom-left" | "bottom-right"
     #[serde(default = "default_overlay_placement")]
     pub overlay_placement: String,
@@ -152,7 +149,6 @@ impl Default for Settings {
             smart_dictation_hotkey: "CmdOrCtrl+Shift+B".to_string(),
             push_to_talk_hotkey: "Fn".to_string(),
             ptt_key: "custom".to_string(),
-            double_press_lock: false,
             overlay_placement: "top-center".to_string(),
             overlay_style: "micro".to_string(),
             custom_polish_styles: Vec::new(),

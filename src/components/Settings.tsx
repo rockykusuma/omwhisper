@@ -591,13 +591,6 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                       <option value="Right Control">Right Control ⌃</option>
                     </select>
                   </SettingRow>
-                  <SettingRow label="Double-press to Lock" description="Press twice quickly to keep recording without holding">
-                    <Toggle
-                      value={settings.double_press_lock ?? false}
-                      onChange={(v) => update({ double_press_lock: v })}
-                      label="Double press lock"
-                    />
-                  </SettingRow>
                 </>
               )}
             </div>

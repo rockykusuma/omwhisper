@@ -64,7 +64,6 @@ export interface AppSettings {
   smart_dictation_hotkey: string;
   push_to_talk_hotkey: string;
   ptt_key: string;
-  double_press_lock: boolean;
   overlay_placement: string;
   overlay_style: string;
 }
