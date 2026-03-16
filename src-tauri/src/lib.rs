@@ -163,12 +163,16 @@ pub fn run() {
                     move |app, event| match event.id.as_ref() {
                         "show" => {
                             if let Some(win) = app.get_webview_window("main") {
+                                #[cfg(target_os = "macos")]
+                                let _ = app.show();
                                 let _ = win.show();
                                 let _ = win.set_focus();
                             }
                         }
                         "settings" => {
                             if let Some(win) = app.get_webview_window("main") {
+                                #[cfg(target_os = "macos")]
+                                let _ = app.show();
                                 let _ = win.show();
                                 let _ = win.set_focus();
                             }
@@ -217,6 +221,8 @@ pub fn run() {
                             if win.is_visible().unwrap_or(false) {
                                 let _ = win.hide();
                             } else {
+                                #[cfg(target_os = "macos")]
+                                let _ = app.show();
                                 let _ = win.show();
                                 let _ = win.set_focus();
                             }
@@ -349,61 +355,108 @@ pub fn run() {
                 }
             }
 
-            // --- Fn key PTT via raw CGEventTap ---
-            // tauri_plugin_global_shortcut uses W3C key codes which don't include fn.
-            // We use a minimal CGEventTap that monitors kCGEventFlagsChanged and checks
-            // kCGEventFlagMaskSecondaryFn — no HIToolbox/string_from_code, no crash.
+            // --- Single-key PTT via raw CGEventTap (Fn, CapsLock, Right Option, Right Control, F13–F15) ---
+            // tauri_plugin_global_shortcut handles modifier+key combos (above).
+            // These bare single keys need CGEventTap for reliable press/release detection.
             #[cfg(target_os = "macos")]
-            if initial_settings.recording_mode == "push_to_talk"
-                && initial_settings.push_to_talk_hotkey == "Fn"
             {
-                let app_press = app.handle().clone();
-                let app_release = app.handle().clone();
-                let state_press = shared_state.clone();
-                let state_release = shared_state.clone();
-                let ptt_last_ms = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
-                let ptt_locked  = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-                let last_clone  = ptt_last_ms.clone();
-                let locked_press = ptt_locked.clone();
-                let locked_release = ptt_locked.clone();
-
-                crate::fn_key::spawn_fn_key_tap(
-                    move || {
-                        let settings = crate::settings::load_settings_sync();
-                        let is_recording = state_press.lock().unwrap().capture.is_some();
-                        let now_ms = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_millis() as u64;
-                        if !is_recording {
-                            if settings.double_press_lock {
-                                let last = last_clone.load(std::sync::atomic::Ordering::SeqCst);
-                                if now_ms.saturating_sub(last) < 500 {
-                                    locked_press.store(true, std::sync::atomic::Ordering::SeqCst);
-                                } else {
+                const SINGLE_PTT_KEYS: &[&str] = &[
+                    "Fn", "CapsLock", "Right Option", "Right Control", "F13", "F14", "F15",
+                ];
+                let ptt_key = initial_settings.push_to_talk_hotkey.clone();
+                if initial_settings.recording_mode == "push_to_talk"
+                    && SINGLE_PTT_KEYS.contains(&ptt_key.as_str())
+                {
+                    // Build shared on_press / on_release callbacks using a macro so each
+                    // arm gets its own concrete closure types (avoids Box<dyn Fn> coercion).
+                    macro_rules! ptt_callbacks {
+                        () => {{
+                            let app_press = app.handle().clone();
+                            let app_release = app.handle().clone();
+                            let state_press = shared_state.clone();
+                            let state_release = shared_state.clone();
+                            let ptt_last_ms = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+                            let ptt_locked  = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+                            let last_clone  = ptt_last_ms.clone();
+                            let locked_press  = ptt_locked.clone();
+                            let locked_release = ptt_locked.clone();
+                            let on_press = move || {
+                                let settings = crate::settings::load_settings_sync();
+                                let is_recording = state_press.lock().unwrap().capture.is_some();
+                                let now_ms = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_millis() as u64;
+                                if !is_recording {
+                                    if settings.double_press_lock {
+                                        let last = last_clone.load(std::sync::atomic::Ordering::SeqCst);
+                                        if now_ms.saturating_sub(last) < 500 {
+                                            locked_press.store(true, std::sync::atomic::Ordering::SeqCst);
+                                        } else {
+                                            locked_press.store(false, std::sync::atomic::Ordering::SeqCst);
+                                        }
+                                    }
+                                    last_clone.store(now_ms, std::sync::atomic::Ordering::SeqCst);
+                                    let focused = crate::paste::get_frontmost_app();
+                                    *crate::commands::get_previous_app().lock().unwrap() = focused;
+                                    let _ = app_press.emit("hotkey-toggle-recording", ());
+                                } else if settings.double_press_lock
+                                    && locked_press.load(std::sync::atomic::Ordering::SeqCst)
+                                {
                                     locked_press.store(false, std::sync::atomic::Ordering::SeqCst);
+                                    let _ = app_press.emit("hotkey-stop-recording", ());
                                 }
-                            }
-                            last_clone.store(now_ms, std::sync::atomic::Ordering::SeqCst);
-                            let focused = crate::paste::get_frontmost_app();
-                            *crate::commands::get_previous_app().lock().unwrap() = focused;
-                            let _ = app_press.emit("hotkey-toggle-recording", ());
-                        } else if settings.double_press_lock
-                            && locked_press.load(std::sync::atomic::Ordering::SeqCst)
-                        {
-                            locked_press.store(false, std::sync::atomic::Ordering::SeqCst);
-                            let _ = app_press.emit("hotkey-stop-recording", ());
+                            };
+                            let on_release = move || {
+                                let is_recording = state_release.lock().unwrap().capture.is_some();
+                                if is_recording && !locked_release.load(std::sync::atomic::Ordering::SeqCst) {
+                                    let _ = app_release.emit("hotkey-stop-recording", ());
+                                }
+                            };
+                            (on_press, on_release)
+                        }};
+                    }
+
+                    match ptt_key.as_str() {
+                        "Fn" => {
+                            let (on_press, on_release) = ptt_callbacks!();
+                            crate::fn_key::spawn_fn_key_tap(on_press, on_release);
                         }
-                    },
-                    move || {
-                        let is_recording = state_release.lock().unwrap().capture.is_some();
-                        if is_recording
-                            && !locked_release.load(std::sync::atomic::Ordering::SeqCst)
-                        {
-                            let _ = app_release.emit("hotkey-stop-recording", ());
+                        "CapsLock" => {
+                            let (on_press, on_release) = ptt_callbacks!();
+                            crate::fn_key::spawn_capslock_tap(on_press, on_release);
                         }
-                    },
-                );
+                        "Right Option" => {
+                            let (on_press, on_release) = ptt_callbacks!();
+                            crate::fn_key::spawn_modifier_key_tap(
+                                crate::fn_key::KEYCODE_RIGHT_OPTION,
+                                0x00080000, // kCGEventFlagMaskAlternate
+                                on_press, on_release,
+                            );
+                        }
+                        "Right Control" => {
+                            let (on_press, on_release) = ptt_callbacks!();
+                            crate::fn_key::spawn_modifier_key_tap(
+                                crate::fn_key::KEYCODE_RIGHT_CONTROL,
+                                0x00040000, // kCGEventFlagMaskControl
+                                on_press, on_release,
+                            );
+                        }
+                        "F13" => {
+                            let (on_press, on_release) = ptt_callbacks!();
+                            crate::fn_key::spawn_function_key_tap(crate::fn_key::KEYCODE_F13, on_press, on_release);
+                        }
+                        "F14" => {
+                            let (on_press, on_release) = ptt_callbacks!();
+                            crate::fn_key::spawn_function_key_tap(crate::fn_key::KEYCODE_F14, on_press, on_release);
+                        }
+                        "F15" => {
+                            let (on_press, on_release) = ptt_callbacks!();
+                            crate::fn_key::spawn_function_key_tap(crate::fn_key::KEYCODE_F15, on_press, on_release);
+                        }
+                        _ => {}
+                    }
+                }
             }
 
             // --- Global Shortcut: Cmd+Shift+B (Smart Dictation) ---
