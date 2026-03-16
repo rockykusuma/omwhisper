@@ -186,10 +186,9 @@ export default function Sidebar({ activeView, onNavigate, appVersion, isOpen, on
           >
             {isOpen ? (
               <div className="px-3 py-2.5">
-                <div className="flex justify-between text-[10px] mb-2 font-mono" style={{ color: "var(--t2)" }}>
-                  <span>Free today</span>
-                  <span>{Math.floor(remaining / 60)}m {remaining % 60}s</span>
-                </div>
+                <span className="text-[10px] mb-2 font-mono block" style={{ color: "var(--t2)" }}>
+                  {Math.floor(remaining / 60)}m {remaining % 60}s left · resets at midnight
+                </span>
                 <div className="h-1 rounded-full overflow-hidden mb-2.5" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}>
                   <div
                     className={`h-full rounded-full transition-all duration-1000 ${
