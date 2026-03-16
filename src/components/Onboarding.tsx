@@ -51,8 +51,14 @@ export default function Onboarding({ onComplete }: Props) {
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [liveSegments, setLiveSegments] = useState<string[]>([]);
+  const [platform, setPlatform] = useState<string>("macos");
 
   const TOTAL_STEPS = 5;
+
+  // Fetch platform
+  useEffect(() => {
+    invoke<string>("get_platform").then(setPlatform).catch(() => {});
+  }, []);
 
   // Check if tiny.en is already downloaded
   useEffect(() => {
@@ -171,7 +177,9 @@ export default function Onboarding({ onComplete }: Props) {
             Microphone access was denied.
           </p>
           <p className="text-white/40 text-xs" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-            Go to System Settings → Privacy & Security → Microphone and enable OmWhisper, then restart the app.
+            {platform === "windows"
+              ? "Go to Settings → Privacy & Security → Microphone Privacy Settings and enable OmWhisper, then restart the app."
+              : "Go to System Settings → Privacy & Security → Microphone and enable OmWhisper, then restart the app."}
           </p>
         </div>
       )}
@@ -186,7 +194,7 @@ export default function Onboarding({ onComplete }: Props) {
         Download AI Model
       </h2>
       <p className="text-white/50 text-sm leading-relaxed mb-2" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-        OmWhisper uses OpenAI's Whisper model running locally on your Mac. Let's download the tiny model to get started.
+        OmWhisper uses OpenAI's Whisper model running locally on your device. Let's download the tiny model to get started.
       </p>
       <p className="text-white/40 text-xs mb-8" style={{ fontFamily: "'DM Mono', monospace" }}>
         tiny.en · 75 MB · Fastest model
@@ -293,7 +301,7 @@ export default function Onboarding({ onComplete }: Props) {
         You're All Set!
       </h2>
       <p className="text-white/50 text-sm leading-relaxed mb-8" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-        OmWhisper lives in your menu bar. Use the global hotkey to start transcribing from anywhere.
+        {platform === "windows" ? "OmWhisper lives in your system tray." : "OmWhisper lives in your menu bar."} Use the global hotkey to start transcribing from anywhere.
       </p>
 
       <div className="w-full rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4 mb-6">
