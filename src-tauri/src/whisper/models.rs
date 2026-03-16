@@ -186,8 +186,18 @@ where
         anyhow::bail!("download failed with status: {}", response.status());
     }
 
-    let total = response.content_length().unwrap_or(0);
+    // Use Content-Length if present; fall back to the catalog's known size so
+    // progress is always reported (HuggingFace CDN sometimes omits the header).
+    let content_len = response.content_length().unwrap_or(0);
+    let catalog_size = available_models()
+        .into_iter()
+        .find(|(n, ..)| *n == name)
+        .map(|(_, _, size, _, _, _, _)| size)
+        .unwrap_or(0);
+    let total = if content_len > 0 { content_len } else { catalog_size };
+
     let mut downloaded: u64 = 0;
+    let mut last_reported = -1f64; // tracks last emitted progress value
 
     let tmp_path = dest.with_extension("bin.tmp");
     let mut file = fs::File::create(&tmp_path)
@@ -204,7 +214,12 @@ where
         downloaded += chunk.len() as u64;
 
         if total > 0 {
-            on_progress(downloaded as f64 / total as f64);
+            let p = (downloaded as f64 / total as f64).min(1.0);
+            // Throttle: only emit when progress moves by ≥ 0.5% to avoid flooding
+            if p - last_reported >= 0.005 {
+                on_progress(p);
+                last_reported = p;
+            }
         }
     }
 

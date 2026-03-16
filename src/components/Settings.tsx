@@ -187,22 +187,17 @@ export default function SettingsPanel({ initialTab }: { initialTab?: Tab }) {
   const { theme, setTheme } = useTheme();
 
   useEffect(() => {
-    Promise.all([
-      invoke<Settings>("get_settings"),
-      invoke<string[]>("get_audio_devices"),
-      invoke<StorageInfo>("get_storage_info"),
-      invoke<boolean>("get_cloud_api_key_status"),
-      invoke<boolean>("check_accessibility_permission"),
-      invoke<{ built_in: BuiltInStyle[]; custom: CustomStyle[] }>("get_polish_styles"),
-    ]).then(([s, d, info, keySet, a11y, styles]) => {
-      setSettings(s);
-      setDevices(d);
-      setStorageInfo(info);
-      setApiKeySet(keySet);
-      setAccessibilityGranted(a11y);
-      setBuiltInStyles(styles.built_in);
-      setCustomStyles(styles.custom);
-    });
+    // Load settings first so the panel renders immediately
+    invoke<Settings>("get_settings").then(setSettings);
+
+    // Slower calls populate lazily in parallel
+    invoke<string[]>("get_audio_devices").then(setDevices).catch(() => {});
+    invoke<StorageInfo>("get_storage_info").then(setStorageInfo).catch(() => {});
+    invoke<boolean>("get_cloud_api_key_status").then(setApiKeySet).catch(() => {});
+    invoke<boolean>("check_accessibility_permission").then(setAccessibilityGranted).catch(() => {});
+    invoke<{ built_in: BuiltInStyle[]; custom: CustomStyle[] }>("get_polish_styles")
+      .then((styles) => { setBuiltInStyles(styles.built_in); setCustomStyles(styles.custom); })
+      .catch(() => {});
   }, []);
 
   async function refreshOllamaStatus() {
@@ -1067,11 +1062,10 @@ function AboutSection() {
         <SettingRow label="Version">
           <span className="text-white/50 text-xs font-mono">{version}</span>
         </SettingRow>
-        <SettingRow label="Model Storage">
-          <span className="text-white/50 text-xs font-mono truncate max-w-[180px]">
-            ~/Library/Application Support/com.omwhisper.app
-          </span>
-        </SettingRow>
+        <div className="py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
+          <p className="text-white/80 text-sm mb-1">Model Storage</p>
+          <p className="text-white/50 text-xs font-mono break-all">~/Library/Application Support/com.omwhisper.app</p>
+        </div>
         <SettingRow label="Debug Info" description="Copy diagnostics for bug reports">
           <button
             onClick={handleCopyDebugInfo}

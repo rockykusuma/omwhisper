@@ -17,30 +17,27 @@ SOURCE    = ICONS_DIR / "Square310x310Logo.png"
 def make_tray_icon(src: Image.Image, size: int) -> Image.Image:
     """
     Derive a monochrome template icon for the macOS menu bar.
-    - Removes background (sampled from corner)
+    - Keeps only pixels with HSV value > 0.25 AND saturation > 0.50
+      (isolates the bright teal OM glyph, drops dark background and circle edge)
     - Auto-crops tight to the symbol bounds
-    - Re-pads to a square with ~8% margin then scales to `size`
+    - Re-pads to a square with minimal margin then scales to `size`
     """
-    # Work at 4× for clean anti-aliasing when downscaling
+    import colorsys
+
+    # Work at 8× for clean anti-aliasing when downscaling
     work_size = size * 8
     img = src.convert("RGBA").resize((work_size, work_size), Image.LANCZOS)
     pixels = img.load()
 
-    # Sample background from 3×3 top-left corner
-    bg_samples = [pixels[x, y][:3] for x in range(3) for y in range(3)]
-    bg_r = sum(s[0] for s in bg_samples) // len(bg_samples)
-    bg_g = sum(s[1] for s in bg_samples) // len(bg_samples)
-    bg_b = sum(s[2] for s in bg_samples) // len(bg_samples)
-
-    threshold = 40
     for y in range(work_size):
         for x in range(work_size):
             r, g, b, a = pixels[x, y]
             if a < 30:
                 pixels[x, y] = (0, 0, 0, 0)
                 continue
-            dist = ((r - bg_r) ** 2 + (g - bg_g) ** 2 + (b - bg_b) ** 2) ** 0.5
-            pixels[x, y] = (0, 0, 0, 0) if dist < threshold else (0, 0, 0, 255)
+            h_, s_, v_ = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+            # Keep only the bright teal OM glyph — drop dark bg and circle outline
+            pixels[x, y] = (0, 0, 0, 255) if (v_ > 0.25 and s_ > 0.50) else (0, 0, 0, 0)
 
     # Auto-crop to the bounding box of the symbol
     bbox = img.getbbox()   # (left, upper, right, lower) of non-transparent pixels
