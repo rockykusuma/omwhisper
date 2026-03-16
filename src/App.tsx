@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import Sidebar, { type View } from "./components/Sidebar";
 import HomeView from "./components/HomeView";
-import ModelManager from "./components/ModelManager";
+import AiModelsView from "./components/AiModelsView";
 import SettingsPanel from "./components/Settings";
 import Onboarding from "./components/Onboarding";
 import TranscriptionHistory from "./components/TranscriptionHistory";
@@ -291,7 +291,7 @@ function App() {
               />
             )}
             {activeView === "models" && (
-              <ModelManager
+              <AiModelsView
                 activeModel={activeModel}
                 onModelChange={async (name) => {
                   setActiveModel(name);
@@ -300,6 +300,11 @@ function App() {
                     await invoke("update_settings", { newSettings: { ...s, active_model: name } });
                   } catch {}
                 }}
+                initialTab={
+                  settingsInitialTab === "whisper" || settingsInitialTab === "smart-dictation"
+                    ? settingsInitialTab
+                    : undefined
+                }
               />
             )}
             {activeView === "settings" && <SettingsPanel initialTab={settingsInitialTab as any} />}
