@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Mic, Clock, Box, Settings, BookMarked, Sparkles, House } from "lucide-react";
+import { Clock, Box, Settings, BookMarked, Sparkles, House } from "lucide-react";
 
-export type View = "home" | "transcribe" | "history" | "models" | "vocabulary" | "license" | "settings";
+export type View = "home" | "history" | "models" | "vocabulary" | "license" | "settings";
 
 interface Props {
   activeView: View;
@@ -15,7 +15,6 @@ interface Props {
 
 const NAV_ITEMS: { id: View; icon: React.ElementType; label: string }[] = [
   { id: "home",       icon: House,      label: "Home"       },
-  { id: "transcribe", icon: Mic,        label: "Transcribe" },
   { id: "history",    icon: Clock,      label: "History"    },
   { id: "models",     icon: Box,        label: "Models"     },
   { id: "vocabulary", icon: BookMarked, label: "Vocabulary" },
@@ -88,17 +87,12 @@ export default function Sidebar({ activeView, onNavigate, appVersion, isOpen, on
           onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "var(--nm-pressed-sm)")}
           onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light)")}
         >
-          <span
-            className="select-none leading-none"
-            style={{
-              fontFamily: "'DM Serif Display', serif",
-              fontSize: 24,
-              color: "var(--accent)",
-              filter: "drop-shadow(0 0 6px var(--accent-glow))",
-            }}
-          >
-            ॐ
-          </span>
+          <img
+            src="/app-icon.png"
+            alt="OmWhisper"
+            draggable={false}
+            style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover" }}
+          />
         </div>
 
         {/* App name — fades out when collapsed */}
