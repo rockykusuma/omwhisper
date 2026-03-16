@@ -33,6 +33,8 @@ export default function TranscriptionHistory() {
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const PAGE = 30;
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
 
   const loadHistory = useCallback(async (newOffset = 0, searchQuery = "") => {
     try {
@@ -120,6 +122,26 @@ export default function TranscriptionHistory() {
     }
   }
 
+  async function handleDeleteSelected() {
+    const deletedCount = selected.size;
+    for (const id of selected) {
+      await invoke("cmd_delete_transcription", { id }).catch((e) => logger.error("Delete failed:", e));
+    }
+    setSelected(new Set());
+    setSelecting(false);
+    await loadHistory(0, "");
+    showToast(`Deleted ${deletedCount}`);
+  }
+
+  function toggleSelect(id: number) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   return (
     <div className="w-full max-w-2xl mx-auto px-8 py-6">
       {/* Header */}
@@ -128,6 +150,15 @@ export default function TranscriptionHistory() {
 
         {/* Export + Clear */}
         <div className="flex items-center gap-2">
+          {!selecting && (
+            <button
+              onClick={() => setSelecting(true)}
+              className="text-white/50 hover:text-white/70 transition-colors text-xs px-3 py-1.5 rounded-lg cursor-pointer font-sans"
+              style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
+            >
+              Select
+            </button>
+          )}
           {isLicensed ? (
             <div className="relative group">
               <button
@@ -218,8 +249,27 @@ export default function TranscriptionHistory() {
                 {/* Entry header */}
                 <div
                   className="flex items-start gap-3 p-4 cursor-pointer"
-                  onClick={() => setExpandedId(isExpanded ? null : entry.id)}
+                  onClick={() => {
+                    if (selecting) {
+                      toggleSelect(entry.id);
+                    } else {
+                      setExpandedId(isExpanded ? null : entry.id);
+                    }
+                  }}
                 >
+                  {selecting && (
+                    <div
+                      className="shrink-0 w-4 h-4 rounded border flex items-center justify-center mr-2"
+                      style={{
+                        borderColor: selected.has(entry.id) ? "var(--accent)" : "color-mix(in srgb, var(--t1) 25%, transparent)",
+                        background: selected.has(entry.id) ? "var(--accent)" : "transparent",
+                      }}
+                    >
+                      {selected.has(entry.id) && (
+                        <span className="text-[9px] font-bold" style={{ color: "#0a0f0d" }}>✓</span>
+                      )}
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <p
                       className="text-white/75 text-sm leading-relaxed font-sans"
@@ -280,6 +330,38 @@ export default function TranscriptionHistory() {
           </button>
         )}
       </div>
+
+      {selecting && (
+        <div
+          className="sticky bottom-0 left-0 right-0 flex items-center justify-between gap-3 px-4 py-3 mt-2 rounded-2xl"
+          style={{
+            background: "var(--bg)",
+            boxShadow: "var(--nm-raised)",
+            border: "1px solid color-mix(in srgb, var(--t1) 8%, transparent)",
+          }}
+        >
+          <span className="text-xs font-mono" style={{ color: "var(--t3)" }}>
+            {selected.size} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setSelecting(false); setSelected(new Set()); }}
+              className="text-xs px-3 py-1.5 rounded-lg cursor-pointer font-sans"
+              style={{ color: "var(--t3)", background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDeleteSelected}
+              disabled={selected.size === 0}
+              className="text-xs px-3 py-1.5 rounded-lg cursor-pointer font-sans disabled:opacity-40"
+              style={{ color: "rgb(248,113,113)", background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
+            >
+              Delete selected
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Clear confirmation dialog */}
       {showConfirmClear && (
