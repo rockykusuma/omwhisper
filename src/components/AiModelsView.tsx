@@ -326,6 +326,7 @@ function SmartDictationTab() {
         }
       } else {
         setLlmDownloading((prev) => ({ ...prev, [name]: progress }));
+        setLlmErrors((prev) => { const next = { ...prev }; delete next[name]; return next; });
       }
     });
 
@@ -470,7 +471,10 @@ function SmartDictationTab() {
                         onClick={() => {
                           setLlmErrors((prev) => { const n = { ...prev }; delete n[model.name]; return n; });
                           setLlmDownloading((prev) => ({ ...prev, [model.name]: 0 }));
-                          invoke("download_llm_model", { name: model.name });
+                          invoke("download_llm_model", { name: model.name }).catch((e: unknown) => {
+                            setLlmDownloading((prev) => { const n = { ...prev }; delete n[model.name]; return n; });
+                            setLlmErrors((prev) => ({ ...prev, [model.name]: String(e) }));
+                          });
                         }}
                         className="btn-primary text-xs px-3 py-1.5"
                       >
@@ -493,7 +497,7 @@ function SmartDictationTab() {
                 }).catch(() => null);
                 if (selected && typeof selected === "string") {
                   const filename = await invoke<string>("import_llm_model", { sourcePath: selected })
-                    .catch((e: string) => { setLlmErrors((prev) => ({ ...prev, import: e })); return null; });
+                    .catch((e: unknown) => { setLlmErrors((prev) => ({ ...prev, import: String(e) })); return null; });
                   if (filename) {
                     invoke<LlmModelInfo[]>("get_llm_models").then(setLlmModels).catch(() => {});
                   }
@@ -503,6 +507,9 @@ function SmartDictationTab() {
             >
               + Add custom model
             </button>
+            {llmErrors["import"] && (
+              <p className="text-red-400/70 text-xs mt-1.5">✗ {llmErrors["import"]}</p>
+            )}
           </div>
         </div>
       )}
