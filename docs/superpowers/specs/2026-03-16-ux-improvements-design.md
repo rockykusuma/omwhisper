@@ -21,7 +21,7 @@ Nine targeted UX issues across the app reduce usability, discoverability, and cl
 **Changes:**
 - Remove the inline stats grid (4-column grid, implemented directly in `HomeView.tsx` — not a separate component) entirely, along with the `stats` state, `loadStats` function, and all calls to `loadStats` (including the mount call and the post-recording call inside the 5-second timer `useEffect`)
 - Remove the "recent 2" transcriptions section from `HomeView.tsx`, along with the `recentItems` state, `loadRecent` function, and all calls to `loadRecent` — including any call inside the Clear button's `onClick` handler (strip it down to just clearing `segments`)
-- Change the transcript clear behaviour: instead of a 5-second `setTimeout`, clear `segments` (and hide the transcript panel) only when a new recording starts (i.e., on `startRecording`). Remove the `postRecordingTimerRef`, the `setTimeout`, and the cleanup `useEffect` for that timer entirely.
+- Change the transcript clear behaviour: instead of a 5-second `setTimeout`, clear `segments` (and hide the transcript panel) only when a new recording starts (i.e., on `startRecording`). Remove `postRecordingTimerRef`, `wasRecordingRef`, the entire on-stop `useEffect` (the one that checks `wasRecordingRef.current` and fires `loadStats`/`postRecordingTimerRef`), and the cleanup `useEffect` for that timer entirely.
 - The "Clear" button remains for manual dismissal (its `onClick` clears `segments` only — `loadRecent` call removed as above)
 
 **Result:** Home is the record button, waveform meter, and live transcript. Nothing else.
@@ -63,7 +63,7 @@ Model presets per provider:
 Implementation:
 - Derive active provider from `settings.ai_cloud_api_url` (same logic already used for the Provider `<select>`)
 - The existing Provider `<select>` `onChange` handler already resets `ai_cloud_model` when switching providers (OpenAI → `gpt-4o-mini`, Groq → `llama3-8b-8192`, Custom → current value). This behaviour is preserved. The new model `<select>` reads its value from `settings.ai_cloud_model` — it stays in sync automatically because `update()` writes through to settings state.
-- When user selects "Custom…" from the model dropdown, show the free-text input below the dropdown. The "Custom…" option value should be a sentinel (e.g., `"__custom__"`) distinct from any real model name.
+- When user selects "Custom…" from the model dropdown, show the free-text input below the dropdown. The "Custom…" option value should be a sentinel (e.g., `"__custom__"`) distinct from any real model name. The sentinel is UI-only — it must never be written to `settings.ai_cloud_model`. Only the value typed in the free-text input is persisted via `update({ ai_cloud_model: typedValue })`.
 - The custom model value is stored as-is in settings
 
 ---
@@ -117,6 +117,7 @@ Implementation:
 **Changes:**
 - In `Settings.tsx`, remove the `SettingRow` for `log_level` from the **General** tab
 - Add it to the **About** tab, above the "Copy Debug Info" button, with label "Log Level" and description "Increase for troubleshooting" (the existing description "Verbosity of log file" also changes to this new text)
+- `AboutSection` currently receives no `settings` or `update` props. Pass `settings: Settings` and `update: (patch: Partial<Settings>) => void` as props into `AboutSection` — matching the pattern used by other sub-tab render blocks in `SettingsPanel`
 
 ---
 
