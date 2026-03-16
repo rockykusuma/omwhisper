@@ -171,6 +171,10 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
   const [devices, setDevices] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? "general");
+
+  useEffect(() => {
+    if (initialTab) setActiveTab(initialTab);
+  }, [initialTab]);
   const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
   const [accessibilityGranted, setAccessibilityGranted] = useState<boolean | null>(null);
   const { theme, setTheme } = useTheme();
@@ -337,17 +341,6 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                   </SettingRow>
                 </>
               )}
-              <SettingRow label="Log Level" description="Verbosity of log file">
-                <select
-                  value={settings.log_level ?? "normal"}
-                  onChange={(e) => update({ log_level: e.target.value })}
-                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                  aria-label="Log level"
-                >
-                  <option value="normal">Normal</option>
-                  <option value="debug">Debug</option>
-                </select>
-              </SettingRow>
             </div>
 
             <h3 className="text-t3 text-[10px] uppercase tracking-widest mt-6 mb-4 font-mono">Storage</h3>
@@ -666,7 +659,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
           </div>
         )}
 
-        {activeTab === "about" && <AboutSection />}
+        {activeTab === "about" && <AboutSection settings={settings} update={update} />}
       </div>
     </div>
   );
@@ -735,7 +728,7 @@ function FileTranscriptionSection({ activeModel }: { activeModel: string }) {
 }
 
 // ─── About ─────────────────────────────────────────────────────────────────────
-function AboutSection() {
+function AboutSection({ settings, update }: { settings: Settings; update: (patch: Partial<Settings>) => void }) {
   const [version, setVersion] = useState("0.1.0");
   const [copying, setCopying] = useState(false);
 
@@ -777,6 +770,18 @@ function AboutSection() {
           <p className="text-white/80 text-sm mb-1">Model Storage</p>
           <p className="text-white/50 text-xs font-mono break-all">~/Library/Application Support/com.omwhisper.app</p>
         </div>
+        <SettingRow label="Log Level" description="Increase for troubleshooting">
+          <select
+            value={settings.log_level ?? "normal"}
+            onChange={(e) => update({ log_level: e.target.value })}
+            className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
+            style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+            aria-label="Log level"
+          >
+            <option value="normal">Normal</option>
+            <option value="debug">Debug</option>
+          </select>
+        </SettingRow>
         <SettingRow label="Debug Info" description="Copy diagnostics for bug reports">
           <button
             onClick={handleCopyDebugInfo}
