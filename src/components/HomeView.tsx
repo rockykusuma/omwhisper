@@ -313,8 +313,8 @@ export default function HomeView({
             )}
           </div>
           <div ref={scrollRef} className="p-5 space-y-3 overflow-y-auto max-h-48 select-text">
-            {segments.map((seg) => (
-              <div key={`${seg.start_ms}-${seg.end_ms}`} className="flex gap-4">
+            {segments.map((seg, idx) => (
+              <div key={`${idx}-${seg.start_ms}-${seg.end_ms}`} className="flex gap-4">
                 <span className="text-emerald-500/35 text-xs shrink-0 mt-0.5 font-mono">
                   {formatSegTime(seg.start_ms)}
                 </span>
