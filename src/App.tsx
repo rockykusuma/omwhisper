@@ -3,7 +3,6 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import Sidebar, { type View } from "./components/Sidebar";
 import HomeView from "./components/HomeView";
-import TranscribeView from "./components/TranscribeView";
 import ModelManager from "./components/ModelManager";
 import SettingsPanel from "./components/Settings";
 import Onboarding from "./components/Onboarding";
@@ -100,6 +99,9 @@ function App() {
     invoke<boolean>("is_first_launch").then(setShowOnboarding);
     invoke<boolean>("is_running_from_dmg").then(setRunningFromDmg).catch(() => {});
     invoke<string>("get_app_version").then(setAppVersion).catch(() => {});
+    invoke<{ active_model: string }>("get_settings")
+      .then((s) => { if (s.active_model) setActiveModel(s.active_model); })
+      .catch(() => {});
   }, []);
 
   // ── Hotkeys + recording-state ───────────────────────────────────────────
@@ -137,7 +139,10 @@ function App() {
       setTimeout(() => setMicError(null), 5000);
     });
 
-    const unlistenTrayNav = listen<string>("tray-navigate", (event) => setActiveView(event.payload as View));
+    const unlistenTrayNav = listen<string>("tray-navigate", (event) => {
+      const view = event.payload === "transcribe" ? "home" : event.payload;
+      setActiveView(view as View);
+    });
 
     return () => {
       Promise.all([unlistenHotkey, unlistenHotkeyStop, unlistenSmartDictation, unlistenState, unlistenUpdate, unlistenMic, unlistenTrayNav])
@@ -276,10 +281,9 @@ function App() {
           {/* Main content */}
           <div className="flex-1 overflow-y-auto">
             {activeView === "home" && (
-              <HomeView activeModel={activeModel} onNavigate={navigate} />
-            )}
-            {activeView === "transcribe" && (
-              <TranscribeView
+              <HomeView
+                activeModel={activeModel}
+                onNavigate={navigate}
                 isRecording={isRecording}
                 isSmartDictation={isSmartDictation}
                 onStartRecording={() => startRecording(false)}
@@ -289,7 +293,13 @@ function App() {
             {activeView === "models" && (
               <ModelManager
                 activeModel={activeModel}
-                onModelChange={(name) => { setActiveModel(name); setActiveView("home"); }}
+                onModelChange={async (name) => {
+                  setActiveModel(name);
+                  try {
+                    const s = await invoke<Record<string, unknown>>("get_settings");
+                    await invoke("update_settings", { newSettings: { ...s, active_model: name } });
+                  } catch {}
+                }}
               />
             )}
             {activeView === "settings" && <SettingsPanel initialTab={settingsInitialTab as any} />}

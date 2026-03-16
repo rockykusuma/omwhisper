@@ -2,15 +2,18 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Mic, Clock, Flame, Hash, Cpu, ChevronRight } from "lucide-react";
-import { logger } from "../utils/logger";
 import type { UsageStats } from "../types";
 
 interface Props {
   activeModel?: string;
   onNavigate?: (view: string) => void;
+  isRecording?: boolean;
+  isSmartDictation?: boolean;
+  onStartRecording?: () => void;
+  onStopRecording?: () => void;
 }
 
-export default function HomeView({ activeModel = "tiny.en", onNavigate }: Props) {
+export default function HomeView({ activeModel = "tiny.en", onNavigate, isRecording: _isRecording, isSmartDictation: _isSmartDictation, onStartRecording: _onStartRecording, onStopRecording: _onStopRecording }: Props) {
   const [stats, setStats] = useState<UsageStats | null>(null);
   const [micName, setMicName] = useState<string>("Default Microphone");
 
