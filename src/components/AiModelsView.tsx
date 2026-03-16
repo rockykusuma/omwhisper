@@ -400,7 +400,7 @@ function SmartDictationTab() {
               <button
                 key={b}
                 onClick={() => {
-                  update({ ai_backend: b });
+                  update({ ai_backend: b, ...(b === "disabled" ? { apply_polish_to_regular: false } : {}) });
                   setTestResult(null);
                   if (b === "built_in") {
                     invoke<LlmModelInfo[]>("get_llm_models").then((models) => {
