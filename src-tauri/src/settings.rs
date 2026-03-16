@@ -90,6 +90,12 @@ pub struct Settings {
     /// When true, Whisper translates speech to English regardless of input language.
     #[serde(default)]
     pub translate_to_english: bool,
+    /// Built-in LLM model filename (GGUF). Used when ai_backend == "built_in".
+    #[serde(default = "default_llm_model_name")]
+    pub llm_model_name: String,
+    /// One-time nudge shown flag — prevents re-showing the "Enable AI cleanup" banner.
+    #[serde(default)]
+    pub llm_nudge_shown: bool,
 }
 
 fn default_clipboard_restore_delay_ms() -> u64 { 2000 }
@@ -110,6 +116,7 @@ fn default_ptt_key() -> String { "custom".to_string() }
 
 fn default_true() -> bool { true }
 fn default_sound_volume() -> f32 { 0.2 }
+fn default_llm_model_name() -> String { "qwen2.5-0.5b-instruct-q4_k_m.gguf".to_string() }
 
 fn default_log_level() -> String {
     "normal".to_string()
@@ -152,6 +159,8 @@ impl Default for Settings {
             overlay_style: "micro".to_string(),
             custom_polish_styles: Vec::new(),
             translate_to_english: false,
+            llm_model_name: "qwen2.5-0.5b-instruct-q4_k_m.gguf".to_string(),
+            llm_nudge_shown: false,
         }
     }
 }

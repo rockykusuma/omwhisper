@@ -66,6 +66,8 @@ export interface AppSettings {
   overlay_placement: string;
   overlay_style: string;
   translate_to_english: boolean;
+  llm_model_name: string;
+  llm_nudge_shown: boolean;
 }
 
 // ─── AI ────────────────────────────────────────────────────────────────────────
