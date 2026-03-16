@@ -586,6 +586,37 @@ pub fn run() {
                 });
             }
 
+            // One-time nudge: if user has never configured AI and Ollama isn't running,
+            // prompt them to enable the built-in LLM backend.
+            {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let settings = crate::settings::load_settings().await;
+                    if settings.llm_nudge_shown || settings.ai_backend != "disabled" {
+                        return; // already shown or already configured
+                    }
+
+                    // Check Ollama with a 3-second hard timeout
+                    let ollama_url = settings.ai_ollama_url.clone();
+                    let ollama_running = tokio::time::timeout(
+                        std::time::Duration::from_secs(3),
+                        crate::ai::ollama::check_status(&ollama_url),
+                    )
+                    .await
+                    .unwrap_or(false); // timeout → treat as not running
+
+                    if !ollama_running {
+                        // Mark shown immediately to prevent re-trigger if app relaunches
+                        let mut updated = settings;
+                        updated.llm_nudge_shown = true;
+                        let _ = crate::settings::save_settings(&updated).await;
+
+                        use tauri::Emitter;
+                        let _ = app_handle.emit("show-llm-nudge", ());
+                    }
+                });
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
