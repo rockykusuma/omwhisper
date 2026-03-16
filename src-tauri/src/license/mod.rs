@@ -114,6 +114,23 @@ pub fn get_machine_id() -> String {
         }
     }
 
+    // Windows: read stable MachineGuid from registry
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::enums::HKEY_LOCAL_MACHINE;
+        use winreg::RegKey;
+        use sha2::{Digest, Sha256};
+
+        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+        if let Ok(key) = hklm.open_subkey("SOFTWARE\\Microsoft\\Cryptography") {
+            if let Ok(guid) = key.get_value::<String, _>("MachineGuid") {
+                let hash = hex::encode(Sha256::digest(guid.as_bytes()));
+                return hash[..16].to_string();
+            }
+        }
+        // Falls through to the shared UUID fallback below if registry read fails
+    }
+
     // Fallback: generate and persist a random UUID
     let id_path = data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
