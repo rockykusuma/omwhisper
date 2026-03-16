@@ -1,13 +1,11 @@
-// Fn-key push-to-talk via raw CGEventTap (macOS only).
+// Single-key push-to-talk via raw CGEventTap (macOS only).
 //
-// rdev crashes on macOS 13+ because its internal `string_from_code` calls
-// `TSMGetInputSourceProperty` (HIToolbox) which requires the main dispatch
-// queue but is invoked from a background CFRunLoop thread.
+// Supports: Fn, CapsLock, Right Option, Right Control, F13, F14, F15
 //
-// This module bypasses rdev entirely: we set up a CGEventTap that listens
-// only for `kCGEventFlagsChanged` events and checks the
-// `kCGEventFlagMaskSecondaryFn` (0x00800000) bit — no key-to-string
-// conversion, no HIToolbox, no crash.
+// Uses CGEventTap instead of tauri_plugin_global_shortcut because:
+// - The plugin only supports modifier+key combos, not bare modifier keys
+// - Key-up events for bare modifiers are unreliable through the plugin
+// - CGEventTap gives us reliable press/release for all key types
 #[allow(non_upper_case_globals, non_snake_case)]
 
 use std::os::raw::{c_int, c_void};
@@ -19,10 +17,24 @@ const kCGSessionEventTap: c_int = 1;
 const kCGHeadInsertEventTap: c_int = 0;
 // CGEventTapOptions
 const kCGEventTapOptionDefault: c_int = 0;
-// CGEventType
+// CGEventType values
 const kCGEventFlagsChanged: u32 = 12;
-// kCGEventFlagMaskSecondaryFn — set in CGEventFlags when the fn key is held
-const kCGEventFlagMaskSecondaryFn: u64 = 0x00800000;
+const kCGEventKeyDown: u32 = 10;
+const kCGEventKeyUp: u32 = 11;
+// CGEventField: kCGKeyboardEventKeycode
+const kCGKeyboardEventKeycode: u32 = 8;
+// CGEventFlags
+const kCGEventFlagMaskSecondaryFn: u64 = 0x00800000; // Fn key
+const kCGEventFlagMaskAlphaShift: u64 = 0x00010000;  // CapsLock state
+const kCGEventFlagMaskAlternate: u64 = 0x00080000;   // Option key
+const kCGEventFlagMaskControl: u64 = 0x00040000;     // Control key
+// HID keycodes for single-key PTT candidates
+pub const KEYCODE_RIGHT_OPTION: u64 = 61;
+pub const KEYCODE_RIGHT_CONTROL: u64 = 60;
+pub const KEYCODE_CAPS_LOCK: u64 = 57;
+pub const KEYCODE_F13: u64 = 105;
+pub const KEYCODE_F14: u64 = 107;
+pub const KEYCODE_F15: u64 = 113;
 
 type CGEventRef = *const c_void;
 type CFMachPortRef = *mut c_void;
@@ -40,6 +52,7 @@ extern "C" {
         user_info: *mut c_void,
     ) -> CFMachPortRef;
     fn CGEventGetFlags(event: CGEventRef) -> u64;
+    fn CGEventGetIntegerValueField(event: CGEventRef, field: u32) -> i64;
     fn CGEventTapEnable(tap: CFMachPortRef, enable: bool);
 }
 
@@ -56,13 +69,15 @@ extern "C" {
     static kCFRunLoopCommonModes: *const c_void;
 }
 
-struct TapState {
+// ─── Fn key ────────────────────────────────────────────────────────────────
+
+struct FnTapState {
     fn_down: AtomicBool,
     on_press: Box<dyn Fn() + Send + Sync>,
     on_release: Box<dyn Fn() + Send + Sync>,
 }
 
-unsafe extern "C" fn tap_callback(
+unsafe extern "C" fn fn_tap_callback(
     _proxy: *const c_void,
     event_type: u32,
     event: CGEventRef,
@@ -71,7 +86,7 @@ unsafe extern "C" fn tap_callback(
     if event_type == kCGEventFlagsChanged && !user_info.is_null() {
         let flags = CGEventGetFlags(event);
         let fn_now = (flags & kCGEventFlagMaskSecondaryFn) != 0;
-        let state = &*(user_info as *const TapState);
+        let state = &*(user_info as *const FnTapState);
         let was_down = state.fn_down.swap(fn_now, Ordering::SeqCst);
         if fn_now && !was_down {
             (state.on_press)();
@@ -79,56 +94,233 @@ unsafe extern "C" fn tap_callback(
             (state.on_release)();
         }
     }
-    event // pass event through (non-blocking tap)
+    event
 }
 
-/// Spawns a background thread that runs a CGEventTap to detect fn key
-/// press/release. Calls `on_press` when fn is pressed, `on_release` when
-/// released. Requires Accessibility permission.
+/// Spawns a CGEventTap for the Fn key.
 pub fn spawn_fn_key_tap(
     on_press: impl Fn() + Send + Sync + 'static,
     on_release: impl Fn() + Send + Sync + 'static,
 ) {
-    std::thread::spawn(move || unsafe {
-        let state = Box::new(TapState {
+    spawn_tap(
+        1u64 << kCGEventFlagsChanged,
+        fn_tap_callback,
+        move || Box::into_raw(Box::new(FnTapState {
             fn_down: AtomicBool::new(false),
             on_press: Box::new(on_press),
             on_release: Box::new(on_release),
-        });
-        let state_ptr = Box::into_raw(state) as *mut c_void;
+        })) as *mut c_void,
+        "fn",
+    );
+}
+
+// ─── Modifier keys (Right Option, Right Control) ────────────────────────────
+
+struct ModifierTapState {
+    target_keycode: u64,
+    flag_mask: u64,
+    on_press: Box<dyn Fn() + Send + Sync>,
+    on_release: Box<dyn Fn() + Send + Sync>,
+}
+
+unsafe extern "C" fn modifier_tap_callback(
+    _proxy: *const c_void,
+    event_type: u32,
+    event: CGEventRef,
+    user_info: *mut c_void,
+) -> CGEventRef {
+    if event_type == kCGEventFlagsChanged && !user_info.is_null() {
+        let keycode = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) as u64;
+        let state = &*(user_info as *const ModifierTapState);
+        if keycode == state.target_keycode {
+            let flags = CGEventGetFlags(event);
+            if (flags & state.flag_mask) != 0 {
+                (state.on_press)();
+            } else {
+                (state.on_release)();
+            }
+        }
+    }
+    event
+}
+
+/// Spawns a CGEventTap for a bare modifier key (Right Option or Right Control).
+/// `target_keycode`: HID keycode (61 = Right Option, 60 = Right Control).
+/// `flag_mask`: CGEventFlags bit that is set while the key is held.
+pub fn spawn_modifier_key_tap(
+    target_keycode: u64,
+    flag_mask: u64,
+    on_press: impl Fn() + Send + Sync + 'static,
+    on_release: impl Fn() + Send + Sync + 'static,
+) {
+    let label = if target_keycode == KEYCODE_RIGHT_OPTION { "right-option" } else { "right-control" };
+    spawn_tap(
+        1u64 << kCGEventFlagsChanged,
+        modifier_tap_callback,
+        move || Box::into_raw(Box::new(ModifierTapState {
+            target_keycode,
+            flag_mask,
+            on_press: Box::new(on_press),
+            on_release: Box::new(on_release),
+        })) as *mut c_void,
+        label,
+    );
+}
+
+// ─── CapsLock ───────────────────────────────────────────────────────────────
+
+struct CapsLockTapState {
+    // kCGEventFlagsChanged fires twice for CapsLock: once on physical press,
+    // once on physical release. The AlphaShift flag tracks lock *state* (toggle),
+    // not physical press, so we use an AtomicBool to track physical down/up.
+    key_down: AtomicBool,
+    on_press: Box<dyn Fn() + Send + Sync>,
+    on_release: Box<dyn Fn() + Send + Sync>,
+}
+
+unsafe extern "C" fn capslock_tap_callback(
+    _proxy: *const c_void,
+    event_type: u32,
+    event: CGEventRef,
+    user_info: *mut c_void,
+) -> CGEventRef {
+    if event_type == kCGEventFlagsChanged && !user_info.is_null() {
+        let keycode = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) as u64;
+        if keycode == KEYCODE_CAPS_LOCK {
+            let state = &*(user_info as *const CapsLockTapState);
+            let was_down = state.key_down.load(Ordering::SeqCst);
+            state.key_down.store(!was_down, Ordering::SeqCst);
+            if !was_down {
+                (state.on_press)();
+            } else {
+                (state.on_release)();
+            }
+        }
+    }
+    event
+}
+
+/// Spawns a CGEventTap for the CapsLock key used as a PTT button.
+/// Treats physical press/release as start/stop — does not affect the CapsLock toggle state.
+pub fn spawn_capslock_tap(
+    on_press: impl Fn() + Send + Sync + 'static,
+    on_release: impl Fn() + Send + Sync + 'static,
+) {
+    // Also tap kCGEventFlagsChanged for the AlphaShift bit so we can see CapsLock events.
+    // We need both the AlphaShift flag mask AND the keycode check to target CapsLock only.
+    let _ = kCGEventFlagMaskAlphaShift; // referenced to suppress unused warning
+    spawn_tap(
+        1u64 << kCGEventFlagsChanged,
+        capslock_tap_callback,
+        move || Box::into_raw(Box::new(CapsLockTapState {
+            key_down: AtomicBool::new(false),
+            on_press: Box::new(on_press),
+            on_release: Box::new(on_release),
+        })) as *mut c_void,
+        "capslock",
+    );
+}
+
+// ─── Function keys (F13, F14, F15) ─────────────────────────────────────────
+
+struct FunctionKeyTapState {
+    target_keycode: u64,
+    on_press: Box<dyn Fn() + Send + Sync>,
+    on_release: Box<dyn Fn() + Send + Sync>,
+}
+
+unsafe extern "C" fn function_key_tap_callback(
+    _proxy: *const c_void,
+    event_type: u32,
+    event: CGEventRef,
+    user_info: *mut c_void,
+) -> CGEventRef {
+    if !user_info.is_null() && (event_type == kCGEventKeyDown || event_type == kCGEventKeyUp) {
+        let keycode = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) as u64;
+        let state = &*(user_info as *const FunctionKeyTapState);
+        if keycode == state.target_keycode {
+            if event_type == kCGEventKeyDown {
+                (state.on_press)();
+            } else {
+                (state.on_release)();
+            }
+        }
+    }
+    event
+}
+
+/// Spawns a CGEventTap for a function key used as PTT (F13=105, F14=107, F15=113).
+/// Auto-repeat keyDown events while held are harmless — the on_press callback
+/// checks `is_recording` and no-ops if already recording.
+pub fn spawn_function_key_tap(
+    target_keycode: u64,
+    on_press: impl Fn() + Send + Sync + 'static,
+    on_release: impl Fn() + Send + Sync + 'static,
+) {
+    let label = match target_keycode {
+        KEYCODE_F13 => "f13",
+        KEYCODE_F14 => "f14",
+        KEYCODE_F15 => "f15",
+        _ => "fN",
+    };
+    spawn_tap(
+        (1u64 << kCGEventKeyDown) | (1u64 << kCGEventKeyUp),
+        function_key_tap_callback,
+        move || Box::into_raw(Box::new(FunctionKeyTapState {
+            target_keycode,
+            on_press: Box::new(on_press),
+            on_release: Box::new(on_release),
+        })) as *mut c_void,
+        label,
+    );
+}
+
+// ─── Shared tap runner ──────────────────────────────────────────────────────
+
+type TapCallbackFn = unsafe extern "C" fn(*const c_void, u32, CGEventRef, *mut c_void) -> CGEventRef;
+
+/// Spawns a background thread with a CGEventTap.
+/// `make_state` is called inside the thread and returns the raw state pointer,
+/// so raw pointers are never sent across thread boundaries.
+fn spawn_tap<F>(
+    event_mask: u64,
+    callback: TapCallbackFn,
+    make_state: F,
+    label: &'static str,
+)
+where
+    F: FnOnce() -> *mut c_void + Send + 'static,
+{
+    std::thread::spawn(move || unsafe {
+        let state_ptr = make_state(); // raw pointer created inside the thread
 
         let tap = CGEventTapCreate(
             kCGSessionEventTap,
             kCGHeadInsertEventTap,
             kCGEventTapOptionDefault,
-            1u64 << kCGEventFlagsChanged,
-            tap_callback,
+            event_mask,
+            callback,
             state_ptr,
         );
 
         if tap.is_null() {
-            tracing::warn!(
-                "fn-key tap: CGEventTapCreate failed — check Accessibility permission"
-            );
-            drop(Box::from_raw(state_ptr as *mut TapState));
+            tracing::warn!("{}-key tap: CGEventTapCreate failed — check Accessibility permission", label);
             return;
         }
 
         let source = CFMachPortCreateRunLoopSource(std::ptr::null(), tap, 0);
         if source.is_null() {
-            tracing::warn!("fn-key tap: CFMachPortCreateRunLoopSource failed");
-            drop(Box::from_raw(state_ptr as *mut TapState));
+            tracing::warn!("{}-key tap: CFMachPortCreateRunLoopSource failed", label);
             return;
         }
 
         let rl = CFRunLoopGetCurrent();
         CFRunLoopAddSource(rl, source, kCFRunLoopCommonModes);
         CGEventTapEnable(tap, true);
-        tracing::info!("fn-key tap: CGEventTap running");
+        tracing::info!("{}-key tap: CGEventTap running", label);
 
-        CFRunLoopRun(); // blocks until the run loop exits (never under normal conditions)
+        CFRunLoopRun();
 
-        tracing::warn!("fn-key tap: run loop exited unexpectedly");
-        drop(Box::from_raw(state_ptr as *mut TapState));
+        tracing::warn!("{}-key tap: run loop exited unexpectedly", label);
     });
 }

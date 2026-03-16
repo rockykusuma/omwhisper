@@ -572,52 +572,27 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
               </SettingRow>
               {settings.recording_mode === "push_to_talk" && (
                 <>
-                  <SettingRow label="Push to Talk Key" description="Single key or combo — hold to record, release to stop">
-                    <div className="flex items-center gap-1.5">
-                      {settings.push_to_talk_hotkey === "Fn" ? (
-                        /* Fn active — show it as the selected key with a clear button */
-                        <>
-                          <span
-                            className="px-2.5 py-1 rounded-lg text-xs font-mono"
-                            style={{
-                              background: "var(--accent-bg)",
-                              color: "var(--accent)",
-                              boxShadow: "var(--nm-pressed-sm)",
-                              border: "1px solid var(--accent-glow-weak)",
-                            }}
-                          >
-                            fn
-                          </span>
-                          <button
-                            onClick={() => update({ push_to_talk_hotkey: "CmdOrCtrl+Shift+X" })}
-                            className="w-5 h-5 rounded-full flex items-center justify-center cursor-pointer transition-all duration-150"
-                            style={{ background: "var(--bg)", color: "var(--t3)", boxShadow: "var(--nm-raised-sm)", fontSize: 11 }}
-                            title="Clear"
-                          >×</button>
-                        </>
-                      ) : (
-                        /* Normal key recorder with fn as a quick-pick option */
-                        <>
-                          <button
-                            onClick={() => update({ push_to_talk_hotkey: "Fn" })}
-                            className="px-2 py-1 rounded-lg text-xs font-mono transition-all duration-150 cursor-pointer"
-                            style={{
-                              background: "var(--bg)",
-                              color: "var(--t4)",
-                              boxShadow: "var(--nm-raised-sm)",
-                              border: "1px solid transparent",
-                            }}
-                            title="Use Fn key"
-                          >fn</button>
-                          <span style={{ color: "var(--t4)", fontSize: 10 }}>or</span>
-                          <HotkeyRecorder
-                            value={settings.push_to_talk_hotkey ?? ""}
-                            onChange={(v) => update({ push_to_talk_hotkey: v || "CmdOrCtrl+Shift+X" })}
-                            requireModifier={false}
-                          />
-                        </>
-                      )}
-                    </div>
+                  <SettingRow label="Push to Talk Key" description="Hold this key to record, release to stop">
+                    <select
+                      value={["Fn","CapsLock","Right Option","Right Control","F13","F14","F15"].includes(settings.push_to_talk_hotkey ?? "") ? settings.push_to_talk_hotkey : "Fn"}
+                      onChange={(e) => update({ push_to_talk_hotkey: e.target.value })}
+                      className="text-xs rounded-xl px-3 py-1.5 cursor-pointer"
+                      style={{
+                        background: "var(--bg)",
+                        color: "var(--t1)",
+                        border: "1px solid color-mix(in srgb, var(--accent) 20%, transparent)",
+                        boxShadow: "var(--nm-pressed-sm)",
+                        outline: "none",
+                      }}
+                    >
+                      <option value="Fn">Fn</option>
+                      <option value="CapsLock">CapsLock ⇪</option>
+                      <option value="Right Option">Right Option ⌥</option>
+                      <option value="Right Control">Right Control ⌃</option>
+                      <option value="F13">F13</option>
+                      <option value="F14">F14</option>
+                      <option value="F15">F15</option>
+                    </select>
                   </SettingRow>
                   <SettingRow label="Double-press to Lock" description="Press twice quickly to keep recording without holding">
                     <Toggle
