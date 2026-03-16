@@ -114,7 +114,7 @@ function App() {
       if (isRecordingRef.current) { stopRecording(); return; }
       const settings = await invoke<{ ai_backend: string }>("get_settings").catch(() => ({ ai_backend: "disabled" }));
       if (settings.ai_backend === "disabled") {
-        setMicError("Smart Dictation needs AI setup. Open Settings → AI Processing.");
+        setMicError("Smart Dictation needs AI setup. Open AI Models → Smart Dictation.");
         setTimeout(() => setMicError(null), 5000);
         return;
       }
@@ -307,7 +307,7 @@ function App() {
                 }
               />
             )}
-            {activeView === "settings" && <SettingsPanel initialTab={settingsInitialTab as any} />}
+            {activeView === "settings" && <SettingsPanel initialTab={settingsInitialTab as any} onNavigate={navigate} />}
             {activeView === "history" && <TranscriptionHistory />}
             {activeView === "vocabulary" && <Vocabulary />}
             {activeView === "license" && <LicensePage />}
