@@ -28,6 +28,7 @@ use commands::{
     get_model_recommendation,
     get_llm_models, get_llm_models_disk_usage, download_llm_model, delete_llm_model, import_llm_model,
     load_llm_engine, unload_llm_engine,
+    get_platform,
     SharedState, TranscriptionState,
 };
 use std::sync::{Arc, Mutex};
@@ -680,6 +681,7 @@ pub fn run() {
             styles::get_polish_styles,
             styles::add_custom_style,
             styles::remove_custom_style,
+            get_platform,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

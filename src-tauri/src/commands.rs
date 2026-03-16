@@ -1115,3 +1115,10 @@ fn recommend_model(ram_gb: f64, is_apple_silicon: bool, _cores: usize) -> (Strin
         }
     }
 }
+
+#[tauri::command]
+pub fn get_platform() -> &'static str {
+    if cfg!(target_os = "macos") { "macos" }
+    else if cfg!(target_os = "windows") { "windows" }
+    else { "linux" }
+}
