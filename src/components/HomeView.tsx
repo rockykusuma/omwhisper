@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { Mic, MicOff, Sparkles, ChevronRight, Cpu, Clock, Hash, Flame } from "lucide-react";
-import type { TranscriptionSegment, TranscriptionEntry, UsageStats } from "../types";
+import { Mic, MicOff, Sparkles, ChevronRight, Cpu } from "lucide-react";
+import type { TranscriptionSegment } from "../types";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -36,23 +36,6 @@ function formatSegTime(ms: number): string {
   return `${m}:${String(s % 60).padStart(2, "0")}`;
 }
 
-function formatRelativeTime(isoString: string): string {
-  try {
-    const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
-    if (diff < 60) return `${diff}s ago`;
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return `${Math.floor(diff / 86400)}d ago`;
-  } catch {
-    return "";
-  }
-}
-
-function formatDurationShort(secs: number): string {
-  if (secs < 60) return `${Math.round(secs)}s`;
-  return `${Math.floor(secs / 60)}m ${Math.round(secs % 60)}s`;
-}
-
 // ── Props ────────────────────────────────────────────────────────────────────
 
 interface HomeViewProps {
@@ -82,25 +65,11 @@ export default function HomeView({
   const [showLiveTranscript, setShowLiveTranscript] = useState(false);
   const recordingStartRef = useRef<number>(0);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const postRecordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const wasRecordingRef = useRef(false);
 
   // ── Home state ──
-  const [stats, setStats] = useState<UsageStats | null>(null);
   const [micName, setMicName] = useState("Default Microphone");
-  const [recentItems, setRecentItems] = useState<TranscriptionEntry[]>([]);
 
   // ── Data loaders ──
-  const loadStats = useCallback(async () => {
-    const s = await invoke<UsageStats>("get_usage_stats").catch(() => null);
-    setStats(s);
-  }, []);
-
-  const loadRecent = useCallback(async () => {
-    const items = await invoke<TranscriptionEntry[]>("get_history", { limit: 2, offset: 0 }).catch(() => []);
-    setRecentItems(items);
-  }, []);
-
   const loadSettings = useCallback(async () => {
     const s = await invoke<{ audio_input_device: string | null }>("get_settings").catch(() => null);
     setMicName(s?.audio_input_device || "Default Microphone");
@@ -108,10 +77,8 @@ export default function HomeView({
 
   // Initial load
   useEffect(() => {
-    loadStats();
     loadSettings();
-    loadRecent();
-  }, [loadStats, loadSettings, loadRecent]);
+  }, [loadSettings]);
 
   // Settings changes
   useEffect(() => {
@@ -119,41 +86,31 @@ export default function HomeView({
     return () => { unlisten.then((f) => f()); };
   }, [loadSettings]);
 
+  // ── Vocabulary nudge ──
+  const [vocabEmpty, setVocabEmpty] = useState(false);
+  const [nudgeDismissed, setNudgeDismissed] = useState(false);
+
+  useEffect(() => {
+    invoke<{ words: string[]; replacements: Record<string, string> }>("get_vocabulary")
+      .then((v) => {
+        if (v.words.length === 0 && Object.keys(v.replacements).length === 0) {
+          setVocabEmpty(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // ── Recording lifecycle ──
 
-  // On start: clear segments, show transcript panel, cancel any post-recording timer
+  // On start: clear segments, show transcript panel
   useEffect(() => {
     if (isRecording) {
       recordingStartRef.current = Date.now();
       setSegments([]);
       setTranscriptionComplete(false);
       setShowLiveTranscript(true);
-      if (postRecordingTimerRef.current) {
-        clearTimeout(postRecordingTimerRef.current);
-        postRecordingTimerRef.current = null;
-      }
     }
   }, [isRecording]);
-
-  // On stop: refresh stats, start 5s timer to hide transcript + refresh recent
-  useEffect(() => {
-    if (wasRecordingRef.current && !isRecording) {
-      loadStats();
-      postRecordingTimerRef.current = setTimeout(() => {
-        setShowLiveTranscript(false);
-        loadRecent();
-        postRecordingTimerRef.current = null;
-      }, 5000);
-    }
-    wasRecordingRef.current = isRecording;
-  }, [isRecording, loadStats, loadRecent]);
-
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (postRecordingTimerRef.current) clearTimeout(postRecordingTimerRef.current);
-    };
-  }, []);
 
   // Collect live segments
   useEffect(() => {
@@ -271,7 +228,7 @@ export default function HomeView({
         </div>
       </div>
 
-      {/* ── Live transcript panel (visible during recording + 5s after) ── */}
+      {/* ── Live transcript panel (visible during recording + persists until next start) ── */}
       {showLiveTranscript && (
         <div className="card-inset overflow-hidden flex-shrink-0">
           <div
@@ -297,14 +254,7 @@ export default function HomeView({
             </span>
             {!isRecording && (
               <button
-                onClick={() => {
-                  setShowLiveTranscript(false);
-                  if (postRecordingTimerRef.current) {
-                    clearTimeout(postRecordingTimerRef.current);
-                    postRecordingTimerRef.current = null;
-                  }
-                  loadRecent();
-                }}
+                onClick={() => { setSegments([]); setShowLiveTranscript(false); }}
                 className="ml-auto text-[10px] cursor-pointer transition-colors duration-150"
                 style={{ color: "var(--t4)" }}
               >
@@ -327,63 +277,29 @@ export default function HomeView({
         </div>
       )}
 
-      {/* ── Stats strip ─────────────────────────────────────────────────── */}
-      {stats && stats.total_recordings > 0 && (
-        <div className="grid grid-cols-4 gap-2.5 flex-shrink-0">
-          {[
-            {
-              id: "today",
-              icon: <Mic size={13} style={{ color: "var(--accent)" }} strokeWidth={2} />,
-              value: stats.recordings_today,
-              label: "Today",
-            },
-            {
-              id: "words",
-              icon: <Hash size={13} style={{ color: "var(--accent)" }} strokeWidth={2} />,
-              value: stats.total_words >= 1000
-                ? `${(stats.total_words / 1000).toFixed(1)}k`
-                : stats.total_words,
-              label: "Words",
-            },
-            {
-              id: "streak",
-              icon: <Flame size={13} strokeWidth={2} style={{ color: stats.streak_days > 1 ? "#f59e0b" : "var(--accent)" }} />,
-              value: stats.streak_days > 1 ? stats.streak_days : stats.recordings_today,
-              label: stats.streak_days > 1 ? "Streak" : "Today",
-            },
-            {
-              id: "time",
-              icon: <Clock size={13} style={{ color: "var(--accent)" }} strokeWidth={2} />,
-              value: (() => {
-                const h = Math.floor(stats.total_duration_seconds / 3600);
-                const m = Math.floor((stats.total_duration_seconds % 3600) / 60);
-                if (h > 0) return `${h}h`;
-                if (m > 0) return `${m}m`;
-                return `${Math.round(stats.total_duration_seconds)}s`;
-              })(),
-              label: "Time",
-            },
-          ].map(({ icon, value, label, id }) => (
-            <div
-              key={id}
-              className="flex flex-col items-center gap-1.5 rounded-2xl py-3 px-2"
-              style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
-            >
-              {icon}
-              <span
-                className="text-xl font-bold font-mono tabular-nums leading-none"
-                style={{ color: "var(--t1)" }}
-              >
-                {value}
-              </span>
-              <span
-                className="text-[9px] font-mono uppercase tracking-wider"
-                style={{ color: "var(--t4)" }}
-              >
-                {label}
-              </span>
-            </div>
-          ))}
+      {/* ── Vocabulary nudge ──────────────────────────────────────────────── */}
+      {vocabEmpty && !nudgeDismissed && !isRecording && !showLiveTranscript && (
+        <div
+          className="rounded-2xl flex items-center gap-3 px-4 py-3 cursor-pointer flex-shrink-0"
+          style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)", border: "1px solid color-mix(in srgb, var(--accent) 15%, transparent)" }}
+          onClick={() => onNavigate("vocabulary")}
+        >
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold leading-snug" style={{ color: "var(--t2)" }}>
+              Whisper keeps mishearing a word?
+            </p>
+            <p className="text-[11px] mt-0.5" style={{ color: "var(--accent)" }}>
+              Add it to Vocabulary for better accuracy →
+            </p>
+          </div>
+          <button
+            onClick={(e) => { e.stopPropagation(); setNudgeDismissed(true); }}
+            className="shrink-0 cursor-pointer transition-colors"
+            style={{ color: "var(--t4)" }}
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -418,61 +334,6 @@ export default function HomeView({
           <ChevronRight size={11} className="shrink-0 opacity-0 group-hover:opacity-60 transition-opacity -mr-1" style={{ color: "var(--t3)" }} />
         </button>
       </div>
-
-      {/* ── Recent recordings (hidden while live transcript is shown) ────── */}
-      {!showLiveTranscript && recentItems.length > 0 && (
-        <div
-          className="rounded-2xl overflow-hidden flex-shrink-0"
-          style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
-        >
-          <div
-            className="flex items-center justify-between px-4 py-3"
-            style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 5%, transparent)" }}
-          >
-            <span className="text-[10px] font-mono uppercase tracking-widest" style={{ color: "var(--t4)" }}>
-              Recent
-            </span>
-            <button
-              onClick={() => onNavigate("history")}
-              className="text-[10px] font-mono cursor-pointer transition-colors duration-150"
-              style={{ color: "var(--accent)" }}
-              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.7")}
-              onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-            >
-              See all →
-            </button>
-          </div>
-          <ul>
-            {recentItems.map((item, idx) => (
-              <li
-                key={item.id}
-                className="px-4 py-3 flex flex-col gap-1"
-                style={
-                  idx < recentItems.length - 1
-                    ? { borderBottom: "1px solid color-mix(in srgb, var(--t1) 5%, transparent)" }
-                    : undefined
-                }
-              >
-                <p
-                  className="text-xs italic leading-snug"
-                  style={{
-                    color: "var(--t3)",
-                    display: "-webkit-box",
-                    WebkitLineClamp: 1,
-                    WebkitBoxOrient: "vertical",
-                    overflow: "hidden",
-                  }}
-                >
-                  "{item.text}"
-                </p>
-                <p className="text-[10px] font-mono" style={{ color: "var(--t4)" }}>
-                  {formatRelativeTime(item.created_at)} · {formatDurationShort(item.duration_seconds)} · {item.model_used}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }
