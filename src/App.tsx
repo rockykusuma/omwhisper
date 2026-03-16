@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { Sparkles } from "lucide-react";
 import Sidebar, { type View } from "./components/Sidebar";
 import HomeView from "./components/HomeView";
 import AiModelsView from "./components/AiModelsView";
@@ -28,6 +29,7 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [micError, setMicError] = useState<string | null>(null);
   const [runningFromDmg, setRunningFromDmg] = useState(false);
+  const [showLlmNudge, setShowLlmNudge] = useState(false);
   const [appVersion, setAppVersion] = useState("0.1.0");
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     return localStorage.getItem("omwhisper-sidebar") !== "closed";
@@ -74,6 +76,8 @@ function App() {
         if (settings.show_overlay) await invoke("show_overlay");
       } catch {}
     } catch (e) {
+      // "cancelled" means the PTT key was released before the mic started — silent no-op.
+      if (String(e) === "cancelled") return;
       logger.error("Failed to start transcription:", e);
       setMicError(String(e));
       setTimeout(() => setMicError(null), 5000);
@@ -81,8 +85,11 @@ function App() {
   }, []);
 
   const stopRecording = useCallback(async () => {
-    pendingIsSmartDictation.current = isSmartDictationRef.current;
-    isPendingPaste.current = true;
+    // Only arm the paste machinery if we were actually recording.
+    if (isRecordingRef.current) {
+      pendingIsSmartDictation.current = isSmartDictationRef.current;
+      isPendingPaste.current = true;
+    }
     try {
       await invoke("stop_transcription");
     } catch (e) {
@@ -144,8 +151,12 @@ function App() {
       setActiveView(view as View);
     });
 
+    const unlistenLlmNudge = listen("show-llm-nudge", () => {
+      setShowLlmNudge(true);
+    });
+
     return () => {
-      Promise.all([unlistenHotkey, unlistenHotkeyStop, unlistenSmartDictation, unlistenState, unlistenUpdate, unlistenMic, unlistenTrayNav])
+      Promise.all([unlistenHotkey, unlistenHotkeyStop, unlistenSmartDictation, unlistenState, unlistenUpdate, unlistenMic, unlistenTrayNav, unlistenLlmNudge])
         .then((fns) => fns.forEach((f) => f()));
     };
   }, [startRecording, stopRecording]);
@@ -184,6 +195,10 @@ function App() {
             invoke("save_transcription", { text: polished, durationSeconds, modelUsed, source: "smart_dictation", rawText, polishStyle: style })
               .catch((e) => logger.error("save_transcription failed:", e));
           } catch (e) {
+            if (String(e) === "llm_not_ready") {
+              showToast("AI model not ready — check AI Models settings.");
+              return;
+            }
             showToast("⚠ AI polish failed — pasting raw text");
             invoke("paste_transcription", { text: rawText }).catch(() => {});
             invoke("save_transcription", { text: rawText, durationSeconds, modelUsed }).catch(() => {});
@@ -191,11 +206,34 @@ function App() {
           }
         })();
       } else {
-        invoke<void>("paste_transcription", { text: rawText })
-          .then(() => showToast("✓ Copied to clipboard"))
-          .catch((e) => logger.error("paste_transcription failed:", e));
-        invoke("save_transcription", { text: rawText, durationSeconds, modelUsed })
-          .catch((e) => logger.error("save_transcription failed:", e));
+        (async () => {
+          try {
+            const settings = await invoke<{ apply_polish_to_regular: boolean }>("get_settings");
+            if (settings.apply_polish_to_regular) {
+              try {
+                const polished = await invoke<string>("polish_text_cmd", { text: rawText, style: "professional" });
+                await invoke("paste_transcription", { text: polished });
+                showToast("✓ AI-polished & copied");
+                invoke("save_transcription", { text: polished, durationSeconds, modelUsed, source: "regular_polished", rawText, polishStyle: "professional" })
+                  .catch((e) => logger.error("save_transcription failed:", e));
+              } catch {
+                showToast("AI not ready — pasting raw text");
+                await invoke("paste_transcription", { text: rawText }).catch(() => {});
+                invoke("save_transcription", { text: rawText, durationSeconds, modelUsed })
+                  .catch((e) => logger.error("save_transcription failed:", e));
+              }
+            } else {
+              await invoke<void>("paste_transcription", { text: rawText });
+              showToast("✓ Copied to clipboard");
+              invoke("save_transcription", { text: rawText, durationSeconds, modelUsed })
+                .catch((e) => logger.error("save_transcription failed:", e));
+            }
+          } catch {
+            // get_settings failed — fall back to raw paste
+            await invoke<void>("paste_transcription", { text: rawText }).catch(() => {});
+            invoke("save_transcription", { text: rawText, durationSeconds, modelUsed }).catch(() => {});
+          }
+        })();
       }
     });
     return () => { unlisten.then((f) => f()); };
@@ -266,6 +304,46 @@ function App() {
                 </a>
                 <button onClick={() => setUpdateInfo(null)} className="text-white/50 hover:text-white/60 text-xs cursor-pointer" aria-label="Dismiss update notification">
                   ✕
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showLlmNudge && (
+            <div
+              className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs"
+              style={{
+                background: "color-mix(in srgb, var(--accent) 8%, var(--bg))",
+                borderBottom: "1px solid color-mix(in srgb, var(--accent) 20%, transparent)",
+              }}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Sparkles size={12} style={{ color: "var(--accent)", flexShrink: 0 }} />
+                <span style={{ color: "var(--t2)" }}>
+                  <span className="font-semibold" style={{ color: "var(--t1)" }}>Enable AI cleanup</span>
+                  {" — "}Download a 400 MB model to fix punctuation and remove filler words. Works offline.
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={async () => {
+                    setShowLlmNudge(false);
+                    const s = await invoke<import("./types").AppSettings>("get_settings");
+                    const updated = { ...s, ai_backend: "built_in" };
+                    await invoke("update_settings", { newSettings: updated });
+                    await invoke("download_llm_model", { name: updated.llm_model_name });
+                    setActiveView("models");
+                  }}
+                  className="btn-primary text-xs px-3 py-1"
+                >
+                  Download &amp; Enable
+                </button>
+                <button
+                  onClick={() => setShowLlmNudge(false)}
+                  className="btn-ghost text-xs px-2 py-1"
+                  style={{ color: "var(--t3)" }}
+                >
+                  Not now
                 </button>
               </div>
             </div>

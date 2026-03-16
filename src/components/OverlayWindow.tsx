@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { Sparkles } from "lucide-react";
 import type { AppSettings } from "../types";
 
 // ─── Micro pill (bars only, compact) ─────────────────────────────────────────
@@ -121,12 +122,16 @@ function WaveformPill() {
 
 export default function OverlayWindow() {
   const [overlayStyle, setOverlayStyle] = useState<string>("micro");
+  const [applyPolishRegular, setApplyPolishRegular] = useState(false);
 
   // Load current setting on mount, re-sync when settings change
   useEffect(() => {
     const load = () =>
       invoke<AppSettings>("get_settings")
-        .then((s) => setOverlayStyle(s.overlay_style ?? "micro"))
+        .then((s) => {
+          setOverlayStyle(s.overlay_style ?? "micro");
+          setApplyPolishRegular(s.apply_polish_to_regular ?? false);
+        })
         .catch(() => {});
     load();
 
@@ -141,12 +146,33 @@ export default function OverlayWindow() {
         invoke("hide_overlay").catch(() => {});
       } else {
         invoke<AppSettings>("get_settings")
-          .then((s) => setOverlayStyle(s.overlay_style ?? "micro"))
+          .then((s) => {
+            setOverlayStyle(s.overlay_style ?? "micro");
+            setApplyPolishRegular(s.apply_polish_to_regular ?? false);
+          })
           .catch(() => {});
       }
     });
     return () => { unlistenState.then((f) => f()); };
   }, []);
 
-  return overlayStyle === "waveform" ? <WaveformPill /> : <MicroPill />;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+      {overlayStyle === "waveform" ? <WaveformPill /> : <MicroPill />}
+      {applyPolishRegular && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          background: "rgba(29,158,117,0.10)",
+          border: "0.5px solid rgba(29,158,117,0.25)",
+          borderRadius: 10,
+          padding: "3px 8px",
+        }}>
+          <Sparkles size={9} style={{ color: "#34d399" }} />
+          <span style={{ color: "#34d399", fontSize: 9, fontWeight: 500, letterSpacing: "0.4px" }}>AI Polish</span>
+        </div>
+      )}
+    </div>
+  );
 }

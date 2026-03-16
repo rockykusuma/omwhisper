@@ -48,7 +48,6 @@ export interface AppSettings {
   log_level: string;
   sound_enabled: boolean;
   sound_volume: number;
-  launch_sound_enabled: boolean;
   restore_clipboard: boolean;
   clipboard_restore_delay_ms: number;
   recording_mode: string;
@@ -66,6 +65,10 @@ export interface AppSettings {
   ptt_key: string;
   overlay_placement: string;
   overlay_style: string;
+  translate_to_english: boolean;
+  llm_model_name: string;
+  llm_nudge_shown: boolean;
+  apply_polish_to_regular: boolean;
 }
 
 // ─── AI ────────────────────────────────────────────────────────────────────────
@@ -73,6 +76,21 @@ export interface AppSettings {
 export interface OllamaStatus {
   running: boolean;
   models: string[];
+}
+
+export interface LlmModelInfo {
+  name: string;
+  size_bytes: number;
+  size_label: string;
+  is_downloaded: boolean;
+  is_active: boolean;
+}
+
+export interface LlmDownloadProgress {
+  name: string;
+  progress: number;
+  done: boolean;
+  error: string | null;
 }
 
 export interface BuiltInStyle {

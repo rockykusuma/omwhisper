@@ -26,6 +26,8 @@ use commands::{
     check_ollama_status, get_ollama_models, polish_text_cmd, test_ai_connection,
     save_cloud_api_key, get_cloud_api_key_status, delete_cloud_api_key_cmd,
     get_model_recommendation,
+    get_llm_models, get_llm_models_disk_usage, download_llm_model, delete_llm_model, import_llm_model,
+    load_llm_engine, unload_llm_engine,
     SharedState, TranscriptionState,
 };
 use std::sync::{Arc, Mutex};
@@ -35,6 +37,47 @@ use tauri::{
     Emitter, Manager,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+
+/// Bring the app to the foreground on macOS.
+///
+/// `app.show()` only calls `[NSApp unhide:nil]` which is for un-hiding a deliberately
+/// hidden app. To actually raise the app above other applications we need
+/// `[NSApp activateIgnoringOtherApps:YES]`.
+#[cfg(target_os = "macos")]
+fn activate_app_macos() {
+    use std::os::raw::{c_char, c_void};
+    extern "C" {
+        fn objc_getClass(name: *const c_char) -> *const c_void;
+        fn sel_registerName(str: *const c_char) -> *const c_void;
+        #[link_name = "objc_msgSend"]
+        fn msg_send_no_args(receiver: *const c_void, sel: *const c_void) -> *mut c_void;
+        #[link_name = "objc_msgSend"]
+        fn msg_send_bool(receiver: *mut c_void, sel: *const c_void, val: i32);
+    }
+    unsafe {
+        let cls = objc_getClass(b"NSApplication\0".as_ptr() as *const c_char);
+        if cls.is_null() { return; }
+        let sel_shared = sel_registerName(b"sharedApplication\0".as_ptr() as *const c_char);
+        let app = msg_send_no_args(cls, sel_shared);
+        if app.is_null() { return; }
+        let sel_activate = sel_registerName(b"activateIgnoringOtherApps:\0".as_ptr() as *const c_char);
+        msg_send_bool(app, sel_activate, 1);
+    }
+}
+
+/// Center the main window on the primary monitor before showing it.
+/// This ensures the app always appears on the main screen even when an extended monitor is connected.
+fn center_on_primary_monitor(win: &tauri::WebviewWindow) {
+    if let Ok(Some(monitor)) = win.primary_monitor() {
+        let screen = monitor.size();
+        let origin = monitor.position();
+        if let Ok(win_size) = win.outer_size() {
+            let x = origin.x + ((screen.width as i32 - win_size.width as i32) / 2);
+            let y = origin.y + ((screen.height as i32 - win_size.height as i32) / 2);
+            let _ = win.set_position(tauri::PhysicalPosition { x, y });
+        }
+    }
+}
 
 /// Ensure only one instance runs. Returns false if another instance is already running.
 fn ensure_single_instance() -> bool {
@@ -97,6 +140,11 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(shared_state.clone())
+        // Separate managed state for LlmEngine — must NOT be inside SharedState
+        // because inference blocks the calling thread for several seconds — holding the shared mutex during inference would deadlock the shortcut handlers.
+        .manage(std::sync::Arc::new(std::sync::Mutex::new(
+            Option::<crate::ai::llm::LlmEngine>::None,
+        )))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -164,7 +212,8 @@ pub fn run() {
                         "show" => {
                             if let Some(win) = app.get_webview_window("main") {
                                 #[cfg(target_os = "macos")]
-                                let _ = app.show();
+                                activate_app_macos();
+                                center_on_primary_monitor(&win);
                                 let _ = win.show();
                                 let _ = win.set_focus();
                             }
@@ -172,7 +221,8 @@ pub fn run() {
                         "settings" => {
                             if let Some(win) = app.get_webview_window("main") {
                                 #[cfg(target_os = "macos")]
-                                let _ = app.show();
+                                activate_app_macos();
+                                center_on_primary_monitor(&win);
                                 let _ = win.show();
                                 let _ = win.set_focus();
                             }
@@ -222,7 +272,8 @@ pub fn run() {
                                 let _ = win.hide();
                             } else {
                                 #[cfg(target_os = "macos")]
-                                let _ = app.show();
+                                activate_app_macos();
+                                center_on_primary_monitor(&win);
                                 let _ = win.show();
                                 let _ = win.set_focus();
                             }
@@ -449,6 +500,18 @@ pub fn run() {
                 }
             })?;
 
+            // Intercept the close button — hide instead of destroying the window
+            // so "Show Window" from the tray always works.
+            if let Some(win) = app.get_webview_window("main") {
+                let win_for_close = win.clone();
+                win.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = win_for_close.hide();
+                    }
+                });
+            }
+
             // Show window for first-time users (onboarding)
             let is_first = {
                 let path = crate::settings::settings_path();
@@ -456,6 +519,7 @@ pub fn run() {
             };
             if is_first {
                 if let Some(win) = app.get_webview_window("main") {
+                    center_on_primary_monitor(&win);
                     let _ = win.show();
                 }
             }
@@ -494,6 +558,64 @@ pub fn run() {
                     }
                 }
             });
+
+            // Eagerly load LlmEngine on launch if built_in backend is configured
+            {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let settings = crate::settings::load_settings().await;
+                    if settings.ai_backend == "built_in" {
+                        let model_path = crate::ai::llm::llm_model_path(&settings.llm_model_name);
+                        if model_path.exists() {
+                            let engine_state = app_handle.state::<std::sync::Arc<std::sync::Mutex<Option<crate::ai::llm::LlmEngine>>>>();
+                            match tokio::task::spawn_blocking(move || {
+                                crate::ai::llm::LlmEngine::new(&model_path)
+                            })
+                            .await
+                            {
+                                Ok(Ok(engine)) => {
+                                    let mut guard = engine_state.lock().unwrap();
+                                    *guard = Some(engine);
+                                    tracing::info!("LlmEngine loaded at launch");
+                                }
+                                Ok(Err(e)) => tracing::warn!("LlmEngine load failed: {}", e),
+                                Err(e) => tracing::warn!("LlmEngine spawn_blocking failed: {}", e),
+                            }
+                        }
+                    }
+                });
+            }
+
+            // One-time nudge: if user has never configured AI and Ollama isn't running,
+            // prompt them to enable the built-in LLM backend.
+            {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let settings = crate::settings::load_settings().await;
+                    if settings.llm_nudge_shown || settings.ai_backend != "disabled" {
+                        return; // already shown or already configured
+                    }
+
+                    // Check Ollama with a 3-second hard timeout
+                    let ollama_url = settings.ai_ollama_url.clone();
+                    let ollama_running = tokio::time::timeout(
+                        std::time::Duration::from_secs(3),
+                        crate::ai::ollama::check_status(&ollama_url),
+                    )
+                    .await
+                    .unwrap_or(false); // timeout → treat as not running
+
+                    if !ollama_running {
+                        // Mark shown immediately to prevent re-trigger if app relaunches
+                        let mut updated = settings;
+                        updated.llm_nudge_shown = true;
+                        let _ = crate::settings::save_settings(&updated).await;
+
+                        use tauri::Emitter;
+                        let _ = app_handle.emit("show-llm-nudge", ());
+                    }
+                });
+            }
 
             Ok(())
         })
@@ -548,6 +670,13 @@ pub fn run() {
             get_cloud_api_key_status,
             delete_cloud_api_key_cmd,
             get_model_recommendation,
+            get_llm_models,
+            get_llm_models_disk_usage,
+            download_llm_model,
+            delete_llm_model,
+            import_llm_model,
+            load_llm_engine,
+            unload_llm_engine,
             styles::get_polish_styles,
             styles::add_custom_style,
             styles::remove_custom_style,

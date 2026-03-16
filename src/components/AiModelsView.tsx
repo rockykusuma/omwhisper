@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Cpu, MemoryStick, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
-import type { AppSettings, BuiltInStyle, CustomStyle, OllamaStatus } from "../types";
+import type { AppSettings, BuiltInStyle, CustomStyle, OllamaStatus, LlmModelInfo, LlmDownloadProgress } from "../types";
 
 // ── Whisper tab types ─────────────────────────────────────────────────────────
 interface ModelInfo {
@@ -142,7 +142,11 @@ function WhisperTab({ activeModel, onModelChange }: { activeModel: string; onMod
               {specExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
           </div>
-          <p className="text-xs mt-2 leading-relaxed" style={{ color: "var(--t2)" }}>{recommendation.reason}</p>
+          <p className="text-xs mt-2 leading-relaxed" style={{ color: "var(--t2)" }}>
+            {recModel && recModel === activeModel
+              ? "You're already on the recommended model."
+              : recommendation.reason}
+          </p>
           {recModel && recModel !== activeModel && (
             <button
               onClick={() => {
@@ -291,6 +295,9 @@ function SmartDictationTab() {
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
   const [customModelInput, setCustomModelInput] = useState("");
+  const [llmModels, setLlmModels] = useState<LlmModelInfo[]>([]);
+  const [llmDownloading, setLlmDownloading] = useState<Record<string, number>>({});
+  const [llmErrors, setLlmErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setCustomModelInput("");
@@ -302,6 +309,28 @@ function SmartDictationTab() {
     invoke<{ built_in: BuiltInStyle[]; custom: CustomStyle[] }>("get_polish_styles")
       .then((styles) => { setBuiltInStyles(styles.built_in); setCustomStyles(styles.custom); })
       .catch(() => {});
+
+    // Load LLM model list
+    invoke<LlmModelInfo[]>("get_llm_models").then(setLlmModels).catch(() => {});
+
+    // Subscribe to LLM download progress
+    const unlistenLlmPromise = listen<LlmDownloadProgress>("llm-download-progress", (event) => {
+      const { name, progress, done, error } = event.payload;
+      if (done) {
+        setLlmDownloading((prev) => { const next = { ...prev }; delete next[name]; return next; });
+        if (error) {
+          setLlmErrors((prev) => ({ ...prev, [name]: error }));
+        } else {
+          invoke<LlmModelInfo[]>("get_llm_models").then(setLlmModels).catch(() => {});
+          invoke("load_llm_engine", { name }).catch(() => {});
+        }
+      } else {
+        setLlmDownloading((prev) => ({ ...prev, [name]: progress }));
+        setLlmErrors((prev) => { const next = { ...prev }; delete next[name]; return next; });
+      }
+    });
+
+    return () => { unlistenLlmPromise.then((f) => f()); };
   }, []);
 
   async function refreshOllamaStatus() {
@@ -367,17 +396,32 @@ function SmartDictationTab() {
       <div className="card px-5 mb-5">
         <SettingRow label="Backend" description="Where text is sent for polishing">
           <div className="flex rounded-xl overflow-hidden" style={{ boxShadow: "var(--nm-pressed-sm)" }}>
-            {(["disabled", "ollama", "cloud"] as const).map((b) => (
+            {(["disabled", "built_in", "ollama", "cloud"] as const).map((b) => (
               <button
                 key={b}
-                onClick={() => { update({ ai_backend: b }); setTestResult(null); }}
+                onClick={() => {
+                  update({ ai_backend: b, ...(b === "disabled" ? { apply_polish_to_regular: false } : {}) });
+                  setTestResult(null);
+                  if (b === "built_in") {
+                    invoke<LlmModelInfo[]>("get_llm_models").then((models) => {
+                      const active = models.find((m) => m.is_active && m.is_downloaded);
+                      if (active) {
+                        invoke("load_llm_engine", { name: active.name }).catch(() => {});
+                      }
+                      setLlmModels(models);
+                    }).catch(() => {});
+                  }
+                }}
                 className="px-3 py-1.5 text-xs transition-all duration-150 cursor-pointer"
                 style={{
                   background: settings.ai_backend === b ? "rgba(139,92,246,0.15)" : "transparent",
                   color: settings.ai_backend === b ? "rgb(167,139,250)" : "var(--t3)",
                 }}
               >
-                {b === "ollama" ? "On-Device" : b === "cloud" ? "Cloud API" : "Disabled"}
+                {b === "ollama" ? "On-Device (Ollama)"
+                 : b === "cloud" ? "Cloud API"
+                 : b === "built_in" ? "Built-in"
+                 : "Disabled"}
               </button>
             ))}
           </div>
@@ -386,6 +430,89 @@ function SmartDictationTab() {
           <p className="text-white/40 text-xs pb-3">Smart Dictation shortcut (⌘⇧B) will paste raw transcription.</p>
         )}
       </div>
+
+      {/* Built-in LLM section */}
+      {settings.ai_backend === "built_in" && (
+        <div className="card px-5 mb-5">
+          <p className="text-white/60 text-[10px] uppercase tracking-widest py-3 font-mono border-b border-white/[0.04]">
+            Local Model
+          </p>
+          {llmModels.map((model) => {
+            const isDownloading = model.name in llmDownloading;
+            const progress = llmDownloading[model.name] ?? 0;
+            const error = llmErrors[model.name];
+            return (
+              <div key={model.name} className="py-3 border-b border-white/[0.04] last:border-0">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      {model.is_active && (
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "var(--accent)" }} />
+                      )}
+                      <span className="text-white/80 text-sm font-medium">{model.name}</span>
+                      {model.is_active && (
+                        <span className="text-[10px] px-1.5 py-px rounded font-mono" style={{ color: "var(--accent)", border: "1px solid color-mix(in srgb, var(--accent) 35%, transparent)" }}>Active</span>
+                      )}
+                    </div>
+                    <p className="text-white/50 text-xs font-mono">{model.size_label}</p>
+                  </div>
+                  <div className="shrink-0">
+                    {model.is_downloaded ? (
+                      <span className="text-emerald-400 text-xs">✓ Downloaded</span>
+                    ) : isDownloading ? (
+                      <div className="text-right min-w-[64px]">
+                        <p className="text-[11px] font-mono mb-1" style={{ color: "var(--accent)" }}>{Math.round(progress * 100)}%</p>
+                        <div className="h-1 rounded-full overflow-hidden" style={{ width: 64, background: "color-mix(in srgb, var(--t1) 8%, transparent)" }}>
+                          <div className="h-full rounded-full transition-all duration-200" style={{ width: `${progress * 100}%`, background: "var(--accent)" }} />
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setLlmErrors((prev) => { const n = { ...prev }; delete n[model.name]; return n; });
+                          setLlmDownloading((prev) => ({ ...prev, [model.name]: 0 }));
+                          invoke("download_llm_model", { name: model.name }).catch((e: unknown) => {
+                            setLlmDownloading((prev) => { const n = { ...prev }; delete n[model.name]; return n; });
+                            setLlmErrors((prev) => ({ ...prev, [model.name]: String(e) }));
+                          });
+                        }}
+                        className="btn-primary text-xs px-3 py-1.5"
+                      >
+                        Download
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {error && <p className="text-red-400/70 text-xs mt-1.5">✗ {error}</p>}
+              </div>
+            );
+          })}
+          <div className="py-3">
+            <button
+              onClick={async () => {
+                const { open } = await import("@tauri-apps/plugin-dialog");
+                const selected = await open({
+                  filters: [{ name: "GGUF Model", extensions: ["gguf"] }],
+                  multiple: false,
+                }).catch(() => null);
+                if (selected && typeof selected === "string") {
+                  const filename = await invoke<string>("import_llm_model", { sourcePath: selected })
+                    .catch((e: unknown) => { setLlmErrors((prev) => ({ ...prev, import: String(e) })); return null; });
+                  if (filename) {
+                    invoke<LlmModelInfo[]>("get_llm_models").then(setLlmModels).catch(() => {});
+                  }
+                }
+              }}
+              className="btn-ghost text-xs px-3 py-1.5"
+            >
+              + Add custom model
+            </button>
+            {llmErrors["import"] && (
+              <p className="text-red-400/70 text-xs mt-1.5">✗ {llmErrors["import"]}</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Ollama section */}
       {settings.ai_backend === "ollama" && (
@@ -577,17 +704,55 @@ function SmartDictationTab() {
             </select>
           </SettingRow>
         )}
-        <SettingRow label="Timeout" description="Max seconds to wait for AI response">
-          <select
-            value={settings.ai_timeout_seconds}
-            onChange={(e) => update({ ai_timeout_seconds: parseInt(e.target.value) })}
-            className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
-            style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+        {settings.ai_backend !== "built_in" && (
+          <SettingRow label="Timeout" description="Max seconds to wait for AI response">
+            <select
+              value={settings.ai_timeout_seconds}
+              onChange={(e) => update({ ai_timeout_seconds: parseInt(e.target.value) })}
+              className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
+              style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+            >
+              <option value={15}>15s</option>
+              <option value={30}>30s</option>
+              <option value={60}>60s</option>
+            </select>
+          </SettingRow>
+        )}
+        <SettingRow
+          label="Apply AI polish to regular recording"
+          description={
+            settings.ai_backend === "disabled"
+              ? "Enable an AI backend above to use this feature."
+              : "⌘⇧V recordings are polished using Professional style before pasting. Falls back to raw paste if AI is unavailable."
+          }
+        >
+          <button
+            onClick={() => {
+              if (settings.ai_backend !== "disabled") {
+                update({ apply_polish_to_regular: !settings.apply_polish_to_regular });
+              }
+            }}
+            role="switch"
+            aria-checked={settings.apply_polish_to_regular}
+            aria-label="Apply AI polish to regular recording"
+            disabled={settings.ai_backend === "disabled"}
+            className="relative w-10 h-6 rounded-full transition-all duration-200"
+            style={{
+              cursor: settings.ai_backend === "disabled" ? "not-allowed" : "pointer",
+              background: "var(--bg)",
+              boxShadow: "var(--nm-pressed-sm)",
+              opacity: settings.ai_backend === "disabled" ? 0.4 : 1,
+            }}
           >
-            <option value={15}>15s</option>
-            <option value={30}>30s</option>
-            <option value={60}>60s</option>
-          </select>
+            <div
+              className="absolute top-1 w-4 h-4 rounded-full transition-all duration-200"
+              style={{
+                transform: settings.apply_polish_to_regular ? "translateX(20px)" : "translateX(4px)",
+                background: settings.apply_polish_to_regular ? "var(--accent)" : "var(--t4)",
+                boxShadow: settings.apply_polish_to_regular ? "0 0 6px var(--accent-glow), var(--nm-raised-sm)" : "var(--nm-raised-sm)",
+              }}
+            />
+          </button>
         </SettingRow>
       </div>
 

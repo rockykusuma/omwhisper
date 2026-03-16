@@ -1,4 +1,5 @@
 pub mod cloud;
+pub mod llm;
 pub mod ollama;
 
 /// Keychain service name for storing the cloud API key.

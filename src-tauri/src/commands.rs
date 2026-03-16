@@ -69,7 +69,7 @@ pub async fn transcribe_file(path: String, model_path: String) -> Result<Vec<Seg
         let engine = WhisperEngine::new(&resolved).map_err(|e| e.to_string())?;
         let audio = load_wav_as_f32(Path::new(&path)).map_err(|e| e.to_string())?;
         let prompt = if initial_prompt.is_empty() { None } else { Some(initial_prompt.as_str()) };
-        engine.transcribe(&audio, "en", prompt, &replacements).map_err(|e| e.to_string())
+        engine.transcribe(&audio, "en", false, prompt, &replacements).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -114,6 +114,7 @@ pub async fn start_transcription(
     let language = settings.language.clone();
     let sound_enabled = settings.sound_enabled;
     let sound_volume = settings.sound_volume;
+    let translate_to_english = settings.translate_to_english;
 
     if sound_enabled {
         crate::sounds::play(crate::sounds::Sound::Start, sound_volume);
@@ -121,9 +122,10 @@ pub async fn start_transcription(
     }
 
     // PTT: if the key was released during the sound delay, abort.
+    // Return a sentinel error so the frontend knows not to set isRecording=true.
     if state.lock().unwrap().start_cancelled {
         state.lock().unwrap().start_cancelled = false;
-        return Ok(());
+        return Err("cancelled".to_string());
     }
 
     // Build capture object and start the audio pipeline.
@@ -192,7 +194,7 @@ pub async fn start_transcription(
 
         for chunk in speech_rx {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                engine.transcribe(&chunk, &language, prompt_ref, &word_replacements)
+                engine.transcribe(&chunk, &language, translate_to_english, prompt_ref, &word_replacements)
             }));
             match result {
                 Ok(Ok(segments)) => {
@@ -312,6 +314,132 @@ pub async fn delete_model(name: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn get_models_disk_usage() -> Result<u64, String> {
     Ok(models::models_disk_usage())
+}
+
+// ─── LLM Model Management ─────────────────────────────────────────────────────
+
+use crate::ai::llm as llm_models;
+
+#[derive(Clone, serde::Serialize)]
+pub struct LlmDownloadProgress {
+    pub name: String,
+    pub progress: f64,
+    pub done: bool,
+    pub error: Option<String>,
+}
+
+#[tauri::command]
+pub async fn get_llm_models(_app: tauri::AppHandle) -> Result<Vec<llm_models::LlmModelInfo>, String> {
+    let settings = crate::settings::load_settings().await;
+    Ok(llm_models::list_llm_models(&settings.llm_model_name))
+}
+
+#[tauri::command]
+pub async fn get_llm_models_disk_usage() -> Result<u64, String> {
+    Ok(llm_models::llm_models_disk_usage())
+}
+
+#[tauri::command]
+pub async fn download_llm_model(name: String, app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Emitter;
+    let name_clone = name.clone();
+    let app_clone = app.clone();
+
+    tokio::spawn(async move {
+        let name_for_cb = name_clone.clone();
+        let app_for_cb = app_clone.clone();
+
+        let result = llm_models::download_llm_model(&name_clone, move |progress| {
+            let _ = app_for_cb.emit(
+                "llm-download-progress",
+                LlmDownloadProgress {
+                    name: name_for_cb.clone(),
+                    progress,
+                    done: false,
+                    error: None,
+                },
+            );
+        })
+        .await;
+
+        match result {
+            Ok(_) => {
+                let _ = app_clone.emit(
+                    "llm-download-progress",
+                    LlmDownloadProgress {
+                        name: name_clone,
+                        progress: 1.0,
+                        done: true,
+                        error: None,
+                    },
+                );
+            }
+            Err(e) => {
+                let _ = app_clone.emit(
+                    "llm-download-progress",
+                    LlmDownloadProgress {
+                        name: name_clone,
+                        progress: 0.0,
+                        done: true,
+                        error: Some(e.to_string()),
+                    },
+                );
+            }
+        }
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_llm_model(name: String) -> Result<(), String> {
+    llm_models::delete_llm_model(&name)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+// Plan extension (not in spec command table — added to support "Add custom model" UI in Task 8)
+#[tauri::command]
+pub async fn import_llm_model(source_path: String) -> Result<String, String> {
+    use std::path::Path;
+    llm_models::import_custom_llm_model(Path::new(&source_path))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+type LlmEngineState = std::sync::Arc<std::sync::Mutex<Option<crate::ai::llm::LlmEngine>>>;
+
+#[tauri::command]
+pub async fn load_llm_engine(
+    name: String,
+    engine_state: tauri::State<'_, LlmEngineState>,
+) -> Result<(), String> {
+    let model_path = crate::ai::llm::llm_model_path(&name);
+    if !model_path.exists() {
+        return Err(format!("Model file not found: {}", name));
+    }
+
+    // Load is blocking (reads ~400MB from disk) — run on a blocking thread
+    let engine = tokio::task::spawn_blocking(move || {
+        crate::ai::llm::LlmEngine::new(&model_path)
+    })
+    .await
+    .map_err(|e| format!("spawn_blocking error: {}", e))?
+    .map_err(|e| e.to_string())?;
+
+    let mut guard = engine_state.lock().unwrap();
+    *guard = Some(engine);
+    Ok(())
+}
+
+// Plan extension (not in spec — added for completeness to allow backend switching without restart)
+#[tauri::command]
+pub async fn unload_llm_engine(
+    engine_state: tauri::State<'_, LlmEngineState>,
+) -> Result<(), String> {
+    let mut guard = engine_state.lock().unwrap();
+    *guard = None;
+    Ok(())
 }
 
 use crate::paste;
@@ -448,7 +576,14 @@ pub async fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
     use tauri::Manager;
     let settings = crate::settings::load_settings().await;
     if let Some(win) = app.get_webview_window("overlay") {
-        if let Ok(Some(monitor)) = win.current_monitor() {
+        // The overlay window is hidden, so current_monitor() may return None.
+        // Fall back to the main window's monitor so positioning always works.
+        let monitor_opt = win.current_monitor().ok().flatten().or_else(|| {
+            app.get_webview_window("main")
+                .and_then(|m| m.current_monitor().ok().flatten())
+        });
+
+        if let Some(monitor) = monitor_opt {
             let scale  = monitor.scale_factor();
             let screen = monitor.size();    // physical pixels
             let origin = monitor.position(); // physical top-left of this monitor
@@ -828,8 +963,29 @@ pub async fn get_ollama_models() -> Vec<String> {
 }
 
 #[tauri::command]
-pub async fn polish_text_cmd(text: String, style: String) -> Result<String, String> {
+pub async fn polish_text_cmd(
+    text: String,
+    style: String,
+    app: tauri::AppHandle,
+) -> Result<String, String> {
+    use tauri::Manager;
     let settings = crate::settings::load_settings().await;
+
+    // built_in is intercepted here — ai::polish has no access to managed state
+    if settings.ai_backend == "built_in" {
+        let engine_state = app.state::<LlmEngineState>();
+        let vocab = settings.custom_vocabulary.clone();
+        let result: anyhow::Result<String> = {
+            let guard = engine_state.lock().unwrap();
+            match guard.as_ref() {
+                Some(engine) => engine.polish(&text, &style, &vocab),
+                None => return Err("llm_not_ready".to_string()),
+            }
+        };
+        return result.map_err(|e: anyhow::Error| e.to_string());
+    }
+
+    // ollama / cloud path — unchanged
     let system_prompt = crate::styles::system_prompt_for(&style, &settings.translate_target_language);
     let request = crate::ai::PolishRequest { text, system_prompt };
     crate::ai::polish(request, &settings)
@@ -910,8 +1066,8 @@ pub fn get_model_recommendation() -> ModelRecommendation {
     let cpu_brand = sys.cpus().first().map(|c| c.brand().to_string()).unwrap_or_default();
     let cpu_cores = sys.cpus().len();
 
-    // Apple Silicon: brand string contains "Apple"
-    let is_apple_silicon = cpu_brand.contains("Apple");
+    // Apple Silicon: use architecture (aarch64) as the reliable signal
+    let is_apple_silicon = std::env::consts::ARCH == "aarch64";
 
     let (recommended_model, reason) = recommend_model(total_ram_gb, is_apple_silicon, cpu_cores);
 
@@ -929,16 +1085,15 @@ pub fn get_model_recommendation() -> ModelRecommendation {
 
 fn recommend_model(ram_gb: f64, is_apple_silicon: bool, _cores: usize) -> (String, String) {
     if is_apple_silicon {
-        // Apple Silicon — Metal acceleration makes larger models practical
+        // Apple Silicon — Metal acceleration makes larger models practical.
+        // For a quick-dictation/paste app, latency matters more than accuracy,
+        // so we cap large-v3-turbo at 24GB+ where users expect best quality.
         if ram_gb >= 24.0 {
-            ("large-v3".to_string(),
-             format!("Your Apple Silicon Mac with {:.0}GB unified memory can run the highest-quality model at full speed via Metal GPU acceleration.", ram_gb))
-        } else if ram_gb >= 16.0 {
-            ("medium.en".to_string(),
-             format!("Your Apple Silicon Mac with {:.0}GB unified memory is ideal for medium.en — excellent accuracy with fast Metal inference.", ram_gb))
+            ("large-v3-turbo".to_string(),
+             format!("Your Apple Silicon Mac with {:.0}GB unified memory can run large-v3-turbo — near large-v3 accuracy at 8× the speed via Metal GPU acceleration.", ram_gb))
         } else if ram_gb >= 8.0 {
             ("small.en".to_string(),
-             format!("Your Apple Silicon Mac with {:.0}GB unified memory runs small.en beautifully — a great balance of speed and accuracy.", ram_gb))
+             format!("Your Apple Silicon Mac with {:.0}GB unified memory is a great fit for small.en — fast, accurate, and snappy for quick dictation.", ram_gb))
         } else {
             ("base.en".to_string(),
              format!("Your Apple Silicon Mac with {:.0}GB unified memory will run base.en quickly — solid accuracy for everyday use.", ram_gb))
