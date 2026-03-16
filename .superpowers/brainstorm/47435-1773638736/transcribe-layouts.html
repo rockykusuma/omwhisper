@@ -1,0 +1,251 @@
+<h2>Transcribe Tab — Layout Ideas</h2>
+<p class="subtitle">Three directions for filling the empty idle state. Click one to select your favourite.</p>
+
+<style>
+  .cards { display: flex; flex-direction: column; gap: 20px; }
+  .card { cursor: pointer; border-radius: 16px; overflow: hidden; }
+  .card-image { padding: 0; background: #0a0f0d; }
+  .card-body { padding: 16px 20px; }
+  .card-body h3 { margin: 0 0 4px; font-size: 15px; }
+  .card-body p { margin: 0; font-size: 13px; opacity: 0.6; }
+
+  /* ── shared mini-app chrome ── */
+  .app {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+    background: #0a0f0d;
+    color: #e5e5e5;
+    border-radius: 12px;
+    overflow: hidden;
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+  }
+  .app-inner { padding: 28px 28px 24px; display: flex; flex-direction: column; align-items: center; gap: 0; min-height: 320px; }
+
+  /* record button */
+  .rec-btn {
+    width: 72px; height: 72px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(145deg, #34d399, #2dd4bf);
+    box-shadow: 0 0 28px rgba(52,211,153,0.22), 6px 6px 14px rgba(0,0,0,0.55), -4px -4px 10px rgba(255,255,255,0.035);
+    flex-shrink: 0;
+  }
+  .rec-btn svg { width: 26px; height: 26px; stroke: #0a1a12; stroke-width: 2; fill: none; }
+
+  /* hint text */
+  .hint { font-size: 11px; font-family: 'SF Mono', monospace; color: rgba(255,255,255,0.22); margin-top: 12px; }
+
+  /* ── Option A: Command Centre ── */
+  .mode-cards { display: flex; gap: 10px; width: 100%; margin-top: 22px; }
+  .mode-card {
+    flex: 1; border-radius: 12px; padding: 12px 14px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .mode-card .mode-icon { font-size: 16px; }
+  .mode-card .mode-title { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.75); }
+  .mode-card .mode-desc { font-size: 10px; color: rgba(255,255,255,0.35); line-height: 1.45; }
+  .mode-card .mode-key {
+    font-size: 9px; font-family: monospace;
+    background: rgba(255,255,255,0.06); border-radius: 4px;
+    padding: 2px 5px; color: rgba(255,255,255,0.4); align-self: flex-start; margin-top: 2px;
+  }
+  .mode-card.ai { border-color: rgba(139,92,246,0.2); }
+  .mode-card.ai .mode-title { color: rgba(167,139,250,0.85); }
+
+  .stats-strip {
+    display: flex; gap: 0; width: 100%; margin-top: 14px;
+    border-radius: 10px; overflow: hidden;
+    background: rgba(255,255,255,0.025);
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  .stat { flex: 1; padding: 9px 12px; text-align: center; }
+  .stat + .stat { border-left: 1px solid rgba(255,255,255,0.05); }
+  .stat .sv { font-size: 15px; font-weight: 600; color: rgba(52,211,153,0.8); }
+  .stat .sl { font-size: 9px; color: rgba(255,255,255,0.3); margin-top: 2px; font-family: monospace; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* ── Option B: Last Session ── */
+  .last-card {
+    width: 100%; margin-top: 22px; border-radius: 12px; overflow: hidden;
+    background: rgba(255,255,255,0.025);
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+  .last-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .last-label { font-size: 9px; font-family: monospace; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,255,255,0.25); }
+  .last-time { font-size: 9px; font-family: monospace; color: rgba(255,255,255,0.18); }
+  .last-copy { font-size: 9px; font-family: monospace; color: rgba(52,211,153,0.5); cursor: pointer; }
+  .last-body { padding: 12px 14px; }
+  .last-text { font-size: 12px; line-height: 1.6; color: rgba(255,255,255,0.35); font-style: italic; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .model-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 10px; font-family: monospace;
+    color: rgba(52,211,153,0.55);
+    background: rgba(52,211,153,0.07);
+    border-radius: 6px; padding: 3px 8px; margin-top: 14px;
+  }
+  .model-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(52,211,153,0.5); }
+
+  /* ── Option C: Dual Hero ── */
+  .dual-hero { display: flex; gap: 12px; width: 100%; margin-top: 10px; }
+  .hero-btn {
+    flex: 1; border-radius: 14px; padding: 18px 14px;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    cursor: pointer;
+  }
+  .hero-btn.standard {
+    background: linear-gradient(160deg, rgba(52,211,153,0.08), rgba(52,211,153,0.03));
+    border: 1px solid rgba(52,211,153,0.18);
+  }
+  .hero-btn.smart {
+    background: linear-gradient(160deg, rgba(139,92,246,0.08), rgba(139,92,246,0.03));
+    border: 1px solid rgba(139,92,246,0.18);
+  }
+  .hero-icon {
+    width: 44px; height: 44px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .hero-icon.std { background: rgba(52,211,153,0.12); }
+  .hero-icon.ai  { background: rgba(139,92,246,0.12); }
+  .hero-icon svg { width: 20px; height: 20px; stroke-width: 1.75; fill: none; }
+  .hero-title { font-size: 12px; font-weight: 600; text-align: center; }
+  .hero-btn.standard .hero-title { color: rgba(52,211,153,0.85); }
+  .hero-btn.smart    .hero-title { color: rgba(167,139,250,0.85); }
+  .hero-desc { font-size: 10px; color: rgba(255,255,255,0.35); text-align: center; line-height: 1.45; }
+  .hero-key { font-size: 9px; font-family: monospace; color: rgba(255,255,255,0.2); margin-top: 2px; }
+  .divider-row { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 18px; }
+  .divider-line { flex: 1; height: 1px; background: rgba(255,255,255,0.05); }
+  .divider-label { font-size: 9px; color: rgba(255,255,255,0.2); font-family: monospace; }
+  .tips-row { display: flex; gap: 8px; width: 100%; flex-wrap: wrap; justify-content: center; margin-top: 6px; }
+  .tip-chip {
+    font-size: 9px; font-family: monospace;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 6px; padding: 3px 8px;
+    color: rgba(255,255,255,0.3);
+  }
+</style>
+
+<div class="cards">
+
+  <!-- ───────────── Option A ───────────── -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="app">
+        <div class="app-inner">
+          <div class="rec-btn">
+            <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </div>
+          <span class="hint">Press the button or use ⌘⇧V</span>
+
+          <div class="mode-cards">
+            <div class="mode-card">
+              <span class="mode-icon">🎙</span>
+              <span class="mode-title">Standard</span>
+              <span class="mode-desc">Transcribe exactly what you say, paste instantly</span>
+              <span class="mode-key">⌘⇧V</span>
+            </div>
+            <div class="mode-card ai">
+              <span class="mode-icon">✦</span>
+              <span class="mode-title">Smart Dictation</span>
+              <span class="mode-desc">AI cleans up grammar &amp; tone before pasting</span>
+              <span class="mode-key">⌘⇧B</span>
+            </div>
+          </div>
+
+          <div class="stats-strip">
+            <div class="stat"><div class="sv">12</div><div class="sl">Today</div></div>
+            <div class="stat"><div class="sv">847</div><div class="sl">Words</div></div>
+            <div class="stat"><div class="sv">3</div><div class="sl">Day streak</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Command Centre</h3>
+      <p>Record button stays on top. Below it: two mode-info cards (Standard vs Smart Dictation with their hotkeys), then a compact today-stats strip. Always informative, never empty.</p>
+    </div>
+  </div>
+
+  <!-- ───────────── Option B ───────────── -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="app">
+        <div class="app-inner">
+          <div class="rec-btn">
+            <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </div>
+          <span class="hint">Press the button or use ⌘⇧V</span>
+
+          <div class="last-card">
+            <div class="last-header">
+              <span class="last-label">Last Recording</span>
+              <span class="last-time">2 min ago · tiny.en</span>
+              <span class="last-copy">Copy ↗</span>
+            </div>
+            <div class="last-body">
+              <div class="last-text">"Schedule a sync with the design team for Thursday afternoon, and make sure to bring the revised mockups from last week's sprint review…"</div>
+            </div>
+          </div>
+
+          <div class="model-badge">
+            <div class="model-dot"></div>
+            tiny.en — active model
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Last Session</h3>
+      <p>Shows a ghost preview of your most recent transcription — faded, italic, with a timestamp and quick copy button. The active model is shown as a subtle badge below. Feels like a workspace you're coming back to.</p>
+    </div>
+  </div>
+
+  <!-- ───────────── Option C ───────────── -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="app">
+        <div class="app-inner" style="padding-top:20px;">
+          <div class="dual-hero">
+            <div class="hero-btn standard">
+              <div class="hero-icon std">
+                <svg viewBox="0 0 24 24" style="stroke:#34d399"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+              </div>
+              <span class="hero-title">Transcribe</span>
+              <span class="hero-desc">Instant word-for-word capture, pasted to any app</span>
+              <span class="hero-key">⌘⇧V</span>
+            </div>
+            <div class="hero-btn smart">
+              <div class="hero-icon ai">
+                <svg viewBox="0 0 24 24" style="stroke:#a78bfa"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+              </div>
+              <span class="hero-title">Smart Dictate</span>
+              <span class="hero-desc">AI polishes tone &amp; grammar before pasting</span>
+              <span class="hero-key">⌘⇧B</span>
+            </div>
+          </div>
+
+          <div class="divider-row">
+            <div class="divider-line"></div>
+            <span class="divider-label">tips</span>
+            <div class="divider-line"></div>
+          </div>
+          <div class="tips-row">
+            <span class="tip-chip">fn key = Push to Talk</span>
+            <span class="tip-chip">Custom vocabulary in sidebar</span>
+            <span class="tip-chip">History saved automatically</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Dual Hero</h3>
+      <p>Replaces the single button with two prominent mode cards side-by-side — tap to start recording in that mode. Below: a thin "tips" strip with rotating hints about features. No single button needed; the card tap IS the action.</p>
+    </div>
+  </div>
+
+</div>

@@ -1,0 +1,227 @@
+<h2>Navigation Architecture</h2>
+<p class="subtitle">The duplication problem — and a unified solution. Click the option you prefer.</p>
+
+<style>
+  body-ref { font-family: -apple-system, sans-serif; }
+
+  .section { margin-bottom: 28px; }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.45; margin-bottom: 12px; }
+
+  /* two-col split view */
+  .split { display: flex; gap: 16px; }
+  .pane {
+    flex: 1; border-radius: 12px; overflow: hidden;
+    background: #111816; border: 1px solid rgba(255,255,255,0.07);
+  }
+  .pane-header {
+    padding: 8px 14px; font-size: 11px; font-family: monospace;
+    background: rgba(255,255,255,0.04);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.5);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .pane-header .active-dot { width:6px;height:6px;border-radius:50%;background:#34d399; }
+  .pane-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .row-label { font-size: 11px; color: rgba(255,255,255,0.55); }
+  .tag {
+    font-size: 9px; font-family: monospace; padding: 2px 7px;
+    border-radius: 4px; white-space: nowrap;
+  }
+  .tag-green  { background: rgba(52,211,153,0.12); color: rgba(52,211,153,0.8); }
+  .tag-yellow { background: rgba(245,158,11,0.12); color: rgba(245,158,11,0.8); }
+  .tag-red    { background: rgba(239,68,68,0.10);  color: rgba(239,68,68,0.7); }
+  .tag-grey   { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.35); }
+
+  .overlap-badge {
+    display: inline-block; font-size: 9px; font-family: monospace;
+    background: rgba(239,68,68,0.12); color: rgba(239,68,68,0.7);
+    border: 1px solid rgba(239,68,68,0.2);
+    border-radius: 4px; padding: 1px 6px; margin-left: 6px;
+  }
+
+  .divider { height: 1px; background: rgba(255,255,255,0.05); margin: 4px 0; }
+
+  /* arrow */
+  .arrow-row { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 16px 0 4px; }
+  .arrow-row .arrow-label { font-size: 12px; font-weight: 600; color: rgba(52,211,153,0.7); }
+  .arrow-row .ar { font-size: 20px; color: rgba(52,211,153,0.5); }
+
+  /* unified home mockup */
+  .app {
+    font-family: -apple-system, sans-serif;
+    background: #0a0f0d; color: #e5e5e5;
+    border-radius: 12px; overflow: hidden;
+    width: 100%; max-width: 380px; margin: 0 auto;
+  }
+  .app-inner { padding: 20px 22px; display: flex; flex-direction: column; gap: 16px; }
+
+  .rec-area { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 6px 0; }
+  .rec-btn {
+    width: 68px; height: 68px; border-radius: 50%;
+    background: linear-gradient(145deg, #34d399, #2dd4bf);
+    box-shadow: 0 0 24px rgba(52,211,153,0.2), 5px 5px 12px rgba(0,0,0,0.5), -3px -3px 8px rgba(255,255,255,0.03);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .rec-btn svg { width:24px;height:24px;stroke:#0a1a12;stroke-width:2;fill:none; }
+  .rec-hint { font-size:10px;font-family:monospace;color:rgba(255,255,255,0.2); }
+
+  .stats-row {
+    display: flex; gap: 0; border-radius: 10px; overflow: hidden;
+    background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.05);
+  }
+  .stat { flex:1;padding:8px 10px;text-align:center; }
+  .stat+.stat { border-left:1px solid rgba(255,255,255,0.05); }
+  .stat .sv { font-size:14px;font-weight:700;font-family:monospace;color:rgba(52,211,153,0.75); }
+  .stat .sl { font-size:8px;font-family:monospace;text-transform:uppercase;letter-spacing:0.06em;color:rgba(255,255,255,0.25);margin-top:2px; }
+
+  .setup-row {
+    display: flex; border-radius: 10px; overflow: hidden;
+    background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.05);
+  }
+  .setup-cell { flex:1;padding:8px 12px;display:flex;align-items:center;gap:6px; }
+  .setup-cell+.setup-cell { border-left:1px solid rgba(255,255,255,0.05); }
+  .setup-cell .sc { font-size:10px;font-family:monospace;color:rgba(255,255,255,0.4);truncate:ellipsis; }
+
+  .history-preview { border-radius: 10px; overflow: hidden; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); }
+  .history-hdr { display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.05); }
+  .history-hdr .hl { font-size:9px;font-family:monospace;text-transform:uppercase;letter-spacing:0.08em;color:rgba(255,255,255,0.25); }
+  .history-hdr .ha { font-size:9px;color:rgba(52,211,153,0.5);font-family:monospace; }
+  .history-item { padding: 9px 12px; display:flex;flex-direction:column;gap:3px;border-bottom:1px solid rgba(255,255,255,0.04); }
+  .history-item:last-child { border-bottom:none; }
+  .history-text { font-size:11px;color:rgba(255,255,255,0.45);font-style:italic;
+    display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden; }
+  .history-meta { font-size:9px;font-family:monospace;color:rgba(255,255,255,0.2); }
+
+  /* option cards */
+  .options { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; }
+  .option { cursor:pointer; border-radius:14px; border:2px solid rgba(255,255,255,0.07); padding:16px 18px; }
+  .option:hover { border-color: rgba(52,211,153,0.25); }
+  .option h3 { margin: 0 0 4px; font-size:14px; }
+  .option p  { margin: 0; font-size:12px; opacity:0.55; line-height:1.5; }
+  .option .pro  { color: rgba(52,211,153,0.8); }
+  .option .con  { color: rgba(239,68,68,0.7); }
+  .option ul { margin:8px 0 0; padding:0 0 0 4px; list-style:none; display:flex;flex-direction:column;gap:4px; }
+  .option ul li { font-size:11px; display:flex;gap:6px; }
+  .option ul li::before { content:"·"; opacity:0.4; }
+</style>
+
+<!-- ── Problem: duplication ── -->
+<div class="section">
+  <div class="label">Current state — what lives where</div>
+  <div class="split">
+    <div class="pane">
+      <div class="pane-header"><div class="active-dot"></div>Home tab</div>
+      <div class="pane-body">
+        <div class="row"><span class="row-label">Stats (recordings, words, streak)</span><span class="tag tag-green">unique</span></div>
+        <div class="row"><span class="row-label">Keyboard shortcuts ⌘⇧V / ⌘⇧B</span><span class="tag tag-yellow">context</span></div>
+        <div class="row"><span class="row-label">Active mic + model</span><span class="tag tag-green">unique</span></div>
+        <div class="row"><span class="row-label">What's New release notes</span><span class="tag tag-grey">stale</span></div>
+        <div class="divider"></div>
+        <div class="row"><span class="row-label" style="opacity:0.3">Record button</span><span class="tag tag-red">missing</span></div>
+        <div class="row"><span class="row-label" style="opacity:0.3">Live transcript</span><span class="tag tag-red">missing</span></div>
+      </div>
+    </div>
+    <div class="pane">
+      <div class="pane-header">Transcribe tab</div>
+      <div class="pane-body">
+        <div class="row"><span class="row-label">Record button</span><span class="tag tag-green">unique</span></div>
+        <div class="row"><span class="row-label">Waveform + live timer</span><span class="tag tag-green">unique</span></div>
+        <div class="row"><span class="row-label">Live segment transcript</span><span class="tag tag-green">unique</span></div>
+        <div class="divider"></div>
+        <div class="row"><span class="row-label" style="opacity:0.3">Stats</span><span class="tag tag-red">missing</span></div>
+        <div class="row"><span class="row-label" style="opacity:0.3">Mic / model info</span><span class="tag tag-red">missing</span></div>
+        <div class="row"><span class="row-label" style="opacity:0.3">History preview</span><span class="tag tag-red">missing</span></div>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:10px;padding:10px 14px;border-radius:8px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.12);">
+    <span style="font-size:11px;color:rgba(239,68,68,0.7);">
+      ⚠ Neither tab is complete. Home has context but no action. Transcribe has action but no context.
+      OmWhisper works via hotkey — users rarely even open the window during recording.
+    </span>
+  </div>
+</div>
+
+<div class="arrow-row">
+  <div class="ar">↓</div>
+  <div class="arrow-label">Proposed: merge into one Home</div>
+  <div class="ar">↓</div>
+</div>
+
+<!-- ── Unified mockup ── -->
+<div class="section" style="margin-top:16px;">
+  <div class="label">Unified Home — everything in one place</div>
+  <div class="app">
+    <div class="app-inner">
+      <!-- Record -->
+      <div class="rec-area">
+        <div class="rec-btn">
+          <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </div>
+        <span class="rec-hint">⌘⇧V to dictate · ⌘⇧B for AI polish</span>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat"><div class="sv">12</div><div class="sl">Today</div></div>
+        <div class="stat"><div class="sv">847</div><div class="sl">Words</div></div>
+        <div class="stat"><div class="sv">3</div><div class="sl">Streak</div></div>
+        <div class="stat"><div class="sv">4h</div><div class="sl">Total</div></div>
+      </div>
+
+      <!-- Active setup -->
+      <div class="setup-row">
+        <div class="setup-cell">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(52,211,153,0.7)" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/></svg>
+          <span class="sc">Default Mic</span>
+        </div>
+        <div class="setup-cell">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(52,211,153,0.7)" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M8 12h8M12 8v8"/></svg>
+          <span class="sc">tiny.en</span>
+        </div>
+      </div>
+
+      <!-- Recent recordings preview -->
+      <div class="history-preview">
+        <div class="history-hdr">
+          <span class="hl">Recent</span>
+          <span class="ha">See all →</span>
+        </div>
+        <div class="history-item">
+          <div class="history-text">"Schedule a sync with the design team for Thursday…"</div>
+          <div class="history-meta">2 min ago · 14s · tiny.en</div>
+        </div>
+        <div class="history-item">
+          <div class="history-text">"Add the new API endpoint to the docs before the review…"</div>
+          <div class="history-meta">1h ago · 22s · small.en</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Choice ── -->
+<div class="label" style="margin-top:24px;">Which direction?</div>
+<div class="options">
+  <div class="option" data-choice="unified" onclick="toggleSelect(this)">
+    <h3 class="pro">✓ Unify into one Home tab</h3>
+    <p>Remove the Transcribe nav item. Home becomes the single action screen: record button + stats + mic/model + recent recordings preview. Sidebar shrinks from 6 items to 5.</p>
+    <ul>
+      <li>Matches how tray apps actually work (SuperWhisper, Whisper Transcription)</li>
+      <li>Record button lives where context lives — no tab-switching</li>
+      <li>Recent recordings fills the empty space meaningfully</li>
+      <li>"What's New" block can be removed (gets stale fast)</li>
+    </ul>
+  </div>
+  <div class="option" data-choice="keep-separate" onclick="toggleSelect(this)">
+    <h3>Keep separate tabs, enrich Transcribe</h3>
+    <p>Home stays as-is. Transcribe gets filled with Option A/B/C from the previous screen.</p>
+    <ul>
+      <li>More separation of concerns — Home = overview, Transcribe = workspace</li>
+      <li class="con">Still requires navigating to Transcribe to see the live transcript</li>
+      <li class="con">Duplicates model/mic info across both tabs</li>
+    </ul>
+  </div>
+</div>

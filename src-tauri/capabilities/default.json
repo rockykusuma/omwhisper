@@ -20,6 +20,7 @@
     "core:window:allow-set-focus",
     "core:window:allow-set-position",
     "core:window:allow-set-always-on-top",
+    "core:window:allow-start-dragging",
     "opener:allow-open-url"
   ]
 }

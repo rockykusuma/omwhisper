@@ -188,7 +188,7 @@ export default function Onboarding({ onComplete }: Props) {
       <p className="text-white/50 text-sm leading-relaxed mb-2" style={{ fontFamily: "'DM Sans', sans-serif" }}>
         OmWhisper uses OpenAI's Whisper model running locally on your Mac. Let's download the tiny model to get started.
       </p>
-      <p className="text-white/25 text-xs mb-8" style={{ fontFamily: "'DM Mono', monospace" }}>
+      <p className="text-white/40 text-xs mb-8" style={{ fontFamily: "'DM Mono', monospace" }}>
         tiny.en · 75 MB · Fastest model
       </p>
 
@@ -210,7 +210,7 @@ export default function Onboarding({ onComplete }: Props) {
             <div className="h-full bg-emerald-400 rounded-full transition-all duration-300"
               style={{ width: `${downloadProgress * 100}%` }} />
           </div>
-          <p className="text-white/20 text-xs mt-2 text-center" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+          <p className="text-white/35 text-xs mt-2 text-center" style={{ fontFamily: "'DM Sans', sans-serif" }}>
             Verifying SHA256…
           </p>
         </div>
@@ -234,7 +234,7 @@ export default function Onboarding({ onComplete }: Props) {
           ✗ {downloadError}
         </p>
       )}
-      <p className="text-white/20 text-xs mt-6" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+      <p className="text-white/35 text-xs mt-6" style={{ fontFamily: "'DM Sans', sans-serif" }}>
         You can download larger models later in Settings → Models
       </p>
     </div>

@@ -49,27 +49,91 @@ pub fn get_frontmost_app() -> Option<String> {
 /// Bring an app to front and paste from clipboard (macOS only).
 #[cfg(target_os = "macos")]
 pub fn paste_to_app(app_name: &str) -> Result<()> {
+    use std::os::raw::{c_int, c_uint, c_void};
+
+    // CoreGraphics types and constants
+    type CGEventRef = *mut c_void;
+    type CGEventSourceRef = *mut c_void;
+    type CGKeyCode = u16;
+    type CGEventFlags = u64;
+    type CGEventTapLocation = c_uint;
+
+    const K_VK_ANSI_V: CGKeyCode = 0x09;
+    const K_CG_EVENT_FLAG_MASK_COMMAND: CGEventFlags = 0x00100000;
+    const K_CG_HID_EVENT_TAP: CGEventTapLocation = 0;
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGEventCreateKeyboardEvent(
+            source: CGEventSourceRef,
+            virtualKey: CGKeyCode,
+            keyDown: c_int,
+        ) -> CGEventRef;
+        fn CGEventSetFlags(event: CGEventRef, flags: CGEventFlags);
+        fn CGEventPost(tap: CGEventTapLocation, event: CGEventRef);
+    }
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFRelease(cf: *mut c_void);
+    }
+
     // Give a brief moment for the recording to fully stop
     std::thread::sleep(std::time::Duration::from_millis(200));
 
-    let script = format!(
-        r#"tell application "{}" to activate
-delay 0.15
-tell application "System Events"
-    keystroke "v" using command down
-end tell"#,
+    // Activate target app via osascript (no Accessibility needed for activation)
+    let activate_script = format!(
+        r#"tell application "{}" to activate"#,
         app_name.replace('"', "\\\"")
     );
-
-    let output = std::process::Command::new("osascript")
+    let _ = std::process::Command::new("osascript")
         .arg("-e")
-        .arg(&script)
-        .output()?;
+        .arg(&activate_script)
+        .output();
 
-    if !output.status.success() {
-        let err = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("AppleScript error: {}", err);
+    // Wait for the app to come to front
+    std::thread::sleep(std::time::Duration::from_millis(300));
+
+    // Check if Accessibility is actually granted for this process
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXIsProcessTrusted() -> bool;
     }
+    let trusted = unsafe { AXIsProcessTrusted() };
+    tracing::info!("paste_to_app: AXIsProcessTrusted={}", trusted);
+    if !trusted {
+        return Err(anyhow::anyhow!("OmWhisper does not have Accessibility permission — grant it in System Settings → Privacy → Accessibility"));
+    }
+
+    // Send Cmd+V via raw CGEventPost — works from any thread, no HIToolbox query
+    unsafe {
+        // Key down
+        let event_down = CGEventCreateKeyboardEvent(
+            std::ptr::null_mut(),
+            K_VK_ANSI_V,
+            1, // keyDown = true
+        );
+        if event_down.is_null() {
+            return Err(anyhow::anyhow!("CGEventCreateKeyboardEvent (down) returned null"));
+        }
+        CGEventSetFlags(event_down, K_CG_EVENT_FLAG_MASK_COMMAND);
+        CGEventPost(K_CG_HID_EVENT_TAP, event_down);
+        CFRelease(event_down);
+
+        // Key up
+        let event_up = CGEventCreateKeyboardEvent(
+            std::ptr::null_mut(),
+            K_VK_ANSI_V,
+            0, // keyDown = false
+        );
+        if event_up.is_null() {
+            return Err(anyhow::anyhow!("CGEventCreateKeyboardEvent (up) returned null"));
+        }
+        CGEventSetFlags(event_up, K_CG_EVENT_FLAG_MASK_COMMAND);
+        CGEventPost(K_CG_HID_EVENT_TAP, event_up);
+        CFRelease(event_up);
+    }
+
     Ok(())
 }
 

@@ -14,6 +14,9 @@ pub struct TranscriptionState {
     pub usage_running: Arc<AtomicBool>,
     /// True when the current recording was started via the Smart Dictation hotkey.
     pub is_smart_dictation: bool,
+    /// Set by stop_transcription when capture is None (key released during startup delay).
+    /// Causes start_transcription to abort after the sound delay.
+    pub start_cancelled: bool,
 }
 
 impl TranscriptionState {
@@ -22,6 +25,7 @@ impl TranscriptionState {
             capture: None,
             usage_running: Arc::new(AtomicBool::new(false)),
             is_smart_dictation: false,
+            start_cancelled: false,
         }
     }
 }
@@ -36,17 +40,22 @@ fn resolve_model_path(model_path: &str) -> PathBuf {
     if p.is_absolute() {
         return p.to_path_buf();
     }
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe| {
-            // debug/  ->  target/  ->  src-tauri/  ->  project root
-            exe.parent()?
-                .parent()?
-                .parent()?
-                .parent()
-                .map(|root| root.join(model_path))
-        })
-        .unwrap_or_else(|| p.to_path_buf())
+    // 1. App data dir (production + bundle dev)
+    if let Some(data_dir) = dirs::data_local_dir() {
+        let prod = data_dir.join("com.omwhisper.app").join(model_path);
+        if prod.exists() {
+            return prod;
+        }
+    }
+    // 2. Walk up from exe (cargo tauri dev: debug/ -> target/ -> src-tauri/ -> project root)
+    if let Some(dev) = std::env::current_exe().ok().and_then(|exe| {
+        exe.parent()?.parent()?.parent()?.parent().map(|r| r.join(model_path))
+    }) {
+        if dev.exists() {
+            return dev;
+        }
+    }
+    p.to_path_buf()
 }
 
 #[tauri::command]
@@ -94,6 +103,29 @@ pub async fn start_transcription(
         }
     }
 
+    // Clear any cancellation from a previous quick tap before we begin.
+    state.lock().unwrap().start_cancelled = false;
+
+    // Load settings and play start chime BEFORE the mic starts,
+    // then wait briefly so the chime finishes and room echo clears.
+    let settings = crate::settings::load_settings().await;
+    let initial_prompt = build_initial_prompt(&settings.custom_vocabulary);
+    let word_replacements = settings.word_replacements.clone();
+    let language = settings.language.clone();
+    let sound_enabled = settings.sound_enabled;
+    let sound_volume = settings.sound_volume;
+
+    if sound_enabled {
+        crate::sounds::play(crate::sounds::Sound::Start, sound_volume);
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+
+    // PTT: if the key was released during the sound delay, abort.
+    if state.lock().unwrap().start_cancelled {
+        state.lock().unwrap().start_cancelled = false;
+        return Ok(());
+    }
+
     // Build capture object and start the audio pipeline.
     let capture = AudioCapture::new();
     let (speech_rx, level_rx) = capture.start().map_err(|e| e.to_string())?;
@@ -107,17 +139,6 @@ pub async fn start_transcription(
     };
 
     let model_path = resolve_model_path(&model);
-    let settings = crate::settings::load_settings().await;
-    let initial_prompt = build_initial_prompt(&settings.custom_vocabulary);
-    let word_replacements = settings.word_replacements.clone();
-    let language = settings.language.clone();
-    let sound_enabled = settings.sound_enabled;
-    let sound_volume = settings.sound_volume;
-
-    // Play start chime
-    if sound_enabled {
-        crate::sounds::play(crate::sounds::Sound::Start, sound_volume);
-    }
 
     // Spawn a thread to forward RMS level events to the frontend.
     let app_for_level = app.clone();
@@ -186,6 +207,8 @@ pub async fn start_transcription(
                 }
             }
         }
+        // All audio chunks have been processed — signal the frontend to paste/save
+        let _ = app.emit("transcription-complete", ());
     });
 
     Ok(())
@@ -198,6 +221,9 @@ pub async fn stop_transcription(state: tauri::State<'_, SharedState>) -> Result<
         s.usage_running.store(false, Ordering::SeqCst);
         if let Some(capture) = s.capture.take() {
             capture.stop();
+        } else {
+            // Key released before capture started (during sound delay) — signal start to abort.
+            s.start_cancelled = true;
         }
     } // MutexGuard dropped here before the await below
 
@@ -298,6 +324,10 @@ fn previous_app() -> &'static Mutex<Option<String>> {
     PREVIOUS_APP.get_or_init(|| Mutex::new(None))
 }
 
+pub fn get_previous_app() -> &'static Mutex<Option<String>> {
+    previous_app()
+}
+
 #[tauri::command]
 pub async fn capture_focused_app() -> Result<Option<String>, String> {
     let app_name = paste::get_frontmost_app();
@@ -325,14 +355,23 @@ pub async fn paste_transcription(text: String) -> Result<(), String> {
             let guard = previous_app().lock().unwrap();
             guard.clone()
         };
+        tracing::info!("paste_transcription: previous_app={:?}", app_name);
         if let Some(name) = app_name {
             if !name.to_lowercase().contains("omwhisper") {
-                tokio::task::spawn_blocking(move || {
+                let result = tokio::task::spawn_blocking(move || {
                     paste::paste_to_app(&name).map_err(|e| e.to_string())
                 })
                 .await
-                .map_err(|e| e.to_string())??;
+                .map_err(|e| e.to_string())?;
+                if let Err(e) = result {
+                    tracing::error!("paste_to_app failed: {}", e);
+                    // Don't propagate — clipboard is already set, user can paste manually
+                }
+            } else {
+                tracing::info!("paste_transcription: skipping paste — app is OmWhisper");
             }
+        } else {
+            tracing::warn!("paste_transcription: no previous_app captured");
         }
     }
 
@@ -367,8 +406,10 @@ pub async fn get_settings() -> Result<Settings, String> {
 }
 
 #[tauri::command]
-pub async fn update_settings(new_settings: Settings) -> Result<(), String> {
-    settings::save_settings(&new_settings).await.map_err(|e| e.to_string())
+pub async fn update_settings(app: tauri::AppHandle, new_settings: Settings) -> Result<(), String> {
+    settings::save_settings(&new_settings).await.map_err(|e| e.to_string())?;
+    let _ = app.emit("settings-changed", ());
+    Ok(())
 }
 
 #[tauri::command]
@@ -405,17 +446,44 @@ pub async fn complete_onboarding() -> Result<(), String> {
 #[tauri::command]
 pub async fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
     use tauri::Manager;
+    let settings = crate::settings::load_settings().await;
     if let Some(win) = app.get_webview_window("overlay") {
-        // Position near top-center of screen
         if let Ok(Some(monitor)) = win.current_monitor() {
-            let screen_size = monitor.size();
-            let win_width = 320u32;
-            let x = (screen_size.width as i32 - win_width as i32) / 2;
-            let y = 60i32;
+            let scale  = monitor.scale_factor();
+            let screen = monitor.size();    // physical pixels
+            let origin = monitor.position(); // physical top-left of this monitor
+
+            // Window logical dimensions → physical
+            let (win_w, win_h) = if settings.overlay_style == "waveform" {
+                ((280.0 * scale) as i32, (100.0 * scale) as i32)
+            } else {
+                ((110.0 * scale) as i32, (44.0 * scale) as i32)
+            };
+
+            // Logical-pixel margins → physical
+            // top: just below the macOS menu bar (~24 logical px)
+            // bottom: above the macOS Dock (~70 logical px tall by default)
+            // side: small inset from screen edge
+            let top_margin    = (28.0 * scale) as i32;
+            let bottom_margin = (84.0 * scale) as i32;
+            let side_margin   = (16.0 * scale) as i32;
+
+            let sw = screen.width as i32;
+            let sh = screen.height as i32;
+            let ox = origin.x;
+            let oy = origin.y;
+
+            let (x, y) = match settings.overlay_placement.as_str() {
+                "top-left"      => (ox + side_margin, oy + top_margin),
+                "top-right"     => (ox + sw - win_w - side_margin, oy + top_margin),
+                "bottom-center" => (ox + (sw - win_w) / 2, oy + sh - win_h - bottom_margin),
+                "bottom-left"   => (ox + side_margin, oy + sh - win_h - bottom_margin),
+                "bottom-right"  => (ox + sw - win_w - side_margin, oy + sh - win_h - bottom_margin),
+                _               => (ox + (sw - win_w) / 2, oy + top_margin), // top-center default
+            };
             let _ = win.set_position(tauri::PhysicalPosition { x, y });
         }
         win.show().map_err(|e| e.to_string())?;
-        win.set_focus().map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -552,6 +620,8 @@ pub struct LicenseInfoPayload {
 
 #[tauri::command]
 pub fn get_license_status() -> String {
+    #[cfg(debug_assertions)]
+    { return "Licensed".to_string(); }
     match crate::license::get_status() {
         crate::license::LicenseStatus::Licensed => "Licensed".to_string(),
         crate::license::LicenseStatus::GracePeriod => "GracePeriod".to_string(),
@@ -808,4 +878,85 @@ pub fn get_cloud_api_key_status() -> bool {
 #[tauri::command]
 pub fn delete_cloud_api_key_cmd() -> Result<(), String> {
     crate::ai::delete_cloud_api_key().map_err(|e| e.to_string())
+}
+
+// ─── Model Recommendation ────────────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct SystemSpec {
+    pub total_ram_gb: f64,
+    pub cpu_brand: String,
+    pub cpu_cores: usize,
+    pub is_apple_silicon: bool,
+}
+
+#[derive(serde::Serialize)]
+pub struct ModelRecommendation {
+    pub recommended_model: String,
+    pub reason: String,
+    pub spec: SystemSpec,
+}
+
+#[tauri::command]
+pub fn get_model_recommendation() -> ModelRecommendation {
+    use sysinfo::System;
+
+    let mut sys = System::new_all();
+    sys.refresh_all();
+
+    let total_ram_bytes = sys.total_memory();
+    let total_ram_gb = total_ram_bytes as f64 / 1_073_741_824.0; // bytes → GB
+
+    let cpu_brand = sys.cpus().first().map(|c| c.brand().to_string()).unwrap_or_default();
+    let cpu_cores = sys.cpus().len();
+
+    // Apple Silicon: brand string contains "Apple"
+    let is_apple_silicon = cpu_brand.contains("Apple");
+
+    let (recommended_model, reason) = recommend_model(total_ram_gb, is_apple_silicon, cpu_cores);
+
+    ModelRecommendation {
+        recommended_model,
+        reason,
+        spec: SystemSpec {
+            total_ram_gb: (total_ram_gb * 10.0).round() / 10.0,
+            cpu_brand,
+            cpu_cores,
+            is_apple_silicon,
+        },
+    }
+}
+
+fn recommend_model(ram_gb: f64, is_apple_silicon: bool, _cores: usize) -> (String, String) {
+    if is_apple_silicon {
+        // Apple Silicon — Metal acceleration makes larger models practical
+        if ram_gb >= 24.0 {
+            ("large-v3".to_string(),
+             format!("Your Apple Silicon Mac with {:.0}GB unified memory can run the highest-quality model at full speed via Metal GPU acceleration.", ram_gb))
+        } else if ram_gb >= 16.0 {
+            ("medium.en".to_string(),
+             format!("Your Apple Silicon Mac with {:.0}GB unified memory is ideal for medium.en — excellent accuracy with fast Metal inference.", ram_gb))
+        } else if ram_gb >= 8.0 {
+            ("small.en".to_string(),
+             format!("Your Apple Silicon Mac with {:.0}GB unified memory runs small.en beautifully — a great balance of speed and accuracy.", ram_gb))
+        } else {
+            ("base.en".to_string(),
+             format!("Your Apple Silicon Mac with {:.0}GB unified memory will run base.en quickly — solid accuracy for everyday use.", ram_gb))
+        }
+    } else {
+        // Intel / other — CPU-only inference, RAM is more limiting
+        if ram_gb >= 32.0 {
+            ("medium.en".to_string(),
+             format!("Your Mac with {:.0}GB RAM can comfortably run medium.en — high accuracy for important recordings.", ram_gb))
+        } else if ram_gb >= 16.0 {
+            ("small.en".to_string(),
+             format!("Your Mac with {:.0}GB RAM is well-suited for small.en — a reliable mix of speed and accuracy.", ram_gb))
+        } else if ram_gb >= 8.0 {
+            ("base.en".to_string(),
+             format!("Your Mac with {:.0}GB RAM is a good fit for base.en — faster than small.en with solid results.", ram_gb))
+        } else {
+            ("tiny.en".to_string(),
+             format!("Your Mac has {:.0}GB RAM; tiny.en keeps resource usage low while still delivering usable transcription.", ram_gb))
+        }
+    }
 }

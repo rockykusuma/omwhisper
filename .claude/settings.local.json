@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /Users/rakeshkusuma/Documents/PersonalProjects/omwhisper/models && curl -L --progress-bar -o /Users/rakeshkusuma/Documents/PersonalProjects/omwhisper/models/ggml-tiny.en.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin 2>&1)",
+      "Bash(npm install:*)",
+      "Bash(cargo build:*)",
+      "Bash(which rsvg-convert:*)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/ggerganov/whisper.cpp/master/models/download-ggml-model.sh\" | grep -A2 \"tiny.en\\\\|base.en\\\\|small.en\\\\|medium.en\\\\|large-v3\" | head -40)",
+      "Bash(curl -sI \"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin\" 2>/dev/null | grep -i \"x-linked-etag\" | head -2)",
+      "Bash(pkill -f \"target/debug/omwhisper\" 2>/dev/null; pkill -f \"vite\" 2>/dev/null; sleep 2 && cargo tauri dev 2>&1 | grep -E \"Finished|Running|^error\\\\[\" | head -5)",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(git add:*)",
+      "Bash(pkill -f omwhisper 2>/dev/null; sleep 1 && cargo tauri dev 2>&1)",
+      "Bash(lsof -ti :5173 | xargs kill -9 2>/dev/null; pkill -f \"cargo run\" 2>/dev/null; pkill -f \"omwhisper\" 2>/dev/null; echo \"done\")",
+      "Bash(cargo tauri:*)",
+      "Bash(lsof -ti :5173 | xargs kill -9 2>/dev/null; pkill -f \"target/debug/omwhisper\" 2>/dev/null; echo \"done\")",
+      "Bash(lsof -ti :5173 | xargs kill -9 2>/dev/null; pkill -f \"target/debug/omwhisper\" 2>/dev/null; sleep 2 && cargo tauri dev 2>&1)",
+      "Bash(lsof -ti :5173 | xargs kill -9 2>/dev/null; pkill -f \"cargo tauri dev\" 2>/dev/null; pkill -f \"omwhisper\" 2>/dev/null; sleep 1; echo \"Processes killed\")",
+      "Bash(pkill:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}

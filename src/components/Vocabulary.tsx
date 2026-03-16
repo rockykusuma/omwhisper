@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { X } from "lucide-react";
+import { useToast } from "../hooks/useToast";
+import { logger } from "../utils/logger";
 
 interface VocabData {
   words: string[];
@@ -12,12 +14,12 @@ export default function Vocabulary() {
   const [newWord, setNewWord] = useState("");
   const [newFrom, setNewFrom] = useState("");
   const [newTo, setNewTo] = useState("");
-  const [toast, setToast] = useState<string | null>(null);
-
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2000);
-  }
+  const { toast, showToast } = useToast(2000);
+  const [editingWord, setEditingWord] = useState<string | null>(null);
+  const [editingWordInput, setEditingWordInput] = useState("");
+  const [editingReplacement, setEditingReplacement] = useState<string | null>(null);
+  const [editingFromInput, setEditingFromInput] = useState("");
+  const [editingToInput, setEditingToInput] = useState("");
 
   async function load() {
     const result = await invoke<VocabData>("get_vocabulary").catch(() => ({ words: [], replacements: {} }));
@@ -29,22 +31,32 @@ export default function Vocabulary() {
   async function handleAddWord() {
     const word = newWord.trim();
     if (!word) return;
-    await invoke("add_vocabulary_word", { word }).catch(() => {});
+    await invoke("add_vocabulary_word", { word }).catch((e) => logger.debug("add_vocabulary_word:", e));
     setNewWord("");
     await load();
     showToast(`Added "${word}"`);
   }
 
   async function handleRemoveWord(word: string) {
-    await invoke("remove_vocabulary_word", { word }).catch(() => {});
+    await invoke("remove_vocabulary_word", { word }).catch((e) => logger.debug("remove_vocabulary_word:", e));
     await load();
+  }
+
+  async function handleSaveWordEdit(oldWord: string, newWord: string) {
+    const trimmed = newWord.trim();
+    if (!trimmed || trimmed === oldWord) { setEditingWord(null); return; }
+    await invoke("remove_vocabulary_word", { word: oldWord }).catch((e) => logger.debug("remove_vocabulary_word:", e));
+    await invoke("add_vocabulary_word", { word: trimmed }).catch((e) => logger.debug("add_vocabulary_word:", e));
+    setEditingWord(null);
+    await load();
+    showToast(`Updated "${trimmed}"`);
   }
 
   async function handleAddReplacement() {
     const from = newFrom.trim();
     const to = newTo.trim();
     if (!from || !to) return;
-    await invoke("add_word_replacement", { from, to }).catch(() => {});
+    await invoke("add_word_replacement", { from, to }).catch((e) => logger.debug("add_word_replacement:", e));
     setNewFrom("");
     setNewTo("");
     await load();
@@ -52,8 +64,23 @@ export default function Vocabulary() {
   }
 
   async function handleRemoveReplacement(from: string) {
-    await invoke("remove_word_replacement", { from }).catch(() => {});
+    await invoke("remove_word_replacement", { from }).catch((e) => logger.debug("remove_word_replacement:", e));
     await load();
+  }
+
+  async function handleSaveReplacementEdit(oldFrom: string, newFrom: string, newTo: string) {
+    const trimFrom = newFrom.trim();
+    const trimTo = newTo.trim();
+    if (!trimFrom || !trimTo) { setEditingReplacement(null); return; }
+    if (trimFrom === oldFrom && trimTo === data.replacements[oldFrom]) {
+      setEditingReplacement(null);
+      return;
+    }
+    await invoke("remove_word_replacement", { from: oldFrom }).catch((e) => logger.debug("remove_word_replacement:", e));
+    await invoke("add_word_replacement", { from: trimFrom, to: trimTo }).catch((e) => logger.debug("add_word_replacement:", e));
+    setEditingReplacement(null);
+    await load();
+    showToast("Replacement updated");
   }
 
   const replacementEntries = Object.entries(data.replacements);
@@ -63,17 +90,17 @@ export default function Vocabulary() {
       {/* Header */}
       <div>
         <h2 className="text-xl font-bold text-white/90">Vocabulary</h2>
-        <p className="text-white/30 text-xs mt-1 font-mono">
+        <p className="text-white/50 text-xs mt-1 font-mono">
           Teach Whisper how to spell names, brands, and jargon
         </p>
       </div>
 
       {/* Custom Words */}
       <div>
-        <h3 className="text-white/30 text-[10px] uppercase tracking-widest mb-3 font-mono">
+        <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-3 font-mono">
           Custom Words
         </h3>
-        <p className="text-white/25 text-xs mb-3 leading-relaxed">
+        <p className="text-white/40 text-xs mb-3 leading-relaxed">
           Add proper names, acronyms, or technical terms. Whisper will prefer these exact spellings.
         </p>
         <div className="card p-4 space-y-3">
@@ -85,7 +112,7 @@ export default function Vocabulary() {
               onChange={(e) => setNewWord(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAddWord()}
               placeholder="e.g. OmWhisper, Rakesh, CUDA…"
-              className="flex-1 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white/80 text-sm placeholder:text-white/20 outline-none focus:border-emerald-500/40 transition-colors font-mono"
+              className="flex-1 rounded-xl px-3 py-2 text-white/75 text-sm placeholder:text-white/25 outline-none font-mono" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
               aria-label="Add custom word"
             />
             <button
@@ -100,34 +127,55 @@ export default function Vocabulary() {
           {/* Word list */}
           {data.words.length > 0 ? (
             <div className="flex flex-wrap gap-2 pt-1">
-              {data.words.map((word) => (
-                <span
-                  key={word}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.06] border border-white/[0.08] text-white/70 text-xs font-mono"
-                >
-                  {word}
-                  <button
-                    onClick={() => handleRemoveWord(word)}
-                    className="text-white/30 hover:text-red-400 transition-colors cursor-pointer"
-                    aria-label={`Remove ${word}`}
+              {data.words.map((word) =>
+                editingWord === word ? (
+                  <span key={word} className="flex items-center gap-1 px-2 py-0.5 rounded-full" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={editingWordInput}
+                      onChange={(e) => setEditingWordInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSaveWordEdit(word, editingWordInput);
+                        if (e.key === "Escape") setEditingWord(null);
+                      }}
+                      onBlur={() => setEditingWord(null)}
+                      className="bg-transparent outline-none text-white/75 text-xs font-mono w-24"
+                      aria-label={`Edit ${word}`}
+                    />
+                  </span>
+                ) : (
+                  <span
+                    key={word}
+                    onClick={() => { setEditingWord(word); setEditingWordInput(word); }}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-full text-white/65 text-xs font-mono cursor-pointer transition-opacity"
+                    style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
+                    title="Click to edit"
                   >
-                    <X size={11} />
-                  </button>
-                </span>
-              ))}
+                    {word}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleRemoveWord(word); }}
+                      className="text-white/50 hover:text-red-400 transition-colors cursor-pointer"
+                      aria-label={`Remove ${word}`}
+                    >
+                      <X size={11} />
+                    </button>
+                  </span>
+                )
+              )}
             </div>
           ) : (
-            <p className="text-white/15 text-xs font-mono">No custom words yet</p>
+            <p className="text-white/50 text-xs font-mono">No custom words yet</p>
           )}
         </div>
       </div>
 
       {/* Auto-Replacements */}
       <div>
-        <h3 className="text-white/30 text-[10px] uppercase tracking-widest mb-3 font-mono">
+        <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-3 font-mono">
           Auto-Replacements
         </h3>
-        <p className="text-white/25 text-xs mb-3 leading-relaxed">
+        <p className="text-white/40 text-xs mb-3 leading-relaxed">
           Replace words automatically after transcription. Case-insensitive, whole-word matching.
         </p>
         <div className="card p-4 space-y-3">
@@ -138,17 +186,17 @@ export default function Vocabulary() {
               value={newFrom}
               onChange={(e) => setNewFrom(e.target.value)}
               placeholder="Replace…"
-              className="flex-1 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white/80 text-sm placeholder:text-white/20 outline-none focus:border-emerald-500/40 transition-colors font-mono"
+              className="flex-1 rounded-xl px-3 py-2 text-white/75 text-sm placeholder:text-white/25 outline-none font-mono" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
               aria-label="Word to replace"
             />
-            <span className="text-white/20 text-sm shrink-0">→</span>
+            <span className="text-white/35 text-sm shrink-0">→</span>
             <input
               type="text"
               value={newTo}
               onChange={(e) => setNewTo(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAddReplacement()}
               placeholder="With…"
-              className="flex-1 bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2 text-white/80 text-sm placeholder:text-white/20 outline-none focus:border-emerald-500/40 transition-colors font-mono"
+              className="flex-1 rounded-xl px-3 py-2 text-white/75 text-sm placeholder:text-white/25 outline-none font-mono" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
               aria-label="Replacement word"
             />
             <button
@@ -163,38 +211,71 @@ export default function Vocabulary() {
           {/* Replacement list */}
           {replacementEntries.length > 0 ? (
             <div className="space-y-2 pt-1">
-              {replacementEntries.map(([from, to]) => (
-                <div
-                  key={from}
-                  className="flex items-center gap-3 py-1.5 px-3 rounded-xl bg-white/[0.03] border border-white/[0.05]"
-                >
-                  <span className="text-white/50 text-xs font-mono flex-1">{from}</span>
-                  <span className="text-white/20 text-xs">→</span>
-                  <span className="text-emerald-400/70 text-xs font-mono flex-1">{to}</span>
-                  <button
-                    onClick={() => handleRemoveReplacement(from)}
-                    className="text-white/20 hover:text-red-400 transition-colors cursor-pointer ml-1"
-                    aria-label={`Remove replacement for ${from}`}
+              {replacementEntries.map(([from, to]) =>
+                editingReplacement === from ? (
+                  <div key={from} className="flex items-center gap-2 py-1.5 px-3 rounded-xl" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={editingFromInput}
+                      onChange={(e) => setEditingFromInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSaveReplacementEdit(from, editingFromInput, editingToInput);
+                        if (e.key === "Escape") setEditingReplacement(null);
+                      }}
+                      className="bg-transparent outline-none text-white/60 text-xs font-mono flex-1"
+                      aria-label="Edit source word"
+                    />
+                    <span className="text-white/35 text-xs shrink-0">→</span>
+                    <input
+                      type="text"
+                      value={editingToInput}
+                      onChange={(e) => setEditingToInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSaveReplacementEdit(from, editingFromInput, editingToInput);
+                        if (e.key === "Escape") setEditingReplacement(null);
+                      }}
+                      onBlur={() => setEditingReplacement(null)}
+                      className="bg-transparent outline-none text-emerald-400/70 text-xs font-mono flex-1"
+                      aria-label="Edit replacement word"
+                    />
+                  </div>
+                ) : (
+                  <div
+                    key={from}
+                    className="flex items-center gap-3 py-1.5 px-3 rounded-xl cursor-pointer"
+                    style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                    onClick={() => { setEditingReplacement(from); setEditingFromInput(from); setEditingToInput(to); }}
+                    title="Click to edit"
                   >
-                    <X size={12} />
-                  </button>
-                </div>
-              ))}
+                    <span className="text-white/50 text-xs font-mono flex-1">{from}</span>
+                    <span className="text-white/35 text-xs">→</span>
+                    <span className="text-emerald-400/70 text-xs font-mono flex-1">{to}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleRemoveReplacement(from); }}
+                      className="text-white/35 hover:text-red-400 transition-colors cursor-pointer ml-1"
+                      aria-label={`Remove replacement for ${from}`}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                )
+              )}
             </div>
           ) : (
-            <p className="text-white/15 text-xs font-mono">No replacements yet</p>
+            <p className="text-white/50 text-xs font-mono">No replacements yet</p>
           )}
         </div>
       </div>
 
       {/* Examples hint */}
-      <div className="text-white/15 text-xs leading-relaxed font-mono space-y-0.5">
+      <div className="text-white/50 text-xs leading-relaxed font-mono space-y-0.5">
         <p>Examples: "okay" → "OK" · "gonna" → "going to" · "OmWhisper" as custom word</p>
       </div>
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono pointer-events-none z-50">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-xl text-emerald-400 text-xs font-mono pointer-events-none z-50" style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm), 0 0 16px rgba(52,211,153,0.15)" }}>
           {toast}
         </div>
       )}

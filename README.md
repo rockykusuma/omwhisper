@@ -1,4 +1,4 @@
-# ॐ OmWhisper
+# ॐ Whisper
 
 > Your voice, transcribed instantly. Private by design.
 

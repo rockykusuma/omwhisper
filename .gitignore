@@ -40,19 +40,6 @@ npm-debug.log*
 # Testing
 coverage/
 
-# Claude context & prompt files
-CLAUDE.md
-CLAUDE_CODE_PROMPTS*.md
-
-# Claude Code internals
-.claude/
-.agents/
-skills-lock.json
-
-# Internal docs & competitor research
-docs/
-inspiration/
-
 # Misc
 *.dmg
 *.app
