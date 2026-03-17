@@ -28,9 +28,19 @@ impl SpeechAnalyzerEngine {
     /// Blocks until all segments are returned via the Swift callback.
     ///
     /// # Concurrency
-    /// DispatchSemaphore provides acquire/release semantics on Apple platforms.
-    /// After the FFI call returns, all callback writes to `segments` are visible —
-    /// no additional fence is needed.
+    /// This function is sound only because `apple_transcribe_buffer` is synchronous:
+    /// the Swift shim uses `DispatchSemaphore.wait()` to block the calling thread until
+    /// all callbacks have fired before returning. The raw `segments_ptr` passed as
+    /// context is a live exclusive borrow — no other reference to `segments` exists
+    /// while callbacks can fire.
+    ///
+    /// **Do not change the Swift shim to call back asynchronously** — that would
+    /// allow `segment_callback` to write through `segments_ptr` after `transcribe`
+    /// returns, causing undefined behaviour.
+    ///
+    /// DispatchSemaphore also provides acquire/release semantics on Apple platforms,
+    /// so after the FFI call returns, all callback writes are visible without an
+    /// additional fence.
     pub fn transcribe(&self, audio: &[f32]) -> anyhow::Result<Vec<crate::whisper::engine::Segment>> {
         use std::os::raw::c_void;
         use std::ffi::CStr;
