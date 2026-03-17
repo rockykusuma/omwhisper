@@ -10,6 +10,7 @@ mod sounds;
 mod ai;
 mod styles;
 mod analytics;
+mod engine;
 #[cfg(target_os = "macos")]
 mod fn_key;
 #[cfg(target_os = "macos")]
