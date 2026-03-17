@@ -85,6 +85,7 @@ export default function TipsSection({ onNavigate }: TipsSectionProps) {
           </button>
           {i < TIPS.length - 1 && (
             <div
+              data-testid="tip-divider"
               className="mx-4"
               style={{ height: "1px", background: "color-mix(in srgb, var(--t1) 6%, transparent)" }}
             />

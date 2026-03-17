@@ -51,6 +51,12 @@ describe("TipsSection", () => {
     expect(mockNavigate).toHaveBeenCalledWith("vocabulary");
   });
 
+  it("clicking Word Replacements navigates to vocabulary", async () => {
+    render(<TipsSection onNavigate={mockNavigate} />);
+    await userEvent.click(screen.getByText("Word Replacements").closest("button")!);
+    expect(mockNavigate).toHaveBeenCalledWith("vocabulary");
+  });
+
   it("clicking History & Export navigates to history", async () => {
     render(<TipsSection onNavigate={mockNavigate} />);
     await userEvent.click(screen.getByText("History & Export").closest("button")!);
@@ -58,9 +64,9 @@ describe("TipsSection", () => {
   });
 
   it("renders 6 dividers between 7 tips", () => {
-    const { container } = render(<TipsSection onNavigate={mockNavigate} />);
-    // Each divider is a 1px-height div with mx-4
-    const dividers = container.querySelectorAll(".mx-4");
+    render(<TipsSection onNavigate={mockNavigate} />);
+    // Each divider is a 1px-height div with tip-divider testid
+    const dividers = screen.getAllByTestId("tip-divider");
     expect(dividers).toHaveLength(6);
   });
 });
