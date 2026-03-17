@@ -970,14 +970,17 @@ pub async fn get_ollama_models() -> Vec<String> {
 pub async fn polish_text_cmd(
     text: String,
     style: String,
+    force_builtin: Option<bool>,
     app: tauri::AppHandle,
 ) -> Result<String, String> {
     use tauri::Manager;
     let settings = crate::settings::load_settings().await;
 
+    let use_builtin = force_builtin == Some(true) || settings.ai_backend == "built_in";
+
     // built_in is intercepted here — ai::polish has no access to managed state
     #[cfg(target_os = "macos")]
-    if settings.ai_backend == "built_in" {
+    if use_builtin {
         let engine_state = app.state::<LlmEngineState>();
         let vocab = settings.custom_vocabulary.clone();
         let result: anyhow::Result<String> = {
@@ -991,7 +994,7 @@ pub async fn polish_text_cmd(
     }
 
     #[cfg(not(target_os = "macos"))]
-    if settings.ai_backend == "built_in" {
+    if use_builtin {
         return Err("On-Device LLM is not available on this platform".to_string());
     }
 
