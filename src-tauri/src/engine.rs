@@ -53,25 +53,22 @@ impl TranscriptionEngine {
     }
 }
 
-// SpeechAnalyzerEngine is zero-sized and explicitly Send (see speech_analyzer.rs).
-// WhisperEngine auto-derives Send (no raw pointers in its fields).
-// TranscriptionEngine must be Send to be moved into std::thread::spawn.
-#[cfg(target_os = "macos")]
+// SAFETY: All contained types are Send.
+// - SpeechAnalyzerEngine: explicitly `unsafe impl Send` (zero-sized, no shared state)
+// - WhisperEngine: Send (used in std::thread::spawn throughout commands.rs)
 unsafe impl Send for TranscriptionEngine {}
 
 #[cfg(test)]
 mod tests {
     use super::TranscriptionEngine;
 
+    /// Test that name() returns "apple" for the Apple variant.
+    /// We construct SpeechAnalyzerEngine directly since it's zero-sized.
     #[test]
-    fn whisper_name_is_correct() {
-        // We can't construct a real WhisperEngine without a model file on disk,
-        // but we can verify the name() string via the pattern match directly.
-        assert_eq!("whisper", "whisper");
-    }
-
-    #[test]
-    fn apple_name_is_correct() {
-        assert_eq!("apple", "apple");
+    #[cfg(target_os = "macos")]
+    fn apple_engine_name_returns_apple() {
+        use crate::macos::speech_analyzer::SpeechAnalyzerEngine;
+        let engine = TranscriptionEngine::Apple(SpeechAnalyzerEngine);
+        assert_eq!(engine.name(), "apple");
     }
 }
