@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { Mic, MicOff, Sparkles, ChevronRight, Cpu } from "lucide-react";
 import type { TranscriptionSegment } from "../types";
+import TipsSection from "./TipsSection";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -334,6 +335,11 @@ export default function HomeView({
           <ChevronRight size={11} className="shrink-0 opacity-0 group-hover:opacity-60 transition-opacity -mr-1" style={{ color: "var(--t3)" }} />
         </button>
       </div>
+
+      {/* ── Tips ────────────────────────────────────────────────────── */}
+      {!isRecording && !showLiveTranscript && (
+        <TipsSection onNavigate={onNavigate} />
+      )}
     </div>
   );
 }
