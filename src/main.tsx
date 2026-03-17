@@ -35,7 +35,7 @@ getWindowLabel().then(label => {
     beforeSend(event) {
       delete event.request;
       if (event.breadcrumbs) {
-        event.breadcrumbs = (event.breadcrumbs as import("@sentry/react").Breadcrumb[]).filter(
+        event.breadcrumbs = event.breadcrumbs.filter(
           (b: import("@sentry/react").Breadcrumb) => b.category !== "navigation" && b.category !== "xhr"
         );
       }

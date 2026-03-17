@@ -159,7 +159,10 @@ impl AudioCapture {
         // Block until the thread either signals an error or confirms success
         // (err_tx drop = success).
         match err_rx.recv() {
-            Ok(err) => Err(err),
+            Ok(err) => {
+                sentry_anyhow::capture_anyhow(&err);
+                Err(err)
+            }
             Err(_) => Ok((speech_rx, level_rx)), // sender dropped without sending = success
         }
     }

@@ -17,6 +17,8 @@ pub struct TranscriptionState {
     /// Set by stop_transcription when capture is None (key released during startup delay).
     /// Causes start_transcription to abort after the sound delay.
     pub start_cancelled: bool,
+    /// Timestamp when the current recording started (for duration_ms in analytics).
+    pub recording_start_time: Option<std::time::Instant>,
 }
 
 impl TranscriptionState {
@@ -26,6 +28,7 @@ impl TranscriptionState {
             usage_running: Arc::new(AtomicBool::new(false)),
             is_smart_dictation: false,
             start_cancelled: false,
+            recording_start_time: None,
         }
     }
 }
@@ -145,6 +148,7 @@ pub async fn start_transcription(
     let usage_running = {
         let mut s = state.lock().unwrap();
         s.capture = Some(capture);
+        s.recording_start_time = Some(std::time::Instant::now());
         s.usage_running.store(true, Ordering::SeqCst);
         s.usage_running.clone()
     };
@@ -195,6 +199,7 @@ pub async fn start_transcription(
             Ok(e) => e,
             Err(err) => {
                 eprintln!("failed to load whisper model: {err}");
+                sentry_anyhow::capture_anyhow(&err);
                 return;
             }
         };
@@ -211,7 +216,10 @@ pub async fn start_transcription(
                         let _ = app.emit("transcription-update", TranscriptionUpdate { segments });
                     }
                 }
-                Ok(Err(err)) => tracing::error!("transcription error: {err}"),
+                Ok(Err(err)) => {
+                    tracing::error!("transcription error: {err}");
+                    sentry_anyhow::capture_anyhow(&err);
+                }
                 Err(_) => {
                     tracing::error!("whisper engine panicked — recovering");
                     let _ = app.emit("transcription-error", "Whisper crashed on this audio chunk, continuing.");
@@ -238,6 +246,11 @@ pub async fn stop_transcription(state: tauri::State<'_, SharedState>) -> Result<
         }
     } // MutexGuard dropped here before the await below
 
+    let duration_ms = {
+        let mut s = state.lock().unwrap();
+        s.recording_start_time.take().map(|t| t.elapsed().as_millis() as u64).unwrap_or(0)
+    };
+
     let settings = crate::settings::load_settings().await;
     if settings.sound_enabled {
         crate::sounds::play(crate::sounds::Sound::Stop, settings.sound_volume);
@@ -245,6 +258,7 @@ pub async fn stop_transcription(state: tauri::State<'_, SharedState>) -> Result<
     crate::analytics::track(settings.analytics_enabled, "transcription_completed", serde_json::json!({
         "model": &settings.active_model,
         "vad_engine": &settings.vad_engine,
+        "duration_ms": duration_ms,
     }));
     Ok(())
 }
@@ -303,6 +317,7 @@ pub async fn download_model(name: String, app: tauri::AppHandle) -> Result<(), S
                 );
             }
             Err(e) => {
+                sentry_anyhow::capture_anyhow(&e);
                 let _ = app_clone.emit(
                     "download-progress",
                     DownloadProgress {
