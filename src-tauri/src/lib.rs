@@ -27,10 +27,11 @@ use commands::{
     save_cloud_api_key, get_cloud_api_key_status, delete_cloud_api_key_cmd,
     get_model_recommendation,
     get_llm_models, get_llm_models_disk_usage, download_llm_model, delete_llm_model, import_llm_model,
-    load_llm_engine, unload_llm_engine,
     get_platform,
     SharedState, TranscriptionState,
 };
+#[cfg(target_os = "macos")]
+use commands::{load_llm_engine, unload_llm_engine};
 use std::sync::{Arc, Mutex};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
@@ -139,13 +140,26 @@ pub fn run() {
 
     let shared_state: SharedState = Arc::new(Mutex::new(TranscriptionState::new()));
 
-    tauri::Builder::default()
-        .manage(shared_state.clone())
-        // Separate managed state for LlmEngine — must NOT be inside SharedState
-        // because inference blocks the calling thread for several seconds — holding the shared mutex during inference would deadlock the shortcut handlers.
-        .manage(std::sync::Arc::new(std::sync::Mutex::new(
-            Option::<crate::ai::llm::LlmEngine>::None,
-        )))
+    // Separate managed state for LlmEngine — must NOT be inside SharedState
+    // because inference blocks the calling thread for several seconds — holding the shared mutex during inference would deadlock the shortcut handlers.
+    #[cfg(target_os = "macos")]
+    let builder = {
+        let b = tauri::Builder::default()
+            .manage(shared_state.clone())
+            .manage(std::sync::Arc::new(std::sync::Mutex::new(
+                Option::<crate::ai::llm::LlmEngine>::None,
+            )));
+        b
+    };
+
+    #[cfg(not(target_os = "macos"))]
+    let builder = {
+        let b = tauri::Builder::default()
+            .manage(shared_state.clone());
+        b
+    };
+
+    let builder = builder
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -566,6 +580,7 @@ pub fn run() {
             });
 
             // Eagerly load LlmEngine on launch if built_in backend is configured
+            #[cfg(target_os = "macos")]
             {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
@@ -681,7 +696,9 @@ pub fn run() {
             download_llm_model,
             delete_llm_model,
             import_llm_model,
+            #[cfg(target_os = "macos")]
             load_llm_engine,
+            #[cfg(target_os = "macos")]
             unload_llm_engine,
             styles::get_polish_styles,
             styles::add_custom_style,

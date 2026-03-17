@@ -407,8 +407,10 @@ pub async fn import_llm_model(source_path: String) -> Result<String, String> {
         .map_err(|e| e.to_string())
 }
 
+#[cfg(target_os = "macos")]
 type LlmEngineState = std::sync::Arc<std::sync::Mutex<Option<crate::ai::llm::LlmEngine>>>;
 
+#[cfg(target_os = "macos")]
 #[tauri::command]
 pub async fn load_llm_engine(
     name: String,
@@ -433,6 +435,7 @@ pub async fn load_llm_engine(
 }
 
 // Plan extension (not in spec — added for completeness to allow backend switching without restart)
+#[cfg(target_os = "macos")]
 #[tauri::command]
 pub async fn unload_llm_engine(
     engine_state: tauri::State<'_, LlmEngineState>,
@@ -972,6 +975,7 @@ pub async fn polish_text_cmd(
     let settings = crate::settings::load_settings().await;
 
     // built_in is intercepted here — ai::polish has no access to managed state
+    #[cfg(target_os = "macos")]
     if settings.ai_backend == "built_in" {
         let engine_state = app.state::<LlmEngineState>();
         let vocab = settings.custom_vocabulary.clone();
