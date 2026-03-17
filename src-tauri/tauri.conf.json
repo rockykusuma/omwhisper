@@ -70,10 +70,10 @@
       }
     },
     "windows": {
-      "allowDowngrades": false
-    },
-    "nsis": {
-      "installMode": "currentUser"
+      "allowDowngrades": false,
+      "nsis": {
+        "installMode": "currentUser"
+      }
     }
   }
 }
