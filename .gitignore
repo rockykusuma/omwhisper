@@ -39,8 +39,11 @@ npm-debug.log*
 # Testing
 coverage/
 
-# Superpowers tooling artifacts
+# Claude Code / agent tooling artifacts
+.agents/
+.claude/
 .superpowers/
+skills-lock.json
 
 # Misc
 *.dmg
