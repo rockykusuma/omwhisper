@@ -1,4 +1,5 @@
 import { Component, ReactNode } from "react";
+import * as Sentry from "@sentry/react";
 
 interface Props {
   children: ReactNode;
@@ -9,7 +10,8 @@ interface State {
   error: string;
 }
 
-export default class ErrorBoundary extends Component<Props, State> {
+// Branded fallback UI — unchanged from original
+class InnerErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
     this.state = { hasError: false, error: "" };
@@ -57,4 +59,13 @@ export default class ErrorBoundary extends Component<Props, State> {
     }
     return this.props.children;
   }
+}
+
+// Outer Sentry wrapper reports errors, then InnerErrorBoundary shows the branded UI.
+export default function ErrorBoundary({ children }: { children: ReactNode }) {
+  return (
+    <Sentry.ErrorBoundary>
+      <InnerErrorBoundary>{children}</InnerErrorBoundary>
+    </Sentry.ErrorBoundary>
+  );
 }
