@@ -63,9 +63,13 @@ pub struct Vad {
 }
 
 impl Vad {
-    /// Public constructor — loads from the embedded `silero_vad.onnx` model bytes.
-    pub fn new(vad_sensitivity: f32, sample_rate: u32) -> Self {
-        Self::from_bytes(SILERO_MODEL, vad_sensitivity, sample_rate)
+    /// Public constructor — loads from the embedded `silero_vad.onnx` model bytes,
+    /// or falls back to the RMS path when `vad_engine` is not `"silero"`.
+    pub fn new(vad_engine: &str, vad_sensitivity: f32, sample_rate: u32) -> Self {
+        match vad_engine {
+            "silero" => Self::from_bytes(SILERO_MODEL, vad_sensitivity, sample_rate),
+            _        => Self::from_bytes(&[], vad_sensitivity, sample_rate),
+        }
     }
 
     /// Internal constructor that accepts model bytes directly.
@@ -305,7 +309,7 @@ mod tests {
     /// Returns a Vad using the real embedded Silero model.
     /// Only used for tests that must exercise the Silero path (LSTM state).
     fn silero_vad() -> Vad {
-        Vad::new(0.5, 16000)
+        Vad::new("silero", 0.5, 16000)
     }
 
     fn speech_samples() -> Vec<f32> {
@@ -344,6 +348,36 @@ mod tests {
         let mut vad = Vad::from_bytes(&[], 0.5, 16000);
         // Must be functional: can call process without panic
         let _ = vad.process(&silence_samples());
+    }
+
+    #[test]
+    fn vad_engine_silero_loads_model() {
+        // Requires the embedded silero_vad.onnx to load successfully (same dependency as lstm_state_zeroed_after_flush).
+        // If ORT fails to init on a given machine, this test will fail with "expected Silero variant" — that indicates
+        // an ORT/model issue, not a bug in the routing logic.
+        let vad = Vad::new("silero", 0.5, 16000);
+        match &vad.impl_ {
+            VadImpl::Silero { .. } => {}
+            VadImpl::Rms { .. } => panic!("expected Silero variant — model failed to load"),
+        }
+    }
+
+    #[test]
+    fn vad_engine_rms_forces_fallback() {
+        let vad = Vad::new("rms", 0.5, 16000);
+        match &vad.impl_ {
+            VadImpl::Rms { .. } => {}
+            VadImpl::Silero { .. } => panic!("expected Rms variant"),
+        }
+    }
+
+    #[test]
+    fn vad_engine_unknown_falls_back_to_rms() {
+        let vad = Vad::new("unknown_engine", 0.5, 16000);
+        match &vad.impl_ {
+            VadImpl::Rms { .. } => {}
+            VadImpl::Silero { .. } => panic!("expected Rms fallback for unknown engine"),
+        }
     }
 
     // ── process — silence ─────────────────────────────────────────────────────
