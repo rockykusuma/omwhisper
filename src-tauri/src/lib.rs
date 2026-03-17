@@ -37,6 +37,7 @@ use commands::{
     get_model_recommendation,
     get_llm_models, get_llm_models_disk_usage, download_llm_model, delete_llm_model, import_llm_model,
     get_platform,
+    get_transcription_engine,
     SharedState, TranscriptionState,
 };
 #[cfg(target_os = "macos")]
@@ -733,6 +734,7 @@ pub fn run() {
             styles::add_custom_style,
             styles::remove_custom_style,
             get_platform,
+            get_transcription_engine,
             commands::open_feedback_url,
         ])
         .run(tauri::generate_context!())
