@@ -23,7 +23,8 @@
         "resizable": true,
         "fullscreen": false,
         "visible": false,
-        "skipTaskbar": true
+        "skipTaskbar": true,
+        "backgroundColor": "#0a0f0d"
       },
       {
         "label": "overlay",
