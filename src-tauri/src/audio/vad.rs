@@ -12,9 +12,6 @@ use ort::{session::Session, value::TensorRef};
 /// Silero VAD ONNX model, embedded at compile time.
 const SILERO_MODEL: &[u8] = include_bytes!("../../assets/silero_vad.onnx");
 
-/// Default speech probability threshold (Silero) derived from vad_sensitivity = 0.5.
-/// threshold = 1.0 - vad_sensitivity
-pub const DEFAULT_THRESHOLD: f32 = 0.5;
 
 /// Seconds of silence after which the current utterance is finalised.
 const SILENCE_TIMEOUT_SECS: f32 = 1.5;
