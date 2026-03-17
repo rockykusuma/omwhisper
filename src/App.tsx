@@ -189,7 +189,7 @@ function App() {
           try {
             const settings = await invoke<{ active_polish_style: string }>("get_settings");
             const style = settings.active_polish_style ?? "professional";
-            const polished = await invoke<string>("polish_text_cmd", { text: rawText, style });
+            const polished = await invoke<string>("polish_text_cmd", { text: rawText, style, forceBuiltin: null });
             await invoke("paste_transcription", { text: polished });
             showToast("✓ AI-polished & copied");
             invoke("save_transcription", { text: polished, durationSeconds, modelUsed, source: "smart_dictation", rawText, polishStyle: style })
@@ -211,10 +211,10 @@ function App() {
             const settings = await invoke<{ apply_polish_to_regular: boolean }>("get_settings");
             if (settings.apply_polish_to_regular) {
               try {
-                const polished = await invoke<string>("polish_text_cmd", { text: rawText, style: "professional" });
+                const polished = await invoke<string>("polish_text_cmd", { text: rawText, style: "cleanup", forceBuiltin: true });
                 await invoke("paste_transcription", { text: polished });
                 showToast("✓ AI-polished & copied");
-                invoke("save_transcription", { text: polished, durationSeconds, modelUsed, source: "regular_polished", rawText, polishStyle: "professional" })
+                invoke("save_transcription", { text: polished, durationSeconds, modelUsed, source: "regular_polished", rawText, polishStyle: "cleanup" })
                   .catch((e) => logger.error("save_transcription failed:", e));
               } catch {
                 showToast("AI not ready — pasting raw text");

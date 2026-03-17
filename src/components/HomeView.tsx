@@ -69,12 +69,25 @@ export default function HomeView({
 
   // ── Home state ──
   const [micName, setMicName] = useState("Default Microphone");
+  const [applyPolishToRegular, setApplyPolishToRegular] = useState(false);
 
   // ── Data loaders ──
   const loadSettings = useCallback(async () => {
-    const s = await invoke<{ audio_input_device: string | null }>("get_settings").catch(() => null);
+    const s = await invoke<{ audio_input_device: string | null; apply_polish_to_regular: boolean }>("get_settings").catch(() => null);
     setMicName(s?.audio_input_device || "Default Microphone");
+    setApplyPolishToRegular(s?.apply_polish_to_regular ?? false);
   }, []);
+
+  const handleToggleCleanup = useCallback(async () => {
+    try {
+      const s = await invoke<import("../types").AppSettings>("get_settings");
+      const next = !applyPolishToRegular;
+      setApplyPolishToRegular(next); // optimistic update
+      await invoke("update_settings", { newSettings: { ...s, apply_polish_to_regular: next } });
+    } catch (e) {
+      setApplyPolishToRegular(applyPolishToRegular); // revert on failure
+    }
+  }, [applyPolishToRegular]);
 
   // Initial load
   useEffect(() => {
@@ -333,6 +346,42 @@ export default function HomeView({
           <Cpu size={13} style={{ color: "var(--accent)", flexShrink: 0 }} strokeWidth={2} />
           <span className="text-xs truncate flex-1 font-mono" style={{ color: "var(--t2)" }}>{activeModel}</span>
           <ChevronRight size={11} className="shrink-0 opacity-0 group-hover:opacity-60 transition-opacity -mr-1" style={{ color: "var(--t3)" }} />
+        </button>
+        <div className="w-px self-stretch shrink-0" style={{ background: "color-mix(in srgb, var(--t1) 6%, transparent)" }} />
+        <button
+          onClick={isRecording ? undefined : handleToggleCleanup}
+          className="group flex items-center gap-2 px-3 py-3 text-left transition-all duration-150 min-w-0 flex-shrink-0"
+          style={{
+            background: applyPolishToRegular
+              ? "color-mix(in srgb, var(--accent) 8%, transparent)"
+              : "transparent",
+            cursor: isRecording ? "default" : "pointer",
+            pointerEvents: isRecording ? "none" : "auto",
+          }}
+          onMouseEnter={(e) => {
+            if (!isRecording && !applyPolishToRegular)
+              e.currentTarget.style.background = "color-mix(in srgb, var(--t1) 4%, transparent)";
+          }}
+          onMouseLeave={(e) => {
+            if (!applyPolishToRegular) e.currentTarget.style.background = "transparent";
+          }}
+          title="Toggle AI Cleanup"
+          aria-pressed={applyPolishToRegular}
+        >
+          <Sparkles size={13} style={{ color: applyPolishToRegular ? "var(--accent)" : "var(--t3)", flexShrink: 0 }} strokeWidth={2} />
+          {/* Toggle pill */}
+          <div
+            className="relative w-7 h-4 rounded-full flex-shrink-0 transition-colors duration-200"
+            style={{ background: applyPolishToRegular ? "var(--accent)" : "color-mix(in srgb, var(--t1) 20%, transparent)" }}
+          >
+            <div
+              className="absolute top-0.5 w-3 h-3 rounded-full transition-transform duration-200"
+              style={{
+                background: applyPolishToRegular ? "var(--bg)" : "var(--t3)",
+                transform: applyPolishToRegular ? "translateX(14px)" : "translateX(2px)",
+              }}
+            />
+          </div>
         </button>
       </div>
 
