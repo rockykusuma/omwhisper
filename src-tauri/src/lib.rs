@@ -9,6 +9,7 @@ mod updater;
 mod sounds;
 mod ai;
 mod styles;
+mod analytics;
 #[cfg(target_os = "macos")]
 mod fn_key;
 
