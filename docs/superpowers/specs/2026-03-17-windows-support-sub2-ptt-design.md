@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-17
 **Branch:** feature/windows-support
-**Status:** Approved
+**Status:** Under Review
 
 ---
 
@@ -19,7 +19,7 @@ PTT on macOS uses two mechanisms:
 2. **CGEventTap** — for bare single keys (Fn, CapsLock, Right Option, Right Control). Implemented entirely in `fn_key.rs` using CoreGraphics/CoreFoundation framework calls. The `lib.rs` single-key PTT block is already guarded with `#[cfg(target_os = "macos")]`.
 
 The problem on Windows:
-- `mod fn_key;` in `lib.rs` is **not** gated → `fn_key.rs` would be compiled on Windows, and its `#[link(name = "CoreGraphics", kind = "framework")]` / `#[link(name = "CoreFoundation", kind = "framework")]` declarations would cause a **linker error** on Windows.
+- `mod fn_key;` in `lib.rs` is already gated with `#[cfg(target_os = "macos")]` (lines 12–13) — no linker issue here. ✅
 - The PTT plugin shortcut registration block is **not** gated → on Windows, if `push_to_talk_hotkey` parses as a valid combo, a PTT shortcut would be registered.
 - The Settings UI PTT section is **not** platform-conditional → Windows users would see PTT controls that do nothing.
 
@@ -46,20 +46,7 @@ Two files changed. No new files created.
 
 ### `src-tauri/src/lib.rs`
 
-**Change 1 — Gate `mod fn_key` (line 13):**
-
-```rust
-// Before:
-mod fn_key;
-
-// After:
-#[cfg(target_os = "macos")]
-mod fn_key;
-```
-
-This prevents `fn_key.rs` from being compiled on Windows. The CoreGraphics and CoreFoundation `#[link]` declarations inside `fn_key.rs` become invisible to the Windows linker. All call sites (`crate::fn_key::spawn_fn_key_tap`, etc.) are already inside the existing `#[cfg(target_os = "macos")]` block at lines 391–455, so no call site changes are needed.
-
-**Change 2 — Gate PTT plugin shortcut registration:**
+**Change 1 — Gate PTT plugin shortcut registration:**
 
 The block starting at `// --- Push-to-talk shortcut: hold to record, release to stop ---` (currently lines 366–388) is wrapped in a `#[cfg(not(target_os = "windows"))]` block. Using a block (not an attribute on the `if let` expression directly) is the idiomatic stable Rust pattern:
 
@@ -73,13 +60,29 @@ The block starting at `// --- Push-to-talk shortcut: hold to record, release to 
 }
 ```
 
+The guard uses `#[cfg(not(target_os = "windows"))]` rather than `#[cfg(target_os = "macos")]` intentionally — this leaves the door open for a future Linux PTT implementation without another spec change. The existing single-key CGEventTap block below it correctly uses `#[cfg(target_os = "macos")]` since CGEventTap is macOS-only and that distinction is permanent.
+
 This prevents PTT plugin shortcuts from being registered on Windows regardless of what `push_to_talk_hotkey` is set to in settings.json.
 
 ### `src/components/Settings.tsx`
 
-**Change 3 — Add platform detection:**
+**Change 2 — Add platform detection:**
 
-After the existing `useState` declarations in the `GeneralSettings` component (or the parent `SettingsPanel` component that renders the PTT section), add:
+The PTT section lives inside the `SettingsPanel` component's `general` tab render path. Add `platform` state after the existing `useState` declarations (around line 179, after `accessibilityGranted` state):
+
+```typescript
+const [platform, setPlatform] = useState<string>("macos");
+
+useEffect(() => {
+  invoke<string>("get_platform").then(setPlatform).catch(() => {});
+}, []);
+```
+
+Default of `"macos"` ensures the PTT section is shown during the brief async fetch window on macOS — no flash of hidden content.
+
+**Change 3 — Conditionally render PTT section:**
+
+Wrap the PTT `<h3>` heading and its card `<div>` in a platform guard:
 
 ```typescript
 const [platform, setPlatform] = useState<string>("macos");
@@ -112,7 +115,7 @@ Wrap the PTT `<h3>` heading and its card `<div>` in a platform guard:
 
 | File | Change |
 |------|--------|
-| `src-tauri/src/lib.rs` | Add `#[cfg(target_os = "macos")]` to `mod fn_key;`; wrap PTT plugin shortcut block in `#[cfg(not(target_os = "windows"))]` |
+| `src-tauri/src/lib.rs` | Wrap PTT plugin shortcut block (`if let Some(ptt_sc)...`) in `#[cfg(not(target_os = "windows"))]` block |
 | `src/components/Settings.tsx` | Add `platform` state from `get_platform`; hide PTT section when `platform === "windows"` |
 
 ---
@@ -121,9 +124,10 @@ Wrap the PTT `<h3>` heading and its card `<div>` in a platform guard:
 
 | Scenario | Before | After |
 |----------|--------|-------|
-| Windows build — compile | Linker error (CoreGraphics missing) | Compiles cleanly |
+| Windows build — compile | Compiles (fn_key already gated) | Unchanged — still compiles |
 | Windows runtime — PTT shortcut | PTT plugin shortcut may register | Never registered |
 | Windows runtime — Settings UI | PTT section visible (but non-functional) | PTT section hidden |
+| Linux runtime — PTT shortcut | PTT plugin shortcut may register | Still registered (not(windows) gate) |
 | macOS — all PTT | Unchanged | Unchanged |
 
 ---
