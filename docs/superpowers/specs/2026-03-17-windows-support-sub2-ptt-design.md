@@ -82,32 +82,20 @@ Default of `"macos"` ensures the PTT section is shown during the brief async fet
 
 **Change 3 — Conditionally render PTT section:**
 
-Wrap the PTT `<h3>` heading and its card `<div>` in a platform guard:
-
-```typescript
-const [platform, setPlatform] = useState<string>("macos");
-
-useEffect(() => {
-  invoke<string>("get_platform").then(setPlatform).catch(() => {});
-}, []);
-```
-
-Default of `"macos"` ensures the PTT section is shown during the brief async fetch window on macOS — no flash of hidden content.
-
-**Change 4 — Conditionally render PTT section:**
-
-Wrap the PTT `<h3>` heading and its card `<div>` in a platform guard:
+Wrap the PTT `<h3>` heading (line ~571) and its card `<div>` (lines ~571–603) in a platform guard. The block ends just before the "Reference" `<h3>` at line ~605:
 
 ```tsx
 {platform !== "windows" && (
   <>
-    <h3 ...>Push to Talk</h3>
+    <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Push to Talk</h3>
     <div className="card px-5 mb-6">
-      ...
+      ... {/* existing PTT toggle + key dropdown */}
     </div>
   </>
 )}
 ```
+
+On Linux, `platform` will be `"linux"` so `platform !== "windows"` is true — PTT UI remains visible on Linux, consistent with the Rust-side `#[cfg(not(target_os = "windows"))]` guard that keeps PTT shortcuts registered on Linux.
 
 ---
 
