@@ -407,8 +407,10 @@ pub async fn import_llm_model(source_path: String) -> Result<String, String> {
         .map_err(|e| e.to_string())
 }
 
+#[cfg(target_os = "macos")]
 type LlmEngineState = std::sync::Arc<std::sync::Mutex<Option<crate::ai::llm::LlmEngine>>>;
 
+#[cfg(target_os = "macos")]
 #[tauri::command]
 pub async fn load_llm_engine(
     name: String,
@@ -433,6 +435,7 @@ pub async fn load_llm_engine(
 }
 
 // Plan extension (not in spec — added for completeness to allow backend switching without restart)
+#[cfg(target_os = "macos")]
 #[tauri::command]
 pub async fn unload_llm_engine(
     engine_state: tauri::State<'_, LlmEngineState>,
@@ -757,6 +760,7 @@ pub struct LicenseInfoPayload {
 pub fn get_license_status() -> String {
     #[cfg(debug_assertions)]
     { return "Licensed".to_string(); }
+    #[cfg(not(debug_assertions))]
     match crate::license::get_status() {
         crate::license::LicenseStatus::Licensed => "Licensed".to_string(),
         crate::license::LicenseStatus::GracePeriod => "GracePeriod".to_string(),
@@ -972,6 +976,7 @@ pub async fn polish_text_cmd(
     let settings = crate::settings::load_settings().await;
 
     // built_in is intercepted here — ai::polish has no access to managed state
+    #[cfg(target_os = "macos")]
     if settings.ai_backend == "built_in" {
         let engine_state = app.state::<LlmEngineState>();
         let vocab = settings.custom_vocabulary.clone();
@@ -983,6 +988,11 @@ pub async fn polish_text_cmd(
             }
         };
         return result.map_err(|e: anyhow::Error| e.to_string());
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    if settings.ai_backend == "built_in" {
+        return Err("On-Device LLM is not available on this platform".to_string());
     }
 
     // ollama / cloud path — unchanged
@@ -1114,4 +1124,11 @@ fn recommend_model(ram_gb: f64, is_apple_silicon: bool, _cores: usize) -> (Strin
              format!("Your Mac has {:.0}GB RAM; tiny.en keeps resource usage low while still delivering usable transcription.", ram_gb))
         }
     }
+}
+
+#[tauri::command]
+pub fn get_platform() -> &'static str {
+    if cfg!(target_os = "macos") { "macos" }
+    else if cfg!(target_os = "windows") { "windows" }
+    else { "linux" }
 }

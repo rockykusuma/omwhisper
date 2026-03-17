@@ -22,7 +22,12 @@ pub fn has_accessibility_permission() -> bool {
     output.map(|o| o.status.success()).unwrap_or(false)
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+pub fn has_accessibility_permission() -> bool {
+    true // Windows does not require Accessibility permission for SendInput
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn has_accessibility_permission() -> bool {
     false
 }
@@ -41,7 +46,12 @@ pub fn get_frontmost_app() -> Option<String> {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+pub fn get_frontmost_app() -> Option<String> {
+    Some("Windows".to_string())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn get_frontmost_app() -> Option<String> {
     None
 }
@@ -137,7 +147,49 @@ pub fn paste_to_app(app_name: &str) -> Result<()> {
     Ok(())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+pub fn paste_to_app(_app_name: &str) -> Result<()> {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
+        VK_CONTROL,
+    };
+
+    // Brief pause to allow recording to fully stop before paste
+    std::thread::sleep(std::time::Duration::from_millis(200));
+
+    let make_key = |vk: u16, flags: u32| -> INPUT {
+        INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: windows_sys::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: vk,
+                    wScan: 0,
+                    dwFlags: flags,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        }
+    };
+
+    let inputs: [INPUT; 4] = [
+        make_key(VK_CONTROL, 0),              // Ctrl down
+        make_key(0x56, 0),                    // V down
+        make_key(0x56, KEYEVENTF_KEYUP),      // V up
+        make_key(VK_CONTROL, KEYEVENTF_KEYUP), // Ctrl up
+    ];
+
+    unsafe {
+        let sent = SendInput(4, inputs.as_ptr(), std::mem::size_of::<INPUT>() as i32);
+        if sent != 4 {
+            return Err(anyhow::anyhow!("SendInput failed: only {} of 4 events sent", sent));
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn paste_to_app(_app_name: &str) -> Result<()> {
     Ok(())
 }
@@ -150,5 +202,10 @@ pub fn open_accessibility_settings() {
         .spawn();
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+pub fn open_accessibility_settings() {
+    // No accessibility settings needed on Windows
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn open_accessibility_settings() {}

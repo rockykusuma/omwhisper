@@ -30,8 +30,7 @@ tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 tracing = "0.1"
 cpal = "0.15"
-whisper-rs = { version = "0.14", features = ["metal"] }
-llama-cpp-2 = { version = "0.1.138", features = ["metal"] }
+whisper-rs = { version = "0.14" }
 hound = "3.5"
 reqwest = { version = "0.12", features = ["stream", "json"] }
 sha2 = "0.10"
@@ -50,3 +49,14 @@ tauri-plugin-opener = "2"
 regex = "1"
 rodio = { version = "0.19", default-features = false, features = ["wav"] }
 sysinfo = { version = "0.30", default-features = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.52", features = ["Win32_UI_Input_KeyboardAndMouse"] }
+winreg = "0.55"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+llama-cpp-2 = { version = "0.1.138", features = ["metal"] }
+# whisper-rs base dep is in [dependencies] (CPU-only, all platforms).
+# This entry adds the Metal GPU feature on macOS only. Cargo unions both.
+# Do NOT remove the base entry from [dependencies] — that would break Windows.
+whisper-rs = { version = "0.14", features = ["metal"] }

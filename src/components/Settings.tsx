@@ -178,7 +178,12 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
   }, [initialTab]);
   const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
   const [accessibilityGranted, setAccessibilityGranted] = useState<boolean | null>(null);
+  const [platform, setPlatform] = useState<string>("macos");
   const { theme, setTheme } = useTheme();
+
+  useEffect(() => {
+    invoke<string>("get_platform").then(setPlatform).catch(() => {});
+  }, []);
 
   useEffect(() => {
     // Load settings first so the panel renders immediately
@@ -568,39 +573,43 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
               </SettingRow>
             </div>
 
-            <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Push to Talk</h3>
-            <div className="card px-5 mb-6">
-              <SettingRow label="Push to Talk Mode" description="Hold a key to record, release when done">
-                <Toggle
-                  value={settings.recording_mode === "push_to_talk"}
-                  onChange={(v) => update({ recording_mode: v ? "push_to_talk" : "toggle" })}
-                  label="Push to talk"
-                />
-              </SettingRow>
-              {settings.recording_mode === "push_to_talk" && (
-                <>
-                  <SettingRow label="Push to Talk Key" description="Hold this key to record, release to stop">
-                    <select
-                      value={["Fn","CapsLock","Right Option","Right Control"].includes(settings.push_to_talk_hotkey ?? "") ? settings.push_to_talk_hotkey : "Fn"}
-                      onChange={(e) => update({ push_to_talk_hotkey: e.target.value })}
-                      className="text-xs rounded-xl px-3 py-1.5 cursor-pointer"
-                      style={{
-                        background: "var(--bg)",
-                        color: "var(--t1)",
-                        border: "1px solid color-mix(in srgb, var(--accent) 20%, transparent)",
-                        boxShadow: "var(--nm-pressed-sm)",
-                        outline: "none",
-                      }}
-                    >
-                      <option value="Fn">Fn</option>
-                      <option value="CapsLock">CapsLock ⇪</option>
-                      <option value="Right Option">Right Option ⌥</option>
-                      <option value="Right Control">Right Control ⌃</option>
-                    </select>
+            {platform !== "windows" && (
+              <>
+                <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Push to Talk</h3>
+                <div className="card px-5 mb-6">
+                  <SettingRow label="Push to Talk Mode" description="Hold a key to record, release when done">
+                    <Toggle
+                      value={settings.recording_mode === "push_to_talk"}
+                      onChange={(v) => update({ recording_mode: v ? "push_to_talk" : "toggle" })}
+                      label="Push to talk"
+                    />
                   </SettingRow>
-                </>
-              )}
-            </div>
+                  {settings.recording_mode === "push_to_talk" && (
+                    <>
+                      <SettingRow label="Push to Talk Key" description="Hold this key to record, release to stop">
+                        <select
+                          value={["Fn","CapsLock","Right Option","Right Control"].includes(settings.push_to_talk_hotkey ?? "") ? settings.push_to_talk_hotkey : "Fn"}
+                          onChange={(e) => update({ push_to_talk_hotkey: e.target.value })}
+                          className="text-xs rounded-xl px-3 py-1.5 cursor-pointer"
+                          style={{
+                            background: "var(--bg)",
+                            color: "var(--t1)",
+                            border: "1px solid color-mix(in srgb, var(--accent) 20%, transparent)",
+                            boxShadow: "var(--nm-pressed-sm)",
+                            outline: "none",
+                          }}
+                        >
+                          <option value="Fn">Fn</option>
+                          <option value="CapsLock">CapsLock ⇪</option>
+                          <option value="Right Option">Right Option ⌥</option>
+                          <option value="Right Control">Right Control ⌃</option>
+                        </select>
+                      </SettingRow>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
 
             <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Reference</h3>
             <div className="card px-5">

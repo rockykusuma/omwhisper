@@ -6,6 +6,7 @@ const BASE_URL: &str = "https://api.lemonsqueezy.com/v1/licenses";
 // ─── Response types ───────────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct ActivateResponse {
     pub activated: bool,
     pub error: Option<String>,
@@ -15,6 +16,7 @@ pub struct ActivateResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct ValidateResponse {
     pub valid: bool,
     pub error: Option<String>,
@@ -22,18 +24,21 @@ pub struct ValidateResponse {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct LicenseKeyData {
     pub id: u64,
     pub status: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct InstanceData {
     pub id: String,
     pub name: String,
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct MetaData {
     pub customer_name: String,
     pub customer_email: String,

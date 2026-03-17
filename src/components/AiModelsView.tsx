@@ -284,6 +284,7 @@ function WhisperTab({ activeModel, onModelChange }: { activeModel: string; onMod
 // ── Smart Dictation sub-tab ───────────────────────────────────────────────────
 function SmartDictationTab() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [platform, setPlatform] = useState<string>("macos");
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
   const [builtInStyles, setBuiltInStyles] = useState<BuiltInStyle[]>([]);
   const [customStyles, setCustomStyles] = useState<CustomStyle[]>([]);
@@ -305,6 +306,7 @@ function SmartDictationTab() {
 
   useEffect(() => {
     invoke<AppSettings>("get_settings").then(setSettings).catch(() => {});
+    invoke<string>("get_platform").then(setPlatform).catch(() => {});
     invoke<boolean>("get_cloud_api_key_status").then(setApiKeySet).catch(() => {});
     invoke<{ built_in: BuiltInStyle[]; custom: CustomStyle[] }>("get_polish_styles")
       .then((styles) => { setBuiltInStyles(styles.built_in); setCustomStyles(styles.custom); })
@@ -322,7 +324,9 @@ function SmartDictationTab() {
           setLlmErrors((prev) => ({ ...prev, [name]: error }));
         } else {
           invoke<LlmModelInfo[]>("get_llm_models").then(setLlmModels).catch(() => {});
-          invoke("load_llm_engine", { name }).catch(() => {});
+          if (platform === "macos") {
+            invoke("load_llm_engine", { name }).catch(() => {});
+          }
         }
       } else {
         setLlmDownloading((prev) => ({ ...prev, [name]: progress }));
@@ -388,6 +392,9 @@ function SmartDictationTab() {
     return <div className="flex items-center justify-center h-64 text-white/35 text-sm">Loading…</div>;
   }
 
+  // Effective backend: if user selected built_in on non-macOS, treat as disabled for display/state
+  const effectiveBackend = platform === "macos" ? settings.ai_backend : (settings.ai_backend === "built_in" ? "disabled" : settings.ai_backend);
+
   return (
     <div>
       <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">AI Processing</h3>
@@ -396,7 +403,9 @@ function SmartDictationTab() {
       <div className="card px-5 mb-5">
         <SettingRow label="Backend" description="Where text is sent for polishing">
           <div className="flex rounded-xl overflow-hidden" style={{ boxShadow: "var(--nm-pressed-sm)" }}>
-            {(["disabled", "built_in", "ollama", "cloud"] as const).map((b) => (
+            {(["disabled", "built_in", "ollama", "cloud"] as const)
+              .filter((b) => platform === "macos" || b !== "built_in")
+              .map((b) => (
               <button
                 key={b}
                 onClick={() => {
@@ -405,7 +414,7 @@ function SmartDictationTab() {
                   if (b === "built_in") {
                     invoke<LlmModelInfo[]>("get_llm_models").then((models) => {
                       const active = models.find((m) => m.is_active && m.is_downloaded);
-                      if (active) {
+                      if (active && platform === "macos") {
                         invoke("load_llm_engine", { name: active.name }).catch(() => {});
                       }
                       setLlmModels(models);
@@ -414,8 +423,8 @@ function SmartDictationTab() {
                 }}
                 className="px-3 py-1.5 text-xs transition-all duration-150 cursor-pointer"
                 style={{
-                  background: settings.ai_backend === b ? "rgba(139,92,246,0.15)" : "transparent",
-                  color: settings.ai_backend === b ? "rgb(167,139,250)" : "var(--t3)",
+                  background: effectiveBackend === b ? "rgba(139,92,246,0.15)" : "transparent",
+                  color: effectiveBackend === b ? "rgb(167,139,250)" : "var(--t3)",
                 }}
               >
                 {b === "ollama" ? "On-Device (Ollama)"
@@ -429,10 +438,13 @@ function SmartDictationTab() {
         {settings.ai_backend === "disabled" && (
           <p className="text-white/40 text-xs pb-3">Smart Dictation shortcut (⌘⇧B) will paste raw transcription.</p>
         )}
+        {platform !== "macos" && settings.ai_backend === "built_in" && (
+          <p className="text-orange-400/70 text-xs pb-3">⚠️ Built-in backend is only available on macOS. Please select another backend.</p>
+        )}
       </div>
 
       {/* Built-in LLM section */}
-      {settings.ai_backend === "built_in" && (
+      {effectiveBackend === "built_in" && (
         <div className="card px-5 mb-5">
           <p className="text-white/60 text-[10px] uppercase tracking-widest py-3 font-mono border-b border-white/[0.04]">
             Local Model
@@ -515,7 +527,7 @@ function SmartDictationTab() {
       )}
 
       {/* Ollama section */}
-      {settings.ai_backend === "ollama" && (
+      {effectiveBackend === "ollama" && (
         <div className="card px-5 mb-5">
           <div className="flex items-center justify-between py-3 border-b border-white/[0.04]">
             <div>
@@ -560,7 +572,7 @@ function SmartDictationTab() {
       )}
 
       {/* Cloud API section */}
-      {settings.ai_backend === "cloud" && (
+      {effectiveBackend === "cloud" && (
         <div className="card px-5 mb-5">
           <SettingRow label="Provider" description="OpenAI-compatible API">
             <select
@@ -704,7 +716,7 @@ function SmartDictationTab() {
             </select>
           </SettingRow>
         )}
-        {settings.ai_backend !== "built_in" && (
+        {effectiveBackend !== "built_in" && (
           <SettingRow label="Timeout" description="Max seconds to wait for AI response">
             <select
               value={settings.ai_timeout_seconds}

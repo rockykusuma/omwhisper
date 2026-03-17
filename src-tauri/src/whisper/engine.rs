@@ -20,6 +20,7 @@ pub struct Segment {
 impl WhisperEngine {
     pub fn new(model_path: &Path) -> Result<Self> {
         let mut ctx_params = WhisperContextParameters::default();
+        #[cfg(target_os = "macos")]
         ctx_params.use_gpu(true);
         let ctx = WhisperContext::new_with_params(
             model_path.to_str().context("invalid model path")?,

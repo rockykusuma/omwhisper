@@ -27,9 +27,11 @@ use commands::{
     save_cloud_api_key, get_cloud_api_key_status, delete_cloud_api_key_cmd,
     get_model_recommendation,
     get_llm_models, get_llm_models_disk_usage, download_llm_model, delete_llm_model, import_llm_model,
-    load_llm_engine, unload_llm_engine,
+    get_platform,
     SharedState, TranscriptionState,
 };
+#[cfg(target_os = "macos")]
+use commands::{load_llm_engine, unload_llm_engine};
 use std::sync::{Arc, Mutex};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
@@ -46,6 +48,7 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 #[cfg(target_os = "macos")]
 fn activate_app_macos() {
     use std::os::raw::{c_char, c_void};
+    #[allow(clashing_extern_declarations)]
     extern "C" {
         fn objc_getClass(name: *const c_char) -> *const c_void;
         fn sel_registerName(str: *const c_char) -> *const c_void;
@@ -138,13 +141,26 @@ pub fn run() {
 
     let shared_state: SharedState = Arc::new(Mutex::new(TranscriptionState::new()));
 
-    tauri::Builder::default()
-        .manage(shared_state.clone())
-        // Separate managed state for LlmEngine — must NOT be inside SharedState
-        // because inference blocks the calling thread for several seconds — holding the shared mutex during inference would deadlock the shortcut handlers.
-        .manage(std::sync::Arc::new(std::sync::Mutex::new(
-            Option::<crate::ai::llm::LlmEngine>::None,
-        )))
+    // Separate managed state for LlmEngine — must NOT be inside SharedState
+    // because inference blocks the calling thread for several seconds — holding the shared mutex during inference would deadlock the shortcut handlers.
+    #[cfg(target_os = "macos")]
+    let builder = {
+        let b = tauri::Builder::default()
+            .manage(shared_state.clone())
+            .manage(std::sync::Arc::new(std::sync::Mutex::new(
+                Option::<crate::ai::llm::LlmEngine>::None,
+            )));
+        b
+    };
+
+    #[cfg(not(target_os = "macos"))]
+    let builder = {
+        let b = tauri::Builder::default()
+            .manage(shared_state.clone());
+        b
+    };
+
+    builder
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -363,27 +379,32 @@ pub fn run() {
             })?;
 
             // --- Push-to-talk shortcut: hold to record, release to stop ---
-            if let Some(ptt_sc) = parse_hotkey(&initial_settings.push_to_talk_hotkey) {
-                let state_ptt = shared_state.clone();
-                if let Err(e) = app.global_shortcut().on_shortcut(ptt_sc, move |app, _shortcut, event| {
-                    let is_recording = state_ptt.lock().unwrap().capture.is_some();
-                    match event.state {
-                        ShortcutState::Pressed => {
-                            if !is_recording {
-                                let focused = crate::paste::get_frontmost_app();
-                                tracing::info!("ptt pressed: captured frontmost app = {:?}", focused);
-                                *crate::commands::get_previous_app().lock().unwrap() = focused;
-                                let _ = app.emit("hotkey-toggle-recording", ());
+            // Not(windows): PTT is toggle-only on Windows; plugin shortcut not registered there.
+            // Uses not(target_os = "windows") rather than macos so Linux can use PTT if added in future.
+            #[cfg(not(target_os = "windows"))]
+            {
+                if let Some(ptt_sc) = parse_hotkey(&initial_settings.push_to_talk_hotkey) {
+                    let state_ptt = shared_state.clone();
+                    if let Err(e) = app.global_shortcut().on_shortcut(ptt_sc, move |app, _shortcut, event| {
+                        let is_recording = state_ptt.lock().unwrap().capture.is_some();
+                        match event.state {
+                            ShortcutState::Pressed => {
+                                if !is_recording {
+                                    let focused = crate::paste::get_frontmost_app();
+                                    tracing::info!("ptt pressed: captured frontmost app = {:?}", focused);
+                                    *crate::commands::get_previous_app().lock().unwrap() = focused;
+                                    let _ = app.emit("hotkey-toggle-recording", ());
+                                }
+                            }
+                            // Always emit stop on release — avoids the race where the key is
+                            // released before the 500 ms sound delay finishes setting `capture`.
+                            ShortcutState::Released => {
+                                let _ = app.emit("hotkey-stop-recording", ());
                             }
                         }
-                        // Always emit stop on release — avoids the race where the key is
-                        // released before the 500 ms sound delay finishes setting `capture`.
-                        ShortcutState::Released => {
-                            let _ = app.emit("hotkey-stop-recording", ());
-                        }
+                    }) {
+                        tracing::warn!("Could not register PTT shortcut: {}", e);
                     }
-                }) {
-                    tracing::warn!("Could not register PTT shortcut: {}", e);
                 }
             }
 
@@ -436,7 +457,7 @@ pub fn run() {
                             let (on_press, on_release) = ptt_callbacks!();
                             crate::fn_key::spawn_modifier_key_tap(
                                 crate::fn_key::KEYCODE_RIGHT_OPTION,
-                                0x00080000, // kCGEventFlagMaskAlternate
+                                crate::fn_key::kCGEventFlagMaskAlternate,
                                 on_press, on_release,
                             );
                         }
@@ -444,7 +465,7 @@ pub fn run() {
                             let (on_press, on_release) = ptt_callbacks!();
                             crate::fn_key::spawn_modifier_key_tap(
                                 crate::fn_key::KEYCODE_RIGHT_CONTROL,
-                                0x00040000, // kCGEventFlagMaskControl
+                                crate::fn_key::kCGEventFlagMaskControl,
                                 on_press, on_release,
                             );
                         }
@@ -560,6 +581,7 @@ pub fn run() {
             });
 
             // Eagerly load LlmEngine on launch if built_in backend is configured
+            #[cfg(target_os = "macos")]
             {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
@@ -675,11 +697,14 @@ pub fn run() {
             download_llm_model,
             delete_llm_model,
             import_llm_model,
+            #[cfg(target_os = "macos")]
             load_llm_engine,
+            #[cfg(target_os = "macos")]
             unload_llm_engine,
             styles::get_polish_styles,
             styles::add_custom_style,
             styles::remove_custom_style,
+            get_platform,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

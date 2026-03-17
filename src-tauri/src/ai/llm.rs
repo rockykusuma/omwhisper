@@ -206,6 +206,7 @@ pub async fn import_custom_llm_model(source_path: &Path) -> Result<String> {
 
 // ─── Inference Engine ─────────────────────────────────────────────────────────
 
+#[cfg(target_os = "macos")]
 use llama_cpp_2::{
     context::params::LlamaContextParams,
     llama_backend::LlamaBackend,
@@ -214,6 +215,7 @@ use llama_cpp_2::{
     sampling::LlamaSampler,
 };
 
+#[cfg(target_os = "macos")]
 pub struct LlmEngine {
     backend: LlamaBackend,
     model: LlamaModel,
@@ -222,9 +224,12 @@ pub struct LlmEngine {
 // Safety: llama-cpp-2 wraps C++ that is not Send by default, but we only call
 // inference from within a spawn_blocking context (one thread at a time) and the
 // managed Mutex prevents concurrent access. This is safe for our usage pattern.
+#[cfg(target_os = "macos")]
 unsafe impl Send for LlmEngine {}
+#[cfg(target_os = "macos")]
 unsafe impl Sync for LlmEngine {}
 
+#[cfg(target_os = "macos")]
 impl LlmEngine {
     /// Load a GGUF model from disk. Enables Metal GPU on Apple Silicon.
     pub fn new(model_path: &Path) -> anyhow::Result<Self> {
@@ -305,6 +310,7 @@ impl LlmEngine {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn build_polish_system_prompt(style: &str, vocab: &[String]) -> String {
     let style_instruction = match style {
         "casual" => "Keep the tone casual and conversational.",
@@ -386,6 +392,7 @@ mod tests {
         assert!(url.is_empty());
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn polish_prompt_contains_style_instruction() {
         let prompt = build_polish_system_prompt("casual", &[]);
@@ -393,6 +400,7 @@ mod tests {
         assert!(prompt.contains("Output ONLY"), "prompt must end with output-only instruction");
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn polish_prompt_includes_vocabulary() {
         let vocab = vec!["OmWhisper".to_string(), "Tauri".to_string()];
