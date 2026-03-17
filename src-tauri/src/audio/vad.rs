@@ -24,6 +24,9 @@ const FRAME_SIZE: usize = 512;
 
 // ── Internal implementation ───────────────────────────────────────────────────
 
+// The Silero variant is large (~216 bytes for the ONNX session + LSTM state arrays).
+// VadImpl lives inside Arc<Mutex<Vad>> in capture.rs, so the stack impact is negligible.
+#[allow(clippy::large_enum_variant)]
 enum VadImpl {
     Silero {
         session: Session,
@@ -45,7 +48,6 @@ pub struct Vad {
     /// Speech probability threshold (Silero) or energy threshold (Rms).
     /// Derived from vad_sensitivity: threshold = 1.0 - vad_sensitivity.
     pub(crate) threshold: f32,
-    sample_rate: u32,
     /// Accumulated speech samples for the current utterance.
     speech_buffer: Vec<f32>,
     /// Silence duration in raw samples (increments by FRAME_SIZE=512 per Silero frame).
@@ -88,7 +90,6 @@ impl Vad {
         Vad {
             impl_,
             threshold,
-            sample_rate,
             speech_buffer: Vec::new(),
             silence_samples: 0,
             silence_timeout_samples,
