@@ -77,7 +77,7 @@ Applied to `html, body` when `[data-theme="dark-glass"]` is active. Three radial
 
 ## Component Overrides
 
-All overrides are scoped to `[data-theme="dark-glass"]` in `globals.css`. They replace the neumorphic `box-shadow` without removing the `--nm-*` variables (which remain for the Charcoal theme).
+All overrides are scoped to `[data-theme="dark-glass"]` in `globals.css`. They replace the neumorphic `box-shadow` without removing the `--nm-*` variables (which remain for the Charcoal theme). `border-radius` is intentionally not re-declared in any override — it is inherited from the base class definitions and applies unchanged in the glass theme.
 
 ### `.card` (raised panel)
 ```css
@@ -91,6 +91,9 @@ All overrides are scoped to `[data-theme="dark-glass"]` in `globals.css`. They r
 ```
 
 ### `.card-inset` (inset well)
+
+The blur is intentionally hardcoded to `8px` (half that of `.card`). Inset wells sit visually closer to the content layer; using the full `16px` would create a stacked-glass visual noise effect where content inside the well appears doubly blurred.
+
 ```css
 [data-theme="dark-glass"] .card-inset {
   background: rgba(0, 0, 0, 0.20);
@@ -165,14 +168,57 @@ export const THEMES: ThemeMeta[] = [
 
 - Default theme: `"charcoal"` (unchanged)
 - `applyTheme()` and `initTheme()` require no logic changes — they just set `data-theme`
+- **Migration:** Users who previously had `emerald` or `warm-amber` saved in localStorage will silently fall back to `"charcoal"` via the existing `THEMES.find` guard in both `initTheme()` and `useTheme()`. No additional migration code is needed — the guard is already the correct mechanism. The TypeScript cast `localStorage.getItem(STORAGE_KEY) as Theme | null` is safe because the guard immediately validates the cast value against the `THEMES` array before use.
 
 ### `src/components/Settings.tsx`
 
-The theme picker section is reorganized to group themes by `style`:
+The theme picker section is reorganized to group themes by `style`. The existing flat `flex` row is replaced with a `flex-col` container holding two groups, each with a label and its own inner `flex` row of swatches:
 
-1. Filter `THEMES` into two groups: `neomorphism` and `glassmorphism`
-2. Render each group with a section heading (`"Neomorphism"` / `"Glassmorphism"`)
-3. Swatch rendering stays the same per theme
+```tsx
+<div className="flex flex-col gap-4">
+  {(["neomorphism", "glassmorphism"] as const).map((style) => (
+    <div key={style}>
+      <p className="text-[10px] uppercase tracking-widest mb-2 font-mono" style={{ color: "var(--t3)" }}>
+        {style === "neomorphism" ? "Neomorphism" : "Glassmorphism"}
+      </p>
+      <div className="flex items-center gap-3 flex-wrap">
+        {THEMES.filter((t) => t.style === style).map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTheme(t.id)}
+            title={t.label}
+            className="flex flex-col items-center gap-1.5 cursor-pointer group"
+            aria-pressed={theme === t.id}
+          >
+            <div
+              className="w-11 h-11 rounded-xl transition-all duration-200 relative"
+              style={{
+                background: t.bg,
+                boxShadow: theme === t.id
+                  ? `0 0 0 2.5px ${t.accent}, 0 0 14px ${t.accent}55`
+                  : "inset 2px 2px 5px rgba(0,0,0,0.25), inset -2px -2px 5px rgba(255,255,255,0.12)",
+              }}
+            >
+              <span
+                className="absolute bottom-1.5 right-1.5 w-2 h-2 rounded-full"
+                style={{ background: t.accent }}
+              />
+            </div>
+            <span
+              className="text-[10px] font-mono transition-colors"
+              style={{ color: theme === t.id ? "var(--accent)" : "var(--t3)" }}
+            >
+              {t.label}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  ))}
+</div>
+```
+
+The swatch `<button>` block (with `aria-pressed`, accent-ring `boxShadow`, accent dot, and label) is identical to the existing implementation at `Settings.tsx:263–291`.
 
 ---
 
@@ -191,3 +237,4 @@ The theme picker section is reorganized to group themes by `style`:
 - Light glassmorphism variant (can be added later as a 3rd theme)
 - Glassmorphism-specific overrides for individual named components (Sidebar, TranscriptionView, etc.) — the `.card` / `.btn-*` class overrides cover the full surface
 - Windows-specific backdrop-filter fallback (Tauri uses WebView2 which supports backdrop-filter on Windows 11)
+- `background-attachment: fixed` behavior on Windows: in WebView2, `fixed` attachment is relative to the WebView container boundary rather than the viewport during window resize. This causes a minor cosmetic artefact (orbs stay static rather than repositioning smoothly) but is acceptable for OmWhisper's fixed-size window.
