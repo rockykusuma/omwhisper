@@ -137,7 +137,23 @@ This triggers the Windows build automatically whenever a version tag (`v0.1.0`, 
 | macOS `cargo build` | Succeeds (Metal GPU) | Unchanged — Metal GPU |
 | macOS transcription speed | Metal GPU | Unchanged |
 | Windows transcription speed | N/A (compile failure) | CPU-only (slower than macOS Metal, functional) |
-| Windows CI on `v*` tag push | Not triggered | Builds and uploads NSIS installer |
+| Windows CI on `v*` tag push | Not triggered | Builds and uploads NSIS installer (requires all Sub-project 5 changes to be committed first) |
+
+---
+
+## Other Dependencies — Pre-verified Cross-Platform
+
+The following dependencies in `Cargo.toml` are confirmed to compile on Windows without changes:
+
+- **`cpal 0.15`**: Uses WASAPI on Windows by default; no extra feature flags required. The `asio` and `jack` features are optional and not used.
+- **`rodio 0.19` with `default-features = false, features = ["wav"]`**: `default-features` controls audio format decoders, not the audio output backend. The cpal/WASAPI output path is always built. WAV playback works on Windows.
+- **`arboard 3`**: Cross-platform clipboard library; uses Win32 clipboard API on Windows.
+- **`keyring 2`**: Cross-platform keychain; uses Windows Credential Store on Windows.
+- **`tauri` with `features = ["macos-private-api", ...]`**: Tauri handles `macos-private-api` as a compile-time hint internally; it does not cause a linker or compile failure on Windows.
+- **`paste.rs`**: Already fully guarded with `#[cfg(target_os = "macos")]` (uses CoreGraphics/AppKit). No changes needed.
+- **`rusqlite`, `chrono`, `reqwest`, `sha2`, `serde`, `tokio`, `anyhow`, `regex`, `dirs`, `uuid`, `image`, `sysinfo`**: All cross-platform, no changes needed.
+
+After Sub-projects 2–5, `whisper-rs`'s Metal feature is the only remaining compile blocker. Fixing it produces a working Windows binary.
 
 ---
 
