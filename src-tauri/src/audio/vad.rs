@@ -1,39 +1,103 @@
-/// Energy-based Voice Activity Detection.
-/// Calculates RMS energy of audio chunks and decides if speech is present.
+//! Voice Activity Detection.
+//!
+//! Uses the Silero VAD ONNX model (v4/v5) for neural speech detection.
+//! Falls back to energy-based RMS VAD if the ONNX session fails to initialise.
+//!
+//! The `rms()` static helper is kept for the frontend audio level meter in
+//! `capture.rs` and is not involved in VAD decisions.
 
-/// RMS energy threshold below which audio is considered silence.
-/// Range: 0.0 (total silence) to 1.0 (maximum amplitude).
-/// Default 0.01 works well for most microphones in quiet environments.
-pub const DEFAULT_THRESHOLD: f32 = 0.01;
+use ndarray::{Array2, Array3};
+use ort::{session::Session, value::TensorRef};
 
-/// Silence duration (in seconds) after which the current utterance is finalized.
-pub const SILENCE_TIMEOUT_SECS: f32 = 1.5;
+/// Silero VAD ONNX model, embedded at compile time.
+const SILERO_MODEL: &[u8] = include_bytes!("../../assets/silero_vad.onnx");
+
+/// Default speech probability threshold (Silero) derived from vad_sensitivity = 0.5.
+/// threshold = 1.0 - vad_sensitivity
+pub const DEFAULT_THRESHOLD: f32 = 0.5;
+
+/// Seconds of silence after which the current utterance is finalised.
+const SILENCE_TIMEOUT_SECS: f32 = 1.5;
+
+/// Silero VAD processes audio in 512-sample frames at 16kHz.
+const FRAME_SIZE: usize = 512;
+
+// ── Internal implementation ───────────────────────────────────────────────────
+
+enum VadImpl {
+    Silero {
+        session: Session,
+        /// LSTM hidden state [2, 1, 64] — persists between frames, zeroed on utterance end/flush.
+        h_state: Array3<f32>,
+        /// LSTM cell state [2, 1, 64] — persists between frames, zeroed on utterance end/flush.
+        c_state: Array3<f32>,
+    },
+    /// RMS energy fallback — used when Silero ONNX session fails to initialise.
+    Rms {
+        threshold: f32,
+    },
+}
+
+// ── Public struct ─────────────────────────────────────────────────────────────
 
 pub struct Vad {
-    threshold: f32,
-    #[allow(dead_code)]
+    impl_: VadImpl,
+    /// Speech probability threshold (Silero) or energy threshold (Rms).
+    /// Derived from vad_sensitivity: threshold = 1.0 - vad_sensitivity.
+    pub(crate) threshold: f32,
     sample_rate: u32,
-    /// Accumulated speech samples for current utterance
+    /// Accumulated speech samples for the current utterance.
     speech_buffer: Vec<f32>,
-    /// Number of consecutive silence samples seen
+    /// Silence duration in raw samples (increments by FRAME_SIZE=512 per Silero frame).
     silence_samples: usize,
-    /// Silence timeout in samples
+    /// Silence timeout in raw samples = SILENCE_TIMEOUT_SECS * sample_rate.
     silence_timeout_samples: usize,
+    /// Partial frame buffer for Silero path (<FRAME_SIZE samples); bypassed on Rms path.
+    leftover: Vec<f32>,
 }
 
 impl Vad {
-    pub fn new(threshold: f32, sample_rate: u32) -> Self {
+    /// Public constructor — loads from the embedded `silero_vad.onnx` model bytes.
+    pub fn new(vad_sensitivity: f32, sample_rate: u32) -> Self {
+        Self::from_bytes(SILERO_MODEL, vad_sensitivity, sample_rate)
+    }
+
+    /// Internal constructor that accepts model bytes directly.
+    /// Used by tests to inject empty/corrupt bytes and exercise the RMS fallback path.
+    pub(crate) fn from_bytes(model_bytes: &[u8], vad_sensitivity: f32, sample_rate: u32) -> Self {
+        let threshold = 1.0 - vad_sensitivity.clamp(0.0, 1.0);
         let silence_timeout_samples = (SILENCE_TIMEOUT_SECS * sample_rate as f32) as usize;
+
+        let impl_ = match Session::builder()
+            .and_then(|mut b| b.commit_from_memory(model_bytes))
+        {
+            Ok(session) => {
+                tracing::debug!("Silero VAD initialised successfully");
+                VadImpl::Silero {
+                    session,
+                    h_state: Array3::zeros((2, 1, 64)),
+                    c_state: Array3::zeros((2, 1, 64)),
+                }
+            }
+            Err(e) => {
+                tracing::error!("Silero VAD init failed, falling back to RMS VAD: {e}");
+                VadImpl::Rms { threshold }
+            }
+        };
+
         Vad {
+            impl_,
             threshold,
             sample_rate,
             speech_buffer: Vec::new(),
             silence_samples: 0,
             silence_timeout_samples,
+            leftover: Vec::new(),
         }
     }
 
     /// Calculate RMS energy of a chunk.
+    /// Used by `capture.rs` for the frontend audio level meter only.
     pub fn rms(samples: &[f32]) -> f32 {
         if samples.is_empty() {
             return 0.0;
@@ -43,29 +107,51 @@ impl Vad {
     }
 
     /// Process a chunk of audio samples.
-    /// Returns Some(Vec<f32>) when an utterance is complete (speech followed by silence timeout).
-    /// Returns None if still accumulating or if chunk is silence with no buffered speech.
+    ///
+    /// Returns `Some(Vec<f32>)` when an utterance is complete (speech followed by silence timeout).
+    /// Returns `None` if still accumulating or if no speech has been detected.
     pub fn process(&mut self, samples: &[f32]) -> Option<Vec<f32>> {
+        match &self.impl_ {
+            VadImpl::Rms { threshold } => self.process_rms(samples, *threshold),
+            VadImpl::Silero { .. } => self.process_silero(samples),
+        }
+    }
+
+    /// Force-flush any buffered speech (called on recording stop).
+    ///
+    /// Resets all state: speech_buffer, leftover, silence_samples, and LSTM states.
+    /// Sub-frame samples in `leftover` (Silero path, <512 samples) are intentionally
+    /// discarded — they are too short to run inference on.
+    pub fn flush(&mut self) -> Option<Vec<f32>> {
+        if self.speech_buffer.is_empty() {
+            return None;
+        }
+        let utterance = std::mem::take(&mut self.speech_buffer);
+        self.leftover.clear();
+        self.silence_samples = 0;
+        self.reset_lstm_state();
+        Some(utterance)
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    /// RMS fallback path. Bypasses `leftover` — processes samples directly.
+    fn process_rms(&mut self, samples: &[f32], threshold: f32) -> Option<Vec<f32>> {
         let energy = Self::rms(samples);
-        let is_speech = energy >= self.threshold;
+        let is_speech = energy >= threshold;
 
         if is_speech {
-            // Speech detected — accumulate and reset silence counter
             self.speech_buffer.extend_from_slice(samples);
             self.silence_samples = 0;
             None
         } else {
-            // Silence
             if self.speech_buffer.is_empty() {
-                // No speech buffered yet — ignore silence
                 return None;
             }
-
             self.silence_samples += samples.len();
             self.speech_buffer.extend_from_slice(samples);
 
             if self.silence_samples >= self.silence_timeout_samples {
-                // Silence timeout reached — finalize utterance
                 let utterance = std::mem::take(&mut self.speech_buffer);
                 self.silence_samples = 0;
                 Some(utterance)
@@ -75,12 +161,115 @@ impl Vad {
         }
     }
 
-    /// Force-flush any buffered speech (called on stop).
-    pub fn flush(&mut self) -> Option<Vec<f32>> {
-        if self.speech_buffer.is_empty() {
-            None
-        } else {
-            Some(std::mem::take(&mut self.speech_buffer))
+    /// Silero ONNX path. Buffers samples into 512-sample frames, runs inference on each.
+    fn process_silero(&mut self, samples: &[f32]) -> Option<Vec<f32>> {
+        self.leftover.extend_from_slice(samples);
+        let mut result = None;
+
+        while self.leftover.len() >= FRAME_SIZE {
+            let frame: Vec<f32> = self.leftover.drain(..FRAME_SIZE).collect();
+            let prob = self.run_silero_inference(&frame);
+
+            if prob >= self.threshold {
+                // Speech frame
+                self.speech_buffer.extend_from_slice(&frame);
+                self.silence_samples = 0;
+            } else {
+                // Silence frame
+                if !self.speech_buffer.is_empty() {
+                    self.silence_samples += FRAME_SIZE;
+                    self.speech_buffer.extend_from_slice(&frame);
+
+                    if self.silence_samples >= self.silence_timeout_samples {
+                        result = Some(std::mem::take(&mut self.speech_buffer));
+                        self.silence_samples = 0;
+                        self.reset_lstm_state();
+                    }
+                }
+            }
+        }
+
+        result
+    }
+
+    /// Runs one 512-sample frame through the Silero ONNX session.
+    /// Updates h_state and c_state in place. Returns speech probability.
+    /// Returns 0.0 on inference error (treated as silence).
+    fn run_silero_inference(&mut self, frame: &[f32]) -> f32 {
+        let VadImpl::Silero { session, h_state, c_state } = &mut self.impl_ else {
+            return 0.0;
+        };
+
+        // Build input tensors
+        let input = match Array2::<f32>::from_shape_vec((1, FRAME_SIZE), frame.to_vec()) {
+            Ok(a) => a,
+            Err(_) => return 0.0,
+        };
+        let sr_arr = ndarray::arr1(&[16000i64]);
+
+        let input_ref = match TensorRef::<f32>::from_array_view(input.view()) {
+            Ok(t) => t,
+            Err(_) => return 0.0,
+        };
+        let sr_ref = match TensorRef::<i64>::from_array_view(sr_arr.view()) {
+            Ok(t) => t,
+            Err(_) => return 0.0,
+        };
+        let h_ref = match TensorRef::<f32>::from_array_view(h_state.view()) {
+            Ok(t) => t,
+            Err(_) => return 0.0,
+        };
+        let c_ref = match TensorRef::<f32>::from_array_view(c_state.view()) {
+            Ok(t) => t,
+            Err(_) => return 0.0,
+        };
+
+        let run_result = session.run(ort::inputs![
+            "input" => input_ref,
+            "sr" => sr_ref,
+            "h" => h_ref,
+            "c" => c_ref,
+        ]);
+
+        let outputs = match run_result {
+            Ok(o) => o,
+            Err(e) => {
+                tracing::warn!("Silero inference error: {e}");
+                return 0.0;
+            }
+        };
+
+        // Extract speech probability — try_extract_tensor returns (&Shape, &[T])
+        let prob = outputs["output"]
+            .try_extract_tensor::<f32>()
+            .map(|(_shape, data)| data.first().copied().unwrap_or(0.0))
+            .unwrap_or(0.0);
+
+        // Update LSTM state
+        let new_h = outputs["hn"]
+            .try_extract_tensor::<f32>()
+            .ok()
+            .and_then(|(_shape, data)| Array3::from_shape_vec((2, 1, 64), data.to_vec()).ok());
+        let new_c = outputs["cn"]
+            .try_extract_tensor::<f32>()
+            .ok()
+            .and_then(|(_shape, data)| Array3::from_shape_vec((2, 1, 64), data.to_vec()).ok());
+
+        if let Some(h) = new_h {
+            *h_state = h;
+        }
+        if let Some(c) = new_c {
+            *c_state = c;
+        }
+
+        prob
+    }
+
+    /// Resets LSTM state to zeros (called after utterance flush or completion).
+    fn reset_lstm_state(&mut self) {
+        if let VadImpl::Silero { h_state, c_state, .. } = &mut self.impl_ {
+            *h_state = Array3::zeros((2, 1, 64));
+            *c_state = Array3::zeros((2, 1, 64));
         }
     }
 }
@@ -155,7 +344,7 @@ mod tests {
     #[test]
     fn vad_new_with_bad_model_bytes_does_not_panic() {
         // Empty bytes → ort session init fails → silently falls back to RMS
-        let vad = Vad::from_bytes(&[], 0.5, 16000);
+        let mut vad = Vad::from_bytes(&[], 0.5, 16000);
         // Must be functional: can call process without panic
         let _ = vad.process(&silence_samples());
     }
