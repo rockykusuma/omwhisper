@@ -48,6 +48,7 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 #[cfg(target_os = "macos")]
 fn activate_app_macos() {
     use std::os::raw::{c_char, c_void};
+    #[allow(clashing_extern_declarations)]
     extern "C" {
         fn objc_getClass(name: *const c_char) -> *const c_void;
         fn sel_registerName(str: *const c_char) -> *const c_void;
@@ -159,7 +160,7 @@ pub fn run() {
         b
     };
 
-    let builder = builder
+    builder
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -456,7 +457,7 @@ pub fn run() {
                             let (on_press, on_release) = ptt_callbacks!();
                             crate::fn_key::spawn_modifier_key_tap(
                                 crate::fn_key::KEYCODE_RIGHT_OPTION,
-                                0x00080000, // kCGEventFlagMaskAlternate
+                                crate::fn_key::kCGEventFlagMaskAlternate,
                                 on_press, on_release,
                             );
                         }
@@ -464,7 +465,7 @@ pub fn run() {
                             let (on_press, on_release) = ptt_callbacks!();
                             crate::fn_key::spawn_modifier_key_tap(
                                 crate::fn_key::KEYCODE_RIGHT_CONTROL,
-                                0x00040000, // kCGEventFlagMaskControl
+                                crate::fn_key::kCGEventFlagMaskControl,
                                 on_press, on_release,
                             );
                         }

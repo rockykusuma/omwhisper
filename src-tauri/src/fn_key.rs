@@ -6,7 +6,7 @@
 // - The plugin only supports modifier+key combos, not bare modifier keys
 // - Key-up events for bare modifiers are unreliable through the plugin
 // - CGEventTap gives us reliable press/release for all key types
-#[allow(non_upper_case_globals, non_snake_case)]
+#![allow(non_upper_case_globals, non_snake_case)]
 
 use std::os::raw::{c_int, c_void};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -23,9 +23,8 @@ const kCGEventFlagsChanged: u32 = 12;
 const kCGKeyboardEventKeycode: u32 = 8;
 // CGEventFlags
 const kCGEventFlagMaskSecondaryFn: u64 = 0x00800000; // Fn key
-const kCGEventFlagMaskAlphaShift: u64 = 0x00010000;  // CapsLock state
-const kCGEventFlagMaskAlternate: u64 = 0x00080000;   // Option key
-const kCGEventFlagMaskControl: u64 = 0x00040000;     // Control key
+pub const kCGEventFlagMaskAlternate: u64 = 0x00080000; // Option key
+pub const kCGEventFlagMaskControl: u64 = 0x00040000;   // Control key
 // HID keycodes for single-key PTT candidates
 pub const KEYCODE_RIGHT_OPTION: u64 = 61;
 pub const KEYCODE_RIGHT_CONTROL: u64 = 60;
@@ -201,9 +200,9 @@ pub fn spawn_capslock_tap(
     on_press: impl Fn() + Send + Sync + 'static,
     on_release: impl Fn() + Send + Sync + 'static,
 ) {
-    // Also tap kCGEventFlagsChanged for the AlphaShift bit so we can see CapsLock events.
-    // We need both the AlphaShift flag mask AND the keycode check to target CapsLock only.
-    let _ = kCGEventFlagMaskAlphaShift; // referenced to suppress unused warning
+    // kCGEventFlagsChanged fires on any modifier change; we filter by KEYCODE_CAPS_LOCK
+    // inside the callback rather than using the AlphaShift flag (which tracks lock state,
+    // not physical press/release).
     spawn_tap(
         1u64 << kCGEventFlagsChanged,
         capslock_tap_callback,

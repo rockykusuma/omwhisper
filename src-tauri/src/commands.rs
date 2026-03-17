@@ -760,6 +760,7 @@ pub struct LicenseInfoPayload {
 pub fn get_license_status() -> String {
     #[cfg(debug_assertions)]
     { return "Licensed".to_string(); }
+    #[cfg(not(debug_assertions))]
     match crate::license::get_status() {
         crate::license::LicenseStatus::Licensed => "Licensed".to_string(),
         crate::license::LicenseStatus::GracePeriod => "GracePeriod".to_string(),
