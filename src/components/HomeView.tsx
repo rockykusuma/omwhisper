@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { Mic, MicOff, Sparkles, ChevronRight, Cpu } from "lucide-react";
-import type { TranscriptionSegment } from "../types";
+import type { TranscriptionSegment, AppSettings } from "../types";
 import TipsSection from "./TipsSection";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -80,7 +80,7 @@ export default function HomeView({
 
   const handleToggleCleanup = useCallback(async () => {
     try {
-      const s = await invoke<import("../types").AppSettings>("get_settings");
+      const s = await invoke<AppSettings>("get_settings");
       const next = !applyPolishToRegular;
       setApplyPolishToRegular(next); // optimistic update
       await invoke("update_settings", { newSettings: { ...s, apply_polish_to_regular: next } });
@@ -366,6 +366,7 @@ export default function HomeView({
             if (!applyPolishToRegular) e.currentTarget.style.background = "transparent";
           }}
           title="Toggle AI Cleanup"
+          aria-label="AI Cleanup"
           aria-pressed={applyPolishToRegular}
         >
           <Sparkles size={13} style={{ color: applyPolishToRegular ? "var(--accent)" : "var(--t3)", flexShrink: 0 }} strokeWidth={2} />
