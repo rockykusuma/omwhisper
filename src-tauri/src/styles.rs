@@ -55,6 +55,11 @@ pub fn built_in_styles() -> Vec<BuiltInStyle> {
             name: "Meeting Notes".to_string(),
             description: "Key points and action items, bullet-pointed".to_string(),
         },
+        BuiltInStyle {
+            id: "cleanup".to_string(),
+            name: "Cleanup".to_string(),
+            description: "Remove fillers, fix grammar, preserve your voice".to_string(),
+        },
     ]
 }
 
@@ -123,6 +128,27 @@ meeting notes. Rules:
 5) Preserve all factual details and names"
             .to_string(),
 
+        "cleanup" => "\
+---
+MODE : CLEANUP (default)
+---
+Process transcribed speech into clean, polished text. This is your default.
+
+Rules:
+- Remove filler words (um, uh, er, like, you know, basically) unless meaningful
+- Fix grammar, spelling, punctuation. Break up run-on sentences
+- Remove false starts, stutters, and accidental repetitions
+- Correct obvious transcription errors
+- Preserve the speaker's voice, tone, vocabulary, and intent
+- Preserve technical terms, proper nouns, names, and jargon exactly as spoken
+
+Self-corrections (\"wait no\", \"I meant\", \"scratch that\"): use only the corrected version. \"Actually\" used for emphasis is NOT a correction.
+Spoken punctuation (\"period\", \"comma\", \"new line\"): convert to symbols.
+Numbers & dates: standard written forms (January 15, 2026 / $300 / 5:30 PM).
+Broken phrases: reconstruct the speaker's likely intent from context.
+Formatting: bullets/numbered lists/paragraph breaks only when they genuinely improve readability. Do not over-format."
+            .to_string(),
+
         other => {
             // Custom style — the frontend passes the system prompt directly in the
             // style field prefixed with "custom:". If just an unknown id is given,
@@ -172,7 +198,7 @@ mod tests {
 
     #[test]
     fn built_in_styles_has_six_entries() {
-        assert_eq!(built_in_styles().len(), 6);
+        assert_eq!(built_in_styles().len(), 7);
     }
 
     #[test]
@@ -181,13 +207,13 @@ mod tests {
         let mut ids: Vec<&str> = styles.iter().map(|s| s.id.as_str()).collect();
         ids.sort();
         ids.dedup();
-        assert_eq!(ids.len(), 6);
+        assert_eq!(ids.len(), 7);
     }
 
     #[test]
     fn expected_style_ids_present() {
         let ids: Vec<String> = built_in_styles().into_iter().map(|s| s.id).collect();
-        for expected in &["professional", "casual", "concise", "translate", "email", "meeting_notes"] {
+        for expected in &["professional", "casual", "concise", "translate", "email", "meeting_notes", "cleanup"] {
             assert!(ids.contains(&expected.to_string()), "missing style: {expected}");
         }
     }
@@ -227,7 +253,7 @@ mod tests {
 
     #[test]
     fn all_builtin_prompts_nonempty() {
-        for id in &["professional", "casual", "concise", "email", "meeting_notes"] {
+        for id in &["professional", "casual", "concise", "email", "meeting_notes", "cleanup"] {
             let prompt = system_prompt_for(id, "English");
             assert!(!prompt.is_empty(), "empty prompt for style: {id}");
         }
