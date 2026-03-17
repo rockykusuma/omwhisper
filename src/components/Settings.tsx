@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
-  Sliders, Mic, FileText, Info, ShieldCheck, ShieldAlert, Keyboard
+  Sliders, Mic, FileText, Info, ShieldCheck, ShieldAlert, Keyboard, Brain, Activity
 } from "lucide-react";
 import { logger } from "../utils/logger";
 import { useTheme, THEMES } from "../hooks/useTheme";
@@ -466,26 +466,48 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                   ))}
                 </select>
               </SettingRow>
-              <SettingRow label="VAD Engine" description="Neural detects speech vs noise · Energy uses volume level">
-                <div className="flex rounded-xl overflow-hidden" style={{ boxShadow: "var(--nm-pressed-sm)" }}>
-                  {(["silero", "rms"] as const).map((engine, i) => (
-                    <button
-                      key={engine}
-                      onClick={() => update({ vad_engine: engine })}
-                      aria-pressed={settings.vad_engine === engine}
-                      className="text-xs px-3 py-1.5 transition-all duration-150 cursor-pointer"
-                      style={{
-                        background: settings.vad_engine === engine ? "var(--accent)" : "var(--bg)",
-                        color: settings.vad_engine === engine ? "#0a0f0d" : "var(--t2)",
-                        fontWeight: settings.vad_engine === engine ? 600 : 400,
-                        borderRight: i === 0 ? "1px solid color-mix(in srgb, var(--t1) 10%, transparent)" : undefined,
-                      }}
-                    >
-                      {engine === "silero" ? "Neural (Silero)" : "Energy (RMS)"}
-                    </button>
-                  ))}
+              <div className="py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
+                <p className="text-white/80 text-sm mb-1">VAD Engine</p>
+                <p className="text-white/50 text-xs mb-3">Algorithm used to detect when you're speaking</p>
+                <div className="flex gap-2">
+                  {([
+                    { id: "silero", Icon: Brain,    label: "Silero",  sub: "Neural AI · more accurate" },
+                    { id: "rms",    Icon: Activity, label: "RMS",     sub: "Energy-based · lighter" },
+                  ] as const).map(({ id, Icon, label, sub }) => {
+                    const active = settings.vad_engine === id;
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => update({ vad_engine: id })}
+                        aria-pressed={active}
+                        className="flex-1 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all duration-150 cursor-pointer"
+                        style={{
+                          background: "var(--bg)",
+                          boxShadow: active ? "var(--nm-pressed-sm)" : "var(--nm-raised-sm)",
+                          border: active
+                            ? "1px solid color-mix(in srgb, var(--accent) 45%, transparent)"
+                            : "1px solid transparent",
+                        }}
+                      >
+                        <div
+                          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                          style={{
+                            background: active ? "var(--accent-bg)" : "color-mix(in srgb, var(--t1) 6%, transparent)",
+                          }}
+                        >
+                          <Icon size={14} style={{ color: active ? "var(--accent)" : "var(--t3)" }} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium leading-tight" style={{ color: active ? "var(--accent)" : "var(--t1)" }}>
+                            {label}
+                          </p>
+                          <p className="text-[10px] leading-tight mt-0.5" style={{ color: "var(--t4)" }}>{sub}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-              </SettingRow>
+              </div>
               <SettingRow
                 label="VAD Sensitivity"
                 description={`Voice detection threshold · ${Math.round(settings.vad_sensitivity * 100)}%`}

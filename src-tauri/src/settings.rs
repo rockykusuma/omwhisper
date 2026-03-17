@@ -123,7 +123,7 @@ fn default_ptt_key() -> String { "custom".to_string() }
 fn default_true() -> bool { true }
 fn default_sound_volume() -> f32 { 0.2 }
 fn default_llm_model_name() -> String { "qwen2.5-0.5b-instruct-q4_k_m.gguf".to_string() }
-fn default_vad_engine() -> String { "silero".to_string() }
+fn default_vad_engine() -> String { "rms".to_string() }
 
 fn default_log_level() -> String {
     "normal".to_string()
@@ -293,8 +293,8 @@ mod tests {
     }
 
     #[test]
-    fn default_vad_engine_is_silero() {
-        assert_eq!(Settings::default().vad_engine, "silero");
+    fn default_vad_engine_is_rms() {
+        assert_eq!(Settings::default().vad_engine, "rms");
     }
 
     #[test]
@@ -393,7 +393,7 @@ mod tests {
         assert_eq!(s.recording_mode, "toggle");
         assert_eq!(s.ai_backend, "disabled");
         assert_eq!(s.overlay_placement, "top-center");
-        assert_eq!(s.vad_engine, "silero");
+        assert_eq!(s.vad_engine, "rms");
         assert!(s.custom_vocabulary.is_empty());
     }
 
