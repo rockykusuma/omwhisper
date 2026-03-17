@@ -1,4 +1,3 @@
-#[cfg(target_os = "macos")]
 mod ffi {
     use std::os::raw::c_char;
     extern "C" {
@@ -14,13 +13,10 @@ mod ffi {
 }
 
 /// Zero-sized engine — holds no state. Safe to send across threads.
-#[cfg(target_os = "macos")]
 pub struct SpeechAnalyzerEngine;
 
-#[cfg(target_os = "macos")]
 unsafe impl Send for SpeechAnalyzerEngine {}
 
-#[cfg(target_os = "macos")]
 impl SpeechAnalyzerEngine {
     /// Returns true only on macOS 26+ when the Apple speech API is usable.
     /// On older macOS versions the Swift shim returns false immediately via #available.
@@ -31,9 +27,10 @@ impl SpeechAnalyzerEngine {
     /// Transcribe 16kHz mono Float32 PCM audio.
     /// Blocks until all segments are returned via the Swift callback.
     ///
-    /// # Safety
+    /// # Concurrency
     /// DispatchSemaphore provides acquire/release semantics on Apple platforms.
-    /// After the FFI call returns, all callback writes to `segments` are visible.
+    /// After the FFI call returns, all callback writes to `segments` are visible —
+    /// no additional fence is needed.
     pub fn transcribe(&self, audio: &[f32]) -> anyhow::Result<Vec<crate::whisper::engine::Segment>> {
         use std::os::raw::c_void;
         use std::ffi::CStr;
@@ -56,10 +53,12 @@ impl SpeechAnalyzerEngine {
             out.push(crate::whisper::engine::Segment { text, start_ms, end_ms, is_final });
         }
 
+        let count = i32::try_from(audio.len())
+            .map_err(|_| anyhow::anyhow!("audio buffer too large for Apple speech API"))?;
         let result = unsafe {
             ffi::apple_transcribe_buffer(
                 audio.as_ptr(),
-                audio.len() as i32,
+                count,
                 16000,
                 segments_ptr as *mut c_void,
                 segment_callback,
@@ -69,15 +68,14 @@ impl SpeechAnalyzerEngine {
         if result == 0 {
             Ok(segments)
         } else {
-            anyhow::bail!("Apple speech transcription failed (returned -1)")
+            anyhow::bail!("Apple speech transcription failed (error code {})", result)
         }
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 mod tests {
     #[test]
-    #[cfg(target_os = "macos")]
     fn is_available_returns_bool_without_panic() {
         // On macOS < 26 this returns false without crashing.
         // Either result is acceptable — the test verifies no panic.
