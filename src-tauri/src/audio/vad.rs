@@ -1,17 +1,20 @@
 //! Voice Activity Detection.
 //!
-//! Uses the Silero VAD ONNX model (v4/v5) for neural speech detection.
+//! Uses the Silero VAD ONNX model (v5) for neural speech detection.
 //! Falls back to energy-based RMS VAD if the ONNX session fails to initialise.
 //!
 //! The `rms()` static helper is kept for the frontend audio level meter in
 //! `capture.rs` and is not involved in VAD decisions.
+//!
+//! Silero v5 ONNX interface:
+//!   Inputs:  `input [1, N]` f32, `state [2, 1, 128]` f32, `sr []` i64
+//!   Outputs: `output [1, 1]` f32 (speech probability), `stateN [2, 1, 128]` f32
 
 use ndarray::{Array2, Array3};
 use ort::{session::Session, value::TensorRef};
 
 /// Silero VAD ONNX model, embedded at compile time.
 const SILERO_MODEL: &[u8] = include_bytes!("../../assets/silero_vad.onnx");
-
 
 /// Seconds of silence after which the current utterance is finalised.
 const SILENCE_TIMEOUT_SECS: f32 = 1.5;
@@ -21,16 +24,15 @@ const FRAME_SIZE: usize = 512;
 
 // ── Internal implementation ───────────────────────────────────────────────────
 
-// The Silero variant is large (~216 bytes for the ONNX session + LSTM state arrays).
+// The Silero variant is large (ONNX session + state array).
 // VadImpl lives inside Arc<Mutex<Vad>> in capture.rs, so the stack impact is negligible.
 #[allow(clippy::large_enum_variant)]
 enum VadImpl {
     Silero {
         session: Session,
-        /// LSTM hidden state [2, 1, 64] — persists between frames, zeroed on utterance end/flush.
-        h_state: Array3<f32>,
-        /// LSTM cell state [2, 1, 64] — persists between frames, zeroed on utterance end/flush.
-        c_state: Array3<f32>,
+        /// Combined LSTM state [2, 1, 128] — persists between frames, zeroed on utterance end/flush.
+        /// Silero v5 uses a single `state` tensor (not separate h/c like v4).
+        state: Array3<f32>,
     },
     /// RMS energy fallback — used when Silero ONNX session fails to initialise.
     Rms {
@@ -71,11 +73,10 @@ impl Vad {
             .and_then(|mut b| b.commit_from_memory(model_bytes))
         {
             Ok(session) => {
-                tracing::debug!("Silero VAD initialised successfully");
+                tracing::info!("Silero VAD v5 initialised successfully");
                 VadImpl::Silero {
                     session,
-                    h_state: Array3::zeros((2, 1, 64)),
-                    c_state: Array3::zeros((2, 1, 64)),
+                    state: Array3::zeros((2, 1, 128)),
                 }
             }
             Err(e) => {
@@ -117,7 +118,7 @@ impl Vad {
 
     /// Force-flush any buffered speech (called on recording stop).
     ///
-    /// Resets all state: speech_buffer, leftover, silence_samples, and LSTM states.
+    /// Resets all state: speech_buffer, leftover, silence_samples, and LSTM state.
     /// Sub-frame samples in `leftover` (Silero path, <512 samples) are intentionally
     /// discarded — they are too short to run inference on.
     pub fn flush(&mut self) -> Option<Vec<f32>> {
@@ -127,7 +128,7 @@ impl Vad {
         let utterance = std::mem::take(&mut self.speech_buffer);
         self.leftover.clear();
         self.silence_samples = 0;
-        self.reset_lstm_state();
+        self.reset_state();
         Some(utterance)
     }
 
@@ -181,7 +182,7 @@ impl Vad {
                     if self.silence_samples >= self.silence_timeout_samples {
                         result = Some(std::mem::take(&mut self.speech_buffer));
                         self.silence_samples = 0;
-                        self.reset_lstm_state();
+                        self.reset_state();
                     }
                 }
             }
@@ -190,15 +191,21 @@ impl Vad {
         result
     }
 
-    /// Runs one 512-sample frame through the Silero ONNX session.
-    /// Updates h_state and c_state in place. Returns speech probability.
+    /// Runs one 512-sample frame through the Silero v5 ONNX session.
+    /// Updates LSTM state in place. Returns speech probability [0.0, 1.0].
     /// Returns 0.0 on inference error (treated as silence).
+    ///
+    /// Silero v5 API:
+    ///   input  "input"  [1, 512] f32
+    ///   input  "state"  [2, 1, 128] f32  — combined LSTM state (replaces v4 h/c)
+    ///   input  "sr"     [] i64
+    ///   output "output" [1, 1] f32       — speech probability
+    ///   output "stateN" [2, 1, 128] f32  — updated state
     fn run_silero_inference(&mut self, frame: &[f32]) -> f32 {
-        let VadImpl::Silero { session, h_state, c_state } = &mut self.impl_ else {
+        let VadImpl::Silero { session, state } = &mut self.impl_ else {
             return 0.0;
         };
 
-        // Build input tensors
         let input = match Array2::<f32>::from_shape_vec((1, FRAME_SIZE), frame.to_vec()) {
             Ok(a) => a,
             Err(_) => return 0.0,
@@ -209,27 +216,20 @@ impl Vad {
             Ok(t) => t,
             Err(_) => return 0.0,
         };
+        let state_ref = match TensorRef::<f32>::from_array_view(state.view()) {
+            Ok(t) => t,
+            Err(_) => return 0.0,
+        };
         let sr_ref = match TensorRef::<i64>::from_array_view(sr_arr.view()) {
             Ok(t) => t,
             Err(_) => return 0.0,
         };
-        let h_ref = match TensorRef::<f32>::from_array_view(h_state.view()) {
-            Ok(t) => t,
-            Err(_) => return 0.0,
-        };
-        let c_ref = match TensorRef::<f32>::from_array_view(c_state.view()) {
-            Ok(t) => t,
-            Err(_) => return 0.0,
-        };
 
-        let run_result = session.run(ort::inputs![
+        let outputs = match session.run(ort::inputs![
             "input" => input_ref,
-            "sr" => sr_ref,
-            "h" => h_ref,
-            "c" => c_ref,
-        ]);
-
-        let outputs = match run_result {
+            "state" => state_ref,
+            "sr"    => sr_ref,
+        ]) {
             Ok(o) => o,
             Err(e) => {
                 tracing::warn!("Silero inference error: {e}");
@@ -237,37 +237,28 @@ impl Vad {
             }
         };
 
-        // Extract speech probability — try_extract_tensor returns (&Shape, &[T])
+        // Extract speech probability
         let prob = outputs["output"]
             .try_extract_tensor::<f32>()
             .map(|(_shape, data)| data.first().copied().unwrap_or(0.0))
             .unwrap_or(0.0);
 
-        // Update LSTM state
-        let new_h = outputs["hn"]
+        // Update LSTM state from stateN output
+        if let Some(new_state) = outputs["stateN"]
             .try_extract_tensor::<f32>()
             .ok()
-            .and_then(|(_shape, data)| Array3::from_shape_vec((2, 1, 64), data.to_vec()).ok());
-        let new_c = outputs["cn"]
-            .try_extract_tensor::<f32>()
-            .ok()
-            .and_then(|(_shape, data)| Array3::from_shape_vec((2, 1, 64), data.to_vec()).ok());
-
-        if let Some(h) = new_h {
-            *h_state = h;
-        }
-        if let Some(c) = new_c {
-            *c_state = c;
+            .and_then(|(_shape, data)| Array3::from_shape_vec((2, 1, 128), data.to_vec()).ok())
+        {
+            *state = new_state;
         }
 
         prob
     }
 
-    /// Resets LSTM state to zeros (called after utterance flush or completion).
-    fn reset_lstm_state(&mut self) {
-        if let VadImpl::Silero { h_state, c_state, .. } = &mut self.impl_ {
-            *h_state = Array3::zeros((2, 1, 64));
-            *c_state = Array3::zeros((2, 1, 64));
+    /// Resets LSTM state to zeros (called after utterance completion or flush).
+    fn reset_state(&mut self) {
+        if let VadImpl::Silero { state, .. } = &mut self.impl_ {
+            *state = Array3::zeros((2, 1, 128));
         }
     }
 }
@@ -405,42 +396,36 @@ mod tests {
 
     #[test]
     fn lstm_state_zeroed_after_flush() {
-        // Uses the real Silero model. Verifies that flush() resets LSTM h/c state to zeros.
+        // Uses the real Silero model. Verifies that flush() resets LSTM state to zeros.
         let mut vad = silero_vad();
 
-        // Feed audio frames so ONNX processes them and LSTM state accumulates
+        // Feed audio frames so ONNX processes them and state accumulates
         for _ in 0..10 {
             vad.process(&vec![0.5f32; 512]);
         }
 
         // Verify we are in Silero mode (not RMS fallback)
-        let lstm_dirty = match &vad.impl_ {
-            VadImpl::Silero { h_state, c_state, .. } => {
-                h_state.iter().any(|&v| v != 0.0) || c_state.iter().any(|&v| v != 0.0)
-            }
+        let state_dirty = match &vad.impl_ {
+            VadImpl::Silero { state, .. } => state.iter().any(|&v| v != 0.0),
             VadImpl::Rms { .. } => panic!("expected Silero variant — model failed to load"),
         };
 
-        // Ensure speech_buffer is non-empty so flush() actually reaches reset_lstm_state().
+        // Ensure speech_buffer is non-empty so flush() actually reaches reset_state().
         // (flush() early-returns None on empty speech_buffer, skipping the reset entirely.)
         vad.speech_buffer.push(0.1f32);
 
-        // The flush call must have dirty state AND non-empty speech_buffer to be a meaningful test
         let _ = vad.flush();
 
-        // Now verify LSTM state is zeroed — both h and c
+        // Verify state is zeroed after flush
         match &vad.impl_ {
-            VadImpl::Silero { h_state, c_state, .. } => {
-                assert!(h_state.iter().all(|&v| v == 0.0), "h_state not zeroed after flush");
-                assert!(c_state.iter().all(|&v| v == 0.0), "c_state not zeroed after flush");
+            VadImpl::Silero { state, .. } => {
+                assert!(state.iter().all(|&v| v == 0.0), "state not zeroed after flush");
             }
             VadImpl::Rms { .. } => panic!("expected Silero variant after flush"),
         }
 
-        // Note: lstm_dirty may be false if Silero scored all frames as silence.
-        // The test is still valid — it verifies flush() calls reset_lstm_state() regardless.
-        // The dirty check is diagnostic only.
-        let _ = lstm_dirty;
+        // Diagnostic only — state may not be dirty if model scored all frames as silence
+        let _ = state_dirty;
     }
 
     // ── flush ─────────────────────────────────────────────────────────────────
