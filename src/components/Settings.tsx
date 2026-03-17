@@ -466,6 +466,26 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                   ))}
                 </select>
               </SettingRow>
+              <SettingRow label="VAD Engine" description="Neural detects speech vs noise · Energy uses volume level">
+                <div className="flex rounded-xl overflow-hidden" style={{ boxShadow: "var(--nm-pressed-sm)" }}>
+                  {(["silero", "rms"] as const).map((engine, i) => (
+                    <button
+                      key={engine}
+                      onClick={() => update({ vad_engine: engine })}
+                      aria-pressed={settings.vad_engine === engine}
+                      className="text-xs px-3 py-1.5 transition-all duration-150 cursor-pointer"
+                      style={{
+                        background: settings.vad_engine === engine ? "var(--accent)" : "var(--bg)",
+                        color: settings.vad_engine === engine ? "#0a0f0d" : "var(--t2)",
+                        fontWeight: settings.vad_engine === engine ? 600 : 400,
+                        borderRight: i === 0 ? "1px solid color-mix(in srgb, var(--t1) 10%, transparent)" : undefined,
+                      }}
+                    >
+                      {engine === "silero" ? "Neural (Silero)" : "Energy (RMS)"}
+                    </button>
+                  ))}
+                </div>
+              </SettingRow>
               <SettingRow
                 label="VAD Sensitivity"
                 description={`Voice detection threshold · ${Math.round(settings.vad_sensitivity * 100)}%`}

@@ -69,6 +69,7 @@ export interface AppSettings {
   llm_model_name: string;
   llm_nudge_shown: boolean;
   apply_polish_to_regular: boolean;
+  vad_engine: string;
 }
 
 // ─── AI ────────────────────────────────────────────────────────────────────────
