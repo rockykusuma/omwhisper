@@ -215,3 +215,188 @@ pub fn list_audio_devices() -> Vec<String> {
         })
         .unwrap_or_default()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── defaults ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn default_hotkey() {
+        assert_eq!(Settings::default().hotkey, "CmdOrCtrl+Shift+V");
+    }
+
+    #[test]
+    fn default_model_is_tiny_en() {
+        assert_eq!(Settings::default().active_model, "tiny.en");
+    }
+
+    #[test]
+    fn default_language_is_en() {
+        assert_eq!(Settings::default().language, "en");
+    }
+
+    #[test]
+    fn default_auto_paste_true() {
+        assert!(Settings::default().auto_paste);
+    }
+
+    #[test]
+    fn default_auto_launch_false() {
+        assert!(!Settings::default().auto_launch);
+    }
+
+    #[test]
+    fn default_show_overlay_true() {
+        assert!(Settings::default().show_overlay);
+    }
+
+    #[test]
+    fn default_onboarding_not_complete() {
+        assert!(!Settings::default().onboarding_complete);
+    }
+
+    #[test]
+    fn default_vad_sensitivity() {
+        assert!((Settings::default().vad_sensitivity - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn default_sound_enabled() {
+        assert!(Settings::default().sound_enabled);
+    }
+
+    #[test]
+    fn default_sound_volume() {
+        assert!((Settings::default().sound_volume - 0.2).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn default_restore_clipboard() {
+        assert!(Settings::default().restore_clipboard);
+    }
+
+    #[test]
+    fn default_clipboard_restore_delay_ms() {
+        assert_eq!(Settings::default().clipboard_restore_delay_ms, 2000);
+    }
+
+    #[test]
+    fn default_recording_mode_is_toggle() {
+        assert_eq!(Settings::default().recording_mode, "toggle");
+    }
+
+    #[test]
+    fn default_ai_backend_is_disabled() {
+        assert_eq!(Settings::default().ai_backend, "disabled");
+    }
+
+    #[test]
+    fn default_ai_ollama_url() {
+        assert_eq!(Settings::default().ai_ollama_url, "http://localhost:11434");
+    }
+
+    #[test]
+    fn default_active_polish_style() {
+        assert_eq!(Settings::default().active_polish_style, "professional");
+    }
+
+    #[test]
+    fn default_translate_target_language() {
+        assert_eq!(Settings::default().translate_target_language, "English");
+    }
+
+    #[test]
+    fn default_overlay_placement() {
+        assert_eq!(Settings::default().overlay_placement, "top-center");
+    }
+
+    #[test]
+    fn default_overlay_style() {
+        assert_eq!(Settings::default().overlay_style, "micro");
+    }
+
+    #[test]
+    fn default_collections_empty() {
+        let s = Settings::default();
+        assert!(s.custom_vocabulary.is_empty());
+        assert!(s.word_replacements.is_empty());
+        assert!(s.custom_polish_styles.is_empty());
+    }
+
+    #[test]
+    fn default_optional_fields_none() {
+        let s = Settings::default();
+        assert!(s.license_key.is_none());
+        assert!(s.audio_input_device.is_none());
+        assert!(s.auto_delete_after_days.is_none());
+    }
+
+    #[test]
+    fn default_bool_flags_false() {
+        let s = Settings::default();
+        assert!(!s.translate_to_english);
+        assert!(!s.llm_nudge_shown);
+        assert!(!s.apply_polish_to_regular);
+    }
+
+    // ── serialization roundtrip ───────────────────────────────────────────────
+
+    #[test]
+    fn json_roundtrip_preserves_defaults() {
+        let original = Settings::default();
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: Settings = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.hotkey, original.hotkey);
+        assert_eq!(restored.active_model, original.active_model);
+        assert_eq!(restored.recording_mode, original.recording_mode);
+        assert_eq!(restored.ai_backend, original.ai_backend);
+    }
+
+    #[test]
+    fn json_roundtrip_preserves_custom_values() {
+        let mut s = Settings::default();
+        s.hotkey = "CmdOrCtrl+Shift+X".to_string();
+        s.active_model = "small.en".to_string();
+        s.auto_paste = false;
+        s.custom_vocabulary = vec!["OmWhisper".to_string(), "Tauri".to_string()];
+        s.word_replacements.insert("ok".to_string(), "OK".to_string());
+
+        let json = serde_json::to_string(&s).unwrap();
+        let restored: Settings = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.hotkey, "CmdOrCtrl+Shift+X");
+        assert_eq!(restored.active_model, "small.en");
+        assert!(!restored.auto_paste);
+        assert_eq!(restored.custom_vocabulary, vec!["OmWhisper", "Tauri"]);
+        assert_eq!(restored.word_replacements.get("ok"), Some(&"OK".to_string()));
+    }
+
+    #[test]
+    fn partial_json_fills_missing_fields_with_defaults() {
+        // Minimal JSON — only hotkey set, everything else missing
+        let json = r#"{"hotkey":"CmdOrCtrl+Shift+Z","active_model":"base.en","language":"en","auto_launch":false,"auto_paste":true,"show_overlay":true,"vad_sensitivity":0.5,"onboarding_complete":false}"#;
+        let s: Settings = serde_json::from_str(json).unwrap();
+        assert_eq!(s.hotkey, "CmdOrCtrl+Shift+Z");
+        // Fields with #[serde(default)] should use defaults
+        assert_eq!(s.recording_mode, "toggle");
+        assert_eq!(s.ai_backend, "disabled");
+        assert_eq!(s.overlay_placement, "top-center");
+        assert!(s.custom_vocabulary.is_empty());
+    }
+
+    // ── settings_path ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn settings_path_ends_with_settings_json() {
+        let path = settings_path();
+        assert_eq!(path.file_name().unwrap(), "settings.json");
+    }
+
+    #[test]
+    fn settings_path_contains_app_identifier() {
+        let path = settings_path();
+        assert!(path.to_string_lossy().contains("com.omwhisper.app"));
+    }
+}

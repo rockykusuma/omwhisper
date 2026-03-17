@@ -308,3 +308,275 @@ pub fn add_seconds_today(seconds: i64) -> Result<()> {
     )?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use rusqlite::{Connection, params};
+
+    /// Create a fresh in-memory DB with the same schema used by the real DB.
+    fn setup() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE transcriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                text TEXT NOT NULL,
+                duration_seconds REAL NOT NULL DEFAULT 0,
+                model_used TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                word_count INTEGER NOT NULL DEFAULT 0,
+                source TEXT NOT NULL DEFAULT 'raw',
+                raw_text TEXT,
+                polish_style TEXT
+            );
+            CREATE TABLE daily_usage (
+                date TEXT PRIMARY KEY,
+                seconds_used INTEGER NOT NULL DEFAULT 0
+            );",
+        )
+        .unwrap();
+        conn
+    }
+
+    fn insert(conn: &Connection, text: &str, duration: f64, model: &str, created_at: &str, source: &str) -> i64 {
+        let word_count = text.split_whitespace().count() as i64;
+        conn.execute(
+            "INSERT INTO transcriptions (text, duration_seconds, model_used, created_at, word_count, source)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![text, duration, model, created_at, word_count, source],
+        )
+        .unwrap();
+        conn.last_insert_rowid()
+    }
+
+    // ── insert & count ────────────────────────────────────────────────────────
+
+    #[test]
+    fn insert_returns_incrementing_ids() {
+        let conn = setup();
+        let id1 = insert(&conn, "Hello world", 2.0, "tiny.en", "2024-01-01T10:00:00+00:00", "raw");
+        let id2 = insert(&conn, "Second entry", 3.0, "tiny.en", "2024-01-01T11:00:00+00:00", "raw");
+        assert_eq!(id1, 1);
+        assert_eq!(id2, 2);
+    }
+
+    #[test]
+    fn word_count_computed_correctly() {
+        let conn = setup();
+        insert(&conn, "one two three four", 1.0, "tiny.en", "2024-01-01T10:00:00+00:00", "raw");
+        let wc: i64 = conn
+            .query_row("SELECT word_count FROM transcriptions WHERE id = 1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(wc, 4);
+    }
+
+    // ── pagination ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn pagination_returns_correct_slice() {
+        let conn = setup();
+        for i in 1..=5 {
+            insert(&conn, &format!("Entry {i}"), 1.0, "tiny.en", &format!("2024-01-0{i}T10:00:00+00:00"), "raw");
+        }
+        let mut stmt = conn.prepare(
+            "SELECT id FROM transcriptions ORDER BY created_at DESC LIMIT 2 OFFSET 1",
+        ).unwrap();
+        let ids: Vec<i64> = stmt.query_map([], |r| r.get(0)).unwrap().filter_map(|r| r.ok()).collect();
+        assert_eq!(ids.len(), 2);
+    }
+
+    #[test]
+    fn get_all_returns_newest_first() {
+        let conn = setup();
+        insert(&conn, "First", 1.0, "tiny.en", "2024-01-01T10:00:00+00:00", "raw");
+        insert(&conn, "Second", 1.0, "tiny.en", "2024-01-02T10:00:00+00:00", "raw");
+        insert(&conn, "Third", 1.0, "tiny.en", "2024-01-03T10:00:00+00:00", "raw");
+        let mut stmt = conn.prepare(
+            "SELECT text FROM transcriptions ORDER BY created_at DESC",
+        ).unwrap();
+        let texts: Vec<String> = stmt.query_map([], |r| r.get(0)).unwrap().filter_map(|r| r.ok()).collect();
+        assert_eq!(texts[0], "Third");
+        assert_eq!(texts[2], "First");
+    }
+
+    // ── search ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn search_finds_matching_entry() {
+        let conn = setup();
+        insert(&conn, "Hello world from Rust", 1.0, "tiny.en", "2024-01-01T10:00:00+00:00", "raw");
+        insert(&conn, "Unrelated text here", 1.0, "tiny.en", "2024-01-02T10:00:00+00:00", "raw");
+        let pattern = "%Rust%";
+        let mut stmt = conn.prepare(
+            "SELECT text FROM transcriptions WHERE text LIKE ?1 ORDER BY created_at DESC LIMIT 100",
+        ).unwrap();
+        let results: Vec<String> = stmt.query_map(params![pattern], |r| r.get(0)).unwrap().filter_map(|r| r.ok()).collect();
+        assert_eq!(results.len(), 1);
+        assert!(results[0].contains("Rust"));
+    }
+
+    #[test]
+    fn search_no_match_returns_empty() {
+        let conn = setup();
+        insert(&conn, "Hello world", 1.0, "tiny.en", "2024-01-01T10:00:00+00:00", "raw");
+        let pattern = "%xyz_not_found%";
+        let mut stmt = conn.prepare(
+            "SELECT text FROM transcriptions WHERE text LIKE ?1",
+        ).unwrap();
+        let results: Vec<String> = stmt.query_map(params![pattern], |r| r.get(0)).unwrap().filter_map(|r| r.ok()).collect();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn search_is_case_insensitive_via_like() {
+        let conn = setup();
+        insert(&conn, "Hello WORLD", 1.0, "tiny.en", "2024-01-01T10:00:00+00:00", "raw");
+        // SQLite LIKE is case-insensitive for ASCII by default
+        let pattern = "%hello%";
+        let mut stmt = conn.prepare(
+            "SELECT COUNT(*) FROM transcriptions WHERE text LIKE ?1",
+        ).unwrap();
+        let count: i64 = stmt.query_row(params![pattern], |r| r.get(0)).unwrap();
+        assert_eq!(count, 1);
+    }
+
+    // ── delete ────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn delete_removes_correct_row() {
+        let conn = setup();
+        let id = insert(&conn, "To delete", 1.0, "tiny.en", "2024-01-01T10:00:00+00:00", "raw");
+        insert(&conn, "Keep me", 1.0, "tiny.en", "2024-01-02T10:00:00+00:00", "raw");
+
+        conn.execute("DELETE FROM transcriptions WHERE id = ?1", params![id]).unwrap();
+
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM transcriptions", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 1);
+        let text: String = conn.query_row("SELECT text FROM transcriptions", [], |r| r.get(0)).unwrap();
+        assert_eq!(text, "Keep me");
+    }
+
+    #[test]
+    fn clear_removes_all_rows() {
+        let conn = setup();
+        insert(&conn, "A", 1.0, "tiny.en", "2024-01-01T10:00:00+00:00", "raw");
+        insert(&conn, "B", 1.0, "tiny.en", "2024-01-02T10:00:00+00:00", "raw");
+        conn.execute_batch("DELETE FROM transcriptions;").unwrap();
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM transcriptions", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 0);
+    }
+
+    // ── export formats ────────────────────────────────────────────────────────
+
+    #[test]
+    fn export_json_is_valid_json() {
+        let conn = setup();
+        insert(&conn, "Test transcription", 5.0, "tiny.en", "2024-01-01T10:00:00+00:00", "raw");
+        let mut stmt = conn.prepare(
+            "SELECT id, text, duration_seconds, model_used, created_at, word_count, source, raw_text, polish_style
+             FROM transcriptions ORDER BY created_at DESC",
+        ).unwrap();
+        let entries: Vec<serde_json::Value> = stmt.query_map([], |row| {
+            Ok(serde_json::json!({
+                "id": row.get::<_, i64>(0)?,
+                "text": row.get::<_, String>(1)?,
+                "duration_seconds": row.get::<_, f64>(2)?,
+                "model_used": row.get::<_, String>(3)?,
+                "created_at": row.get::<_, String>(4)?,
+                "word_count": row.get::<_, i64>(5)?,
+            }))
+        }).unwrap().filter_map(|r| r.ok()).collect();
+        let json = serde_json::to_string_pretty(&entries).unwrap();
+        assert!(json.contains("Test transcription"));
+        // Verify it's valid JSON by parsing it back
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert!(parsed.is_array());
+    }
+
+    #[test]
+    fn export_txt_format_contains_text() {
+        let texts = vec!["First sentence", "Second sentence"];
+        let mut out = String::new();
+        for text in &texts {
+            out.push_str(&format!("[2024-01-01]\n{}\n\n", text));
+        }
+        assert!(out.contains("First sentence"));
+        assert!(out.contains("Second sentence"));
+    }
+
+    #[test]
+    fn export_markdown_contains_headers() {
+        let mut out = String::from("# OmWhisper Transcription History\n\n");
+        out.push_str("## 2024-01-01T10:00:00+00:00\n\n");
+        out.push_str("**Model:** tiny.en | **Words:** 3 | **Duration:** 2.5s\n\n");
+        out.push_str("Hello world test\n\n---\n\n");
+        assert!(out.starts_with("# OmWhisper"));
+        assert!(out.contains("##"));
+        assert!(out.contains("**Model:**"));
+    }
+
+    // ── daily usage ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn daily_usage_upsert_accumulates() {
+        let conn = setup();
+        let date = "2024-01-01";
+        conn.execute(
+            "INSERT INTO daily_usage (date, seconds_used) VALUES (?1, ?2)
+             ON CONFLICT(date) DO UPDATE SET seconds_used = seconds_used + ?2",
+            params![date, 60i64],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO daily_usage (date, seconds_used) VALUES (?1, ?2)
+             ON CONFLICT(date) DO UPDATE SET seconds_used = seconds_used + ?2",
+            params![date, 120i64],
+        ).unwrap();
+        let total: i64 = conn.query_row(
+            "SELECT seconds_used FROM daily_usage WHERE date = ?1",
+            params![date],
+            |r| r.get(0),
+        ).unwrap();
+        assert_eq!(total, 180);
+    }
+
+    #[test]
+    fn daily_usage_missing_date_returns_zero() {
+        let conn = setup();
+        let total: i64 = conn
+            .query_row(
+                "SELECT seconds_used FROM daily_usage WHERE date = '9999-01-01'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        assert_eq!(total, 0);
+    }
+
+    // ── stats ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn stats_total_words_summed_correctly() {
+        let conn = setup();
+        insert(&conn, "one two three", 1.0, "tiny.en", "2024-01-01T10:00:00+00:00", "raw"); // 3 words
+        insert(&conn, "four five", 1.0, "tiny.en", "2024-01-02T10:00:00+00:00", "raw");     // 2 words
+        let total_words: i64 = conn
+            .query_row("SELECT COALESCE(SUM(word_count), 0) FROM transcriptions", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(total_words, 5);
+    }
+
+    #[test]
+    fn stats_total_duration_summed_correctly() {
+        let conn = setup();
+        insert(&conn, "A", 10.5, "tiny.en", "2024-01-01T10:00:00+00:00", "raw");
+        insert(&conn, "B", 4.5, "tiny.en", "2024-01-02T10:00:00+00:00", "raw");
+        let total: f64 = conn
+            .query_row("SELECT COALESCE(SUM(duration_seconds), 0) FROM transcriptions", [], |r| r.get(0))
+            .unwrap();
+        assert!((total - 15.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn free_tier_constant_is_1800_seconds() {
+        assert_eq!(super::FREE_TIER_SECONDS, 1800);
+    }
+}

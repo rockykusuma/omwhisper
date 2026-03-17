@@ -163,3 +163,131 @@ fn resample_to_16k(samples: &[f32], src_rate: u32, dst_rate: u32) -> Vec<f32> {
 
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── regex_escape ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn regex_escape_plain_word_unchanged() {
+        assert_eq!(regex_escape("hello"), "hello");
+    }
+
+    #[test]
+    fn regex_escape_dot_escaped() {
+        assert_eq!(regex_escape("e.g"), "e\\.g");
+    }
+
+    #[test]
+    fn regex_escape_parens_escaped() {
+        assert_eq!(regex_escape("(ok)"), "\\(ok\\)");
+    }
+
+    #[test]
+    fn regex_escape_multiple_specials() {
+        let escaped = regex_escape("a+b*c?");
+        assert_eq!(escaped, "a\\+b\\*c\\?");
+    }
+
+    // ── apply_replacements ────────────────────────────────────────────────────
+
+    #[test]
+    fn empty_map_returns_text_unchanged() {
+        let result = apply_replacements("hello world", &HashMap::new());
+        assert_eq!(result, "hello world");
+    }
+
+    #[test]
+    fn simple_whole_word_replacement() {
+        let mut map = HashMap::new();
+        map.insert("okay".to_string(), "OK".to_string());
+        let result = apply_replacements("That is okay with me", &map);
+        assert_eq!(result, "That is OK with me");
+    }
+
+    #[test]
+    fn partial_word_not_replaced() {
+        let mut map = HashMap::new();
+        map.insert("ok".to_string(), "OK".to_string());
+        // "okay" should NOT be replaced — "ok" is not a whole word here
+        let result = apply_replacements("That is okay", &map);
+        assert_eq!(result, "That is okay");
+    }
+
+    #[test]
+    fn replacement_is_case_insensitive() {
+        let mut map = HashMap::new();
+        map.insert("hello".to_string(), "Hi".to_string());
+        let result = apply_replacements("HELLO world", &map);
+        assert_eq!(result, "Hi world");
+    }
+
+    #[test]
+    fn multiple_replacements_applied() {
+        let mut map = HashMap::new();
+        map.insert("um".to_string(), "".to_string());
+        map.insert("uh".to_string(), "".to_string());
+        let result = apply_replacements("um this is uh great", &map);
+        assert!(!result.contains("um"));
+        assert!(!result.contains("uh"));
+    }
+
+    #[test]
+    fn replacement_with_internal_special_chars_escaped() {
+        let mut map = HashMap::new();
+        // Key starts and ends with word chars so \b works.
+        // The dot in the middle must be regex-escaped to match literally.
+        map.insert("v1.0".to_string(), "version one".to_string());
+        let result = apply_replacements("Running v1.0 of the app", &map);
+        assert_eq!(result, "Running version one of the app");
+    }
+
+    #[test]
+    fn no_match_returns_text_unchanged() {
+        let mut map = HashMap::new();
+        map.insert("xyz".to_string(), "replaced".to_string());
+        let result = apply_replacements("hello world", &map);
+        assert_eq!(result, "hello world");
+    }
+
+    // ── resample_to_16k ──────────────────────────────────────────────────────
+
+    #[test]
+    fn resample_same_rate_is_identity_length() {
+        let samples: Vec<f32> = (0..160).map(|i| i as f32 / 160.0).collect();
+        let out = resample_to_16k(&samples, 16000, 16000);
+        assert_eq!(out.len(), samples.len());
+    }
+
+    #[test]
+    fn resample_downsample_halves_length() {
+        let samples = vec![0.5f32; 320];
+        let out = resample_to_16k(&samples, 32000, 16000);
+        assert_eq!(out.len(), 160);
+    }
+
+    #[test]
+    fn resample_upsample_doubles_length() {
+        let samples = vec![0.5f32; 80];
+        let out = resample_to_16k(&samples, 8000, 16000);
+        assert_eq!(out.len(), 160);
+    }
+
+    #[test]
+    fn resample_dc_signal_preserved() {
+        // A constant signal should stay constant after resampling
+        let samples = vec![0.5f32; 320];
+        let out = resample_to_16k(&samples, 32000, 16000);
+        for sample in &out {
+            assert!((*sample - 0.5).abs() < 1e-4, "expected ~0.5, got {sample}");
+        }
+    }
+
+    #[test]
+    fn resample_empty_returns_empty() {
+        let out = resample_to_16k(&[], 44100, 16000);
+        assert!(out.is_empty());
+    }
+}

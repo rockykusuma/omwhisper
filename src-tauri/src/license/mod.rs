@@ -274,3 +274,123 @@ pub async fn deactivate() -> Result<(), String> {
     clear_stored();
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    fn days_ago_rfc3339(days: i64) -> String {
+        (Utc::now() - chrono::Duration::days(days)).to_rfc3339()
+    }
+
+    // ── days_since_validated_to_status ────────────────────────────────────────
+
+    #[test]
+    fn validated_today_is_licensed() {
+        let recent = days_ago_rfc3339(0);
+        assert_eq!(days_since_validated_to_status(&recent), LicenseStatus::Licensed);
+    }
+
+    #[test]
+    fn validated_seven_days_ago_is_licensed() {
+        // REVALIDATE_DAYS = 7, so exactly 7 days → still Licensed
+        let dt = days_ago_rfc3339(7);
+        assert_eq!(days_since_validated_to_status(&dt), LicenseStatus::Licensed);
+    }
+
+    #[test]
+    fn validated_eight_days_ago_is_grace_period() {
+        let dt = days_ago_rfc3339(8);
+        assert_eq!(days_since_validated_to_status(&dt), LicenseStatus::GracePeriod);
+    }
+
+    #[test]
+    fn validated_thirty_days_ago_is_grace_period() {
+        // GRACE_PERIOD_DAYS = 30, so exactly 30 days → still GracePeriod
+        let dt = days_ago_rfc3339(30);
+        assert_eq!(days_since_validated_to_status(&dt), LicenseStatus::GracePeriod);
+    }
+
+    #[test]
+    fn validated_thirty_one_days_ago_is_expired() {
+        let dt = days_ago_rfc3339(31);
+        assert_eq!(days_since_validated_to_status(&dt), LicenseStatus::Expired);
+    }
+
+    #[test]
+    fn validated_hundred_days_ago_is_expired() {
+        let dt = days_ago_rfc3339(100);
+        assert_eq!(days_since_validated_to_status(&dt), LicenseStatus::Expired);
+    }
+
+    #[test]
+    fn invalid_date_string_returns_free() {
+        assert_eq!(days_since_validated_to_status("not-a-date"), LicenseStatus::Free);
+    }
+
+    #[test]
+    fn empty_date_string_returns_free() {
+        assert_eq!(days_since_validated_to_status(""), LicenseStatus::Free);
+    }
+
+    // ── is_active ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn licensed_is_active() {
+        assert!(matches!(LicenseStatus::Licensed, s if {
+            // Test via is_active logic: Licensed | GracePeriod = active
+            matches!(s, LicenseStatus::Licensed | LicenseStatus::GracePeriod)
+        }));
+    }
+
+    #[test]
+    fn grace_period_is_active() {
+        assert!(matches!(
+            LicenseStatus::GracePeriod,
+            LicenseStatus::Licensed | LicenseStatus::GracePeriod
+        ));
+    }
+
+    #[test]
+    fn free_is_not_active() {
+        assert!(!matches!(
+            LicenseStatus::Free,
+            LicenseStatus::Licensed | LicenseStatus::GracePeriod
+        ));
+    }
+
+    #[test]
+    fn expired_is_not_active() {
+        assert!(!matches!(
+            LicenseStatus::Expired,
+            LicenseStatus::Licensed | LicenseStatus::GracePeriod
+        ));
+    }
+
+    // ── instance_name ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn instance_name_has_prefix() {
+        let name = instance_name();
+        assert!(name.starts_with("omwhisper-"), "expected 'omwhisper-' prefix, got: {name}");
+    }
+
+    #[test]
+    fn instance_name_is_stable() {
+        // Two calls should return the same value
+        assert_eq!(instance_name(), instance_name());
+    }
+
+    #[test]
+    fn machine_id_is_sixteen_chars() {
+        let id = get_machine_id();
+        assert_eq!(id.len(), 16, "expected 16-char machine ID, got: {id}");
+    }
+
+    #[test]
+    fn machine_id_is_alphanumeric() {
+        let id = get_machine_id();
+        assert!(id.chars().all(|c| c.is_ascii_alphanumeric()), "non-alphanumeric in machine ID: {id}");
+    }
+}

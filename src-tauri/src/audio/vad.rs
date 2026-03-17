@@ -84,3 +84,130 @@ impl Vad {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── rms ──────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn rms_of_empty_slice_is_zero() {
+        assert_eq!(Vad::rms(&[]), 0.0);
+    }
+
+    #[test]
+    fn rms_of_silence_is_zero() {
+        let silence = vec![0.0f32; 100];
+        assert_eq!(Vad::rms(&silence), 0.0);
+    }
+
+    #[test]
+    fn rms_of_unit_amplitude_is_one() {
+        // Signal alternating +1 / -1 has RMS = 1.0
+        let signal: Vec<f32> = (0..100).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect();
+        let rms = Vad::rms(&signal);
+        assert!((rms - 1.0).abs() < 1e-5, "expected ~1.0, got {rms}");
+    }
+
+    #[test]
+    fn rms_of_dc_offset_equals_amplitude() {
+        let signal = vec![0.5f32; 64];
+        let rms = Vad::rms(&signal);
+        assert!((rms - 0.5).abs() < 1e-5, "expected ~0.5, got {rms}");
+    }
+
+    #[test]
+    fn rms_single_sample() {
+        let rms = Vad::rms(&[0.8]);
+        assert!((rms - 0.8).abs() < 1e-5);
+    }
+
+    // ── process ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn silence_with_no_buffer_returns_none() {
+        let mut vad = Vad::new(0.01, 16000);
+        let silence = vec![0.0f32; 1600];
+        assert!(vad.process(&silence).is_none());
+    }
+
+    #[test]
+    fn speech_chunk_accumulates_and_returns_none() {
+        let mut vad = Vad::new(0.01, 16000);
+        let speech = vec![0.5f32; 1600]; // well above threshold
+        assert!(vad.process(&speech).is_none()); // still accumulating
+    }
+
+    #[test]
+    fn utterance_flushed_after_silence_timeout() {
+        // silence_timeout = 1.5s * 16000 = 24000 samples
+        let mut vad = Vad::new(0.01, 16000);
+        let speech = vec![0.5f32; 1600];
+        let silence = vec![0.0f32; 1600];
+
+        // Feed speech
+        assert!(vad.process(&speech).is_none());
+
+        // Feed silence until timeout (24000 / 1600 = 15 chunks)
+        let mut result = None;
+        for _ in 0..15 {
+            result = vad.process(&silence);
+            if result.is_some() { break; }
+        }
+        assert!(result.is_some(), "expected utterance after silence timeout");
+        let utterance = result.unwrap();
+        // Utterance should include the speech samples
+        assert!(utterance.len() >= 1600);
+    }
+
+    #[test]
+    fn speech_followed_by_speech_keeps_accumulating() {
+        let mut vad = Vad::new(0.01, 16000);
+        let speech = vec![0.5f32; 1600];
+        assert!(vad.process(&speech).is_none());
+        assert!(vad.process(&speech).is_none()); // still no silence timeout
+    }
+
+    #[test]
+    fn silence_resets_after_utterance_flushed() {
+        let mut vad = Vad::new(0.01, 16000);
+        let speech = vec![0.5f32; 1600];
+        let silence = vec![0.0f32; 1600];
+
+        vad.process(&speech);
+        // Drain silence to trigger flush
+        for _ in 0..15 { vad.process(&silence); }
+
+        // After flush, more silence should return None
+        assert!(vad.process(&silence).is_none());
+    }
+
+    // ── flush ─────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn flush_empty_buffer_returns_none() {
+        let mut vad = Vad::new(0.01, 16000);
+        assert!(vad.flush().is_none());
+    }
+
+    #[test]
+    fn flush_returns_buffered_speech() {
+        let mut vad = Vad::new(0.01, 16000);
+        let speech = vec![0.5f32; 800];
+        vad.process(&speech);
+        let flushed = vad.flush();
+        assert!(flushed.is_some());
+        assert_eq!(flushed.unwrap().len(), 800);
+    }
+
+    #[test]
+    fn flush_clears_buffer() {
+        let mut vad = Vad::new(0.01, 16000);
+        let speech = vec![0.5f32; 800];
+        vad.process(&speech);
+        vad.flush();
+        // Second flush should be empty
+        assert!(vad.flush().is_none());
+    }
+}

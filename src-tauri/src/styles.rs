@@ -165,3 +165,82 @@ pub async fn remove_custom_style(name: String) -> Result<(), String> {
     settings.custom_polish_styles.retain(|s| s.name != name);
     crate::settings::save_settings(&settings).await.map_err(|e| e.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn built_in_styles_has_six_entries() {
+        assert_eq!(built_in_styles().len(), 6);
+    }
+
+    #[test]
+    fn built_in_style_ids_are_unique() {
+        let styles = built_in_styles();
+        let mut ids: Vec<&str> = styles.iter().map(|s| s.id.as_str()).collect();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), 6);
+    }
+
+    #[test]
+    fn expected_style_ids_present() {
+        let ids: Vec<String> = built_in_styles().into_iter().map(|s| s.id).collect();
+        for expected in &["professional", "casual", "concise", "translate", "email", "meeting_notes"] {
+            assert!(ids.contains(&expected.to_string()), "missing style: {expected}");
+        }
+    }
+
+    #[test]
+    fn professional_prompt_is_nonempty() {
+        let prompt = system_prompt_for("professional", "English");
+        assert!(!prompt.is_empty());
+        assert!(prompt.to_lowercase().contains("professional"));
+    }
+
+    #[test]
+    fn translate_prompt_includes_target_language() {
+        let prompt = system_prompt_for("translate", "French");
+        assert!(prompt.contains("French"), "expected 'French' in prompt: {prompt}");
+    }
+
+    #[test]
+    fn translate_prompt_changes_with_language() {
+        let french = system_prompt_for("translate", "French");
+        let spanish = system_prompt_for("translate", "Spanish");
+        assert_ne!(french, spanish);
+    }
+
+    #[test]
+    fn custom_prefix_returns_prompt_directly() {
+        let prompt = system_prompt_for("custom:You are a pirate.", "English");
+        assert_eq!(prompt, "You are a pirate.");
+    }
+
+    #[test]
+    fn unknown_style_falls_back_to_professional() {
+        let unknown = system_prompt_for("nonexistent_style", "English");
+        let professional = system_prompt_for("professional", "English");
+        assert_eq!(unknown, professional);
+    }
+
+    #[test]
+    fn all_builtin_prompts_nonempty() {
+        for id in &["professional", "casual", "concise", "email", "meeting_notes"] {
+            let prompt = system_prompt_for(id, "English");
+            assert!(!prompt.is_empty(), "empty prompt for style: {id}");
+        }
+    }
+
+    #[test]
+    fn custom_style_struct_serializes() {
+        let style = CustomStyle {
+            name: "Test".to_string(),
+            system_prompt: "Be brief.".to_string(),
+        };
+        let json = serde_json::to_string(&style).unwrap();
+        assert!(json.contains("Test"));
+        assert!(json.contains("Be brief."));
+    }
+}
