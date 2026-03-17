@@ -19,6 +19,8 @@ pub struct TranscriptionState {
     pub start_cancelled: bool,
     /// Timestamp when the current recording started (for duration_ms in analytics).
     pub recording_start_time: Option<std::time::Instant>,
+    /// Name of the currently active transcription engine ("whisper" or "apple").
+    pub active_engine: &'static str,
 }
 
 impl TranscriptionState {
@@ -29,6 +31,7 @@ impl TranscriptionState {
             is_smart_dictation: false,
             start_cancelled: false,
             recording_start_time: None,
+            active_engine: "whisper",
         }
     }
 }
@@ -155,6 +158,19 @@ pub async fn start_transcription(
 
     let model_path = resolve_model_path(&model);
 
+    // Select the transcription engine (Apple or Whisper) before spawning the thread.
+    let engine = match crate::engine::TranscriptionEngine::select(&model_path) {
+        Ok(e) => e,
+        Err(err) => {
+            eprintln!("failed to select transcription engine: {err}");
+            sentry_anyhow::capture_anyhow(&err);
+            return Err(err.to_string());
+        }
+    };
+    // Capture the name before moving engine into the thread (borrow-checker requirement).
+    let engine_name = engine.name();
+    state.lock().expect("state mutex poisoned").active_engine = engine_name;
+
     // Spawn a thread to forward RMS level events to the frontend.
     let app_for_level = app.clone();
     std::thread::spawn(move || {
@@ -193,16 +209,8 @@ pub async fn start_transcription(
     });
 
     // Spawn a dedicated thread to load the model and consume speech utterances.
-    // (WhisperEngine is not Send/Sync, so we keep it on one thread.)
+    // TranscriptionEngine is Send (see engine.rs unsafe impl Send).
     std::thread::spawn(move || {
-        let engine = match WhisperEngine::new(&model_path) {
-            Ok(e) => e,
-            Err(err) => {
-                eprintln!("failed to load whisper model: {err}");
-                sentry_anyhow::capture_anyhow(&err);
-                return;
-            }
-        };
 
         let prompt_ref: Option<&str> = if initial_prompt.is_empty() { None } else { Some(&initial_prompt) };
 
@@ -1177,4 +1185,24 @@ pub fn get_platform() -> &'static str {
 pub fn open_feedback_url(url: String, app: AppHandle) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
     app.opener().open_url(&url, None::<&str>).map_err(|e| e.to_string())
+}
+
+// ─── Transcription Engine ─────────────────────────────────────────────────────
+
+/// Returns the name of the currently active transcription engine ("whisper" or "apple").
+/// Note: not yet registered in invoke_handler! — that happens in Task 4.
+#[tauri::command]
+pub fn get_transcription_engine(state: tauri::State<'_, SharedState>) -> &'static str {
+    state.lock().unwrap().active_engine
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TranscriptionState;
+
+    #[test]
+    fn transcription_state_default_active_engine_is_whisper() {
+        let state = TranscriptionState::new();
+        assert_eq!(state.active_engine, "whisper");
+    }
 }
