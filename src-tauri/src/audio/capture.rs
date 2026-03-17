@@ -16,9 +16,6 @@ pub struct AudioCapture {
 }
 
 impl AudioCapture {
-    // Note: AudioCapture::new takes (vad_sensitivity, vad_engine) — vad_sensitivity first.
-    // Vad::new takes (vad_engine, vad_sensitivity, sample_rate) — vad_engine first.
-    // The order is intentionally different; pass them correctly at the inner call site.
     pub fn new(vad_sensitivity: f32, vad_engine: &str) -> Self {
         AudioCapture {
             running: Arc::new(AtomicBool::new(false)),
