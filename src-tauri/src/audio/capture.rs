@@ -3,7 +3,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use super::vad::{Vad, DEFAULT_THRESHOLD};
+use super::vad::Vad;
 
 const TARGET_SAMPLE_RATE: u32 = 16000;
 
@@ -16,10 +16,10 @@ pub struct AudioCapture {
 }
 
 impl AudioCapture {
-    pub fn new() -> Self {
+    pub fn new(vad_sensitivity: f32) -> Self {
         AudioCapture {
             running: Arc::new(AtomicBool::new(false)),
-            vad: Arc::new(Mutex::new(Vad::new(DEFAULT_THRESHOLD, TARGET_SAMPLE_RATE))),
+            vad: Arc::new(Mutex::new(Vad::new(vad_sensitivity, TARGET_SAMPLE_RATE))),
             speech_tx: Arc::new(Mutex::new(None)),
         }
     }
