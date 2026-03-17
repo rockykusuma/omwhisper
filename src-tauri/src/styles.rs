@@ -197,7 +197,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn built_in_styles_has_six_entries() {
+    fn built_in_styles_has_seven_entries() {
         assert_eq!(built_in_styles().len(), 7);
     }
 
