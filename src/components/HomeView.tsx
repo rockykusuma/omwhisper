@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { Mic, MicOff, Sparkles, ChevronRight, Cpu } from "lucide-react";
+import { Mic, MicOff, Sparkles } from "lucide-react";
 import type { TranscriptionSegment, AppSettings } from "../types";
 import TipsSection from "./TipsSection";
 
@@ -70,6 +70,9 @@ export default function HomeView({
   // ── Home state ──
   const [micName, setMicName] = useState("Default Microphone");
   const [applyPolishToRegular, setApplyPolishToRegular] = useState(false);
+  const [modelNudgeDismissed, setModelNudgeDismissed] = useState(
+    () => localStorage.getItem("omw_model_nudge_dismissed") === "1"
+  );
 
   // ── Data loaders ──
   const loadSettings = useCallback(async () => {
@@ -100,29 +103,18 @@ export default function HomeView({
     return () => { unlisten.then((f) => f()); };
   }, [loadSettings]);
 
-  // ── Vocabulary nudge ──
-  const [vocabEmpty, setVocabEmpty] = useState(false);
-  const [nudgeDismissed, setNudgeDismissed] = useState(false);
-
-  useEffect(() => {
-    invoke<{ words: string[]; replacements: Record<string, string> }>("get_vocabulary")
-      .then((v) => {
-        if (v.words.length === 0 && Object.keys(v.replacements).length === 0) {
-          setVocabEmpty(true);
-        }
-      })
-      .catch(() => {});
-  }, []);
 
   // ── Recording lifecycle ──
 
-  // On start: clear segments, show transcript panel
+  // On start: clear segments, show transcript panel; hide on stop
   useEffect(() => {
     if (isRecording) {
       recordingStartRef.current = Date.now();
       setSegments([]);
       setTranscriptionComplete(false);
       setShowLiveTranscript(true);
+    } else {
+      setShowLiveTranscript(false);
     }
   }, [isRecording]);
 
@@ -166,7 +158,20 @@ export default function HomeView({
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col h-full px-8 py-6 gap-4 overflow-y-auto">
+    <div className="relative flex flex-col h-full px-8 py-6 gap-4 overflow-y-auto">
+
+      {/* ── Mic selector (top-right) ─────────────────────────────────────── */}
+      <button
+        onClick={() => onNavigate("settings:audio")}
+        className="absolute top-2 right-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition-all duration-150 cursor-pointer"
+        style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "color-mix(in srgb, var(--t1) 6%, var(--bg))")}
+        onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg)")}
+        title="Change Microphone"
+      >
+        <Mic size={11} style={{ color: "var(--accent)", flexShrink: 0 }} strokeWidth={2} />
+        <span className="text-[11px] truncate max-w-[140px]" style={{ color: "var(--t3)" }}>{micName}</span>
+      </button>
 
       {/* ── Record / Stop button ────────────────────────────────────────── */}
       <div className="flex flex-col items-center gap-3 py-5">
@@ -234,13 +239,61 @@ export default function HomeView({
             </>
           ) : (
             <p className="text-[11px] font-mono text-center leading-relaxed" style={{ color: "var(--t4)" }}>
-              {showLiveTranscript && transcriptionComplete
-                ? "Recording complete — pasted to your app"
-                : "⌘⇧V to dictate anywhere · ⌘⇧B for AI polish"}
+              ⌘⇧V to dictate anywhere · ⌘⇧B for AI polish
             </p>
           )}
         </div>
       </div>
+
+      {/* ── AI Cleanup toggle row ─────────────────────────────────────────── */}
+      <button
+        onClick={isRecording ? undefined : handleToggleCleanup}
+        className="group w-full flex items-center gap-3 px-4 py-3 rounded-2xl flex-shrink-0 transition-all duration-150"
+        style={{
+          background: applyPolishToRegular
+            ? "color-mix(in srgb, var(--accent) 8%, var(--bg))"
+            : "var(--bg)",
+          boxShadow: "var(--nm-raised-sm)",
+          cursor: isRecording ? "default" : "pointer",
+          pointerEvents: isRecording ? "none" : "auto",
+        }}
+        onMouseEnter={(e) => {
+          if (!isRecording && !applyPolishToRegular)
+            e.currentTarget.style.background = "color-mix(in srgb, var(--t1) 4%, var(--bg))";
+        }}
+        onMouseLeave={(e) => {
+          if (!applyPolishToRegular) e.currentTarget.style.background = "var(--bg)";
+        }}
+        title="Toggle AI Cleanup"
+        aria-label="Apply AI Polish to regular recording"
+        aria-pressed={applyPolishToRegular}
+      >
+        <Sparkles size={13} style={{ color: applyPolishToRegular ? "var(--accent)" : "var(--t3)", flexShrink: 0, marginTop: 2 }} strokeWidth={2} />
+        <div className="flex-1 text-left min-w-0">
+          <p className="text-xs font-semibold" style={{ color: applyPolishToRegular ? "var(--t2)" : "var(--t3)" }}>
+            Apply AI Polish to regular recording
+          </p>
+          <p className="text-[11px] mt-0.5 leading-snug" style={{ color: "var(--t4)" }}>
+            ⌘⇧V recordings are polished before pasting. Falls back to raw paste if AI is unavailable.
+          </p>
+          <p className="text-[10px] mt-1 leading-snug" style={{ color: "var(--t4)", opacity: 0.7 }}>
+            ⚠ Adds a brief pause before pasting while AI processes your text.
+          </p>
+        </div>
+        {/* Toggle pill */}
+        <div
+          className="relative w-7 h-4 rounded-full flex-shrink-0 transition-colors duration-200"
+          style={{ background: applyPolishToRegular ? "var(--accent)" : "color-mix(in srgb, var(--t1) 20%, transparent)" }}
+        >
+          <div
+            className="absolute top-0.5 w-3 h-3 rounded-full transition-transform duration-200"
+            style={{
+              background: applyPolishToRegular ? "var(--bg)" : "var(--t3)",
+              transform: applyPolishToRegular ? "translateX(14px)" : "translateX(2px)",
+            }}
+          />
+        </div>
+      </button>
 
       {/* ── Live transcript panel (visible during recording + persists until next start) ── */}
       {showLiveTranscript && (
@@ -266,15 +319,6 @@ export default function HomeView({
             <span className="text-xs font-mono" style={{ color: "var(--t4)" }}>
               {segments.length} segment{segments.length !== 1 ? "s" : ""}
             </span>
-            {!isRecording && (
-              <button
-                onClick={() => { setSegments([]); setShowLiveTranscript(false); }}
-                className="ml-auto text-[10px] cursor-pointer transition-colors duration-150"
-                style={{ color: "var(--t4)" }}
-              >
-                Clear
-              </button>
-            )}
           </div>
           <div ref={scrollRef} className="p-5 space-y-3 overflow-y-auto max-h-48 select-text">
             {segments.map((seg, idx) => (
@@ -291,100 +335,64 @@ export default function HomeView({
         </div>
       )}
 
-      {/* ── Vocabulary nudge ──────────────────────────────────────────────── */}
-      {vocabEmpty && !nudgeDismissed && !isRecording && !showLiveTranscript && (
+
+
+      {/* ── Model nudge ──────────────────────────────────────────────────── */}
+      {!modelNudgeDismissed && !isRecording && !showLiveTranscript && (
         <div
-          className="rounded-2xl flex items-center gap-3 px-4 py-3 cursor-pointer flex-shrink-0"
-          style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)", border: "1px solid color-mix(in srgb, var(--accent) 15%, transparent)" }}
-          onClick={() => onNavigate("vocabulary")}
+          className="rounded-2xl flex-shrink-0 overflow-hidden"
+          style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
         >
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold leading-snug" style={{ color: "var(--t2)" }}>
-              Whisper keeps mishearing a word?
-            </p>
-            <p className="text-[11px] mt-0.5" style={{ color: "var(--accent)" }}>
-              Add it to Vocabulary for better accuracy →
-            </p>
+          <div className="flex items-center justify-between px-4 pt-3 pb-2">
+            <p className="text-xs font-semibold" style={{ color: "var(--t2)" }}>Choosing the right model</p>
+            <button
+              onClick={() => { setModelNudgeDismissed(true); localStorage.setItem("omw_model_nudge_dismissed", "1"); }}
+              className="text-[11px] cursor-pointer transition-colors"
+              style={{ color: "var(--t4)" }}
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
           </div>
-          <button
-            onClick={(e) => { e.stopPropagation(); setNudgeDismissed(true); }}
-            className="shrink-0 cursor-pointer transition-colors"
-            style={{ color: "var(--t4)" }}
-            aria-label="Dismiss"
-          >
-            ✕
-          </button>
+          <div className="px-4 pb-3 space-y-2">
+            {([
+              { name: "tiny.en",         speed: "⚡⚡⚡", label: "Fastest",   note: "Best for quick notes, reminders & short dictations. English only." },
+              { name: "tiny",            speed: "⚡⚡⚡", label: "Fastest",   note: "Same speed as tiny.en but supports all languages. Slightly less accurate for English." },
+              { name: "small.en",        speed: "⚡⚡",   label: "Fast",      note: "Great for everyday use. Better accuracy than tiny with minimal wait. English only." },
+              { name: "small",           speed: "⚡⚡",   label: "Fast",      note: "Multilingual version of small.en. Good balance of speed and language coverage." },
+              { name: "medium.en",       speed: "⚡",     label: "Balanced",  note: "Handles technical terms, names & complex vocabulary well. English only." },
+              { name: "medium",          speed: "⚡",     label: "Balanced",  note: "Same as medium.en with full multilingual support. Ideal for mixed-language content." },
+              { name: "large-v3-turbo",  speed: "⚡🐢",  label: "Accurate",  note: "High accuracy with all languages. Good for meetings & long dictations." },
+              { name: "large-v3",        speed: "🐢",     label: "Max",       note: "Highest possible accuracy across all languages. Use when every word matters." },
+            ] as const).map((m) => (
+              <div key={m.name} className="flex items-start gap-3">
+                <div className="w-28 shrink-0">
+                  <span
+                    className="text-[10px] font-mono font-semibold"
+                    style={{ color: activeModel === m.name ? "var(--accent)" : "var(--t3)" }}
+                  >
+                    {m.name}
+                  </span>
+                  {activeModel === m.name && (
+                    <span className="ml-1.5 text-[9px] font-semibold uppercase tracking-wide" style={{ color: "var(--accent)" }}>active</span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-[10px]" style={{ color: "var(--t4)" }}>{m.speed} {m.label} — </span>
+                  <span className="text-[10px]" style={{ color: "var(--t4)" }}>{m.note}</span>
+                </div>
+              </div>
+            ))}
+            <button
+              onClick={() => onNavigate("models")}
+              className="mt-3 text-[11px] font-semibold cursor-pointer transition-colors"
+              style={{ color: "var(--accent)" }}
+            >
+              Change model →
+            </button>
+          </div>
         </div>
       )}
-
-      {/* ── Active setup row ─────────────────────────────────────────────── */}
-      <div
-        className="rounded-2xl overflow-hidden flex flex-shrink-0"
-        style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
-      >
-        <button
-          onClick={() => onNavigate("settings:audio")}
-          className="group flex-1 flex items-center gap-2 px-4 py-3 text-left transition-all duration-150 cursor-pointer min-w-0"
-          style={{ background: "transparent" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "color-mix(in srgb, var(--t1) 4%, transparent)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-          title="Open Audio Settings"
-        >
-          <Mic size={13} style={{ color: "var(--accent)", flexShrink: 0 }} strokeWidth={2} />
-          <span className="text-xs truncate flex-1" style={{ color: "var(--t2)" }}>{micName}</span>
-          <ChevronRight size={11} className="shrink-0 opacity-0 group-hover:opacity-60 transition-opacity -mr-1" style={{ color: "var(--t3)" }} />
-        </button>
-        <div className="w-px self-stretch shrink-0" style={{ background: "color-mix(in srgb, var(--t1) 6%, transparent)" }} />
-        <button
-          onClick={() => onNavigate("models")}
-          className="group flex-1 flex items-center gap-2 px-4 py-3 text-left transition-all duration-150 cursor-pointer min-w-0"
-          style={{ background: "transparent" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "color-mix(in srgb, var(--t1) 4%, transparent)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-          title="Change Model"
-        >
-          <Cpu size={13} style={{ color: "var(--accent)", flexShrink: 0 }} strokeWidth={2} />
-          <span className="text-xs truncate flex-1 font-mono" style={{ color: "var(--t2)" }}>{activeModel}</span>
-          <ChevronRight size={11} className="shrink-0 opacity-0 group-hover:opacity-60 transition-opacity -mr-1" style={{ color: "var(--t3)" }} />
-        </button>
-        <div className="w-px self-stretch shrink-0" style={{ background: "color-mix(in srgb, var(--t1) 6%, transparent)" }} />
-        <button
-          onClick={isRecording ? undefined : handleToggleCleanup}
-          className="group flex items-center gap-2 px-3 py-3 text-left transition-all duration-150 min-w-0 flex-shrink-0"
-          style={{
-            background: applyPolishToRegular
-              ? "color-mix(in srgb, var(--accent) 8%, transparent)"
-              : "transparent",
-            cursor: isRecording ? "default" : "pointer",
-            pointerEvents: isRecording ? "none" : "auto",
-          }}
-          onMouseEnter={(e) => {
-            if (!isRecording && !applyPolishToRegular)
-              e.currentTarget.style.background = "color-mix(in srgb, var(--t1) 4%, transparent)";
-          }}
-          onMouseLeave={(e) => {
-            if (!applyPolishToRegular) e.currentTarget.style.background = "transparent";
-          }}
-          title="Toggle AI Cleanup"
-          aria-label="AI Cleanup"
-          aria-pressed={applyPolishToRegular}
-        >
-          <Sparkles size={13} style={{ color: applyPolishToRegular ? "var(--accent)" : "var(--t3)", flexShrink: 0 }} strokeWidth={2} />
-          {/* Toggle pill */}
-          <div
-            className="relative w-7 h-4 rounded-full flex-shrink-0 transition-colors duration-200"
-            style={{ background: applyPolishToRegular ? "var(--accent)" : "color-mix(in srgb, var(--t1) 20%, transparent)" }}
-          >
-            <div
-              className="absolute top-0.5 w-3 h-3 rounded-full transition-transform duration-200"
-              style={{
-                background: applyPolishToRegular ? "var(--bg)" : "var(--t3)",
-                transform: applyPolishToRegular ? "translateX(14px)" : "translateX(2px)",
-              }}
-            />
-          </div>
-        </button>
-      </div>
 
       {/* ── Tips ────────────────────────────────────────────────────── */}
       {!isRecording && !showLiveTranscript && (

@@ -9,18 +9,6 @@ interface Tip {
 
 const TIPS: Tip[] = [
   {
-    icon: "⚡",
-    headline: "Speed vs accuracy",
-    description: "tiny.en is fastest — try small or large-v3-turbo for longer or technical dictations",
-    target: "models:whisper",
-  },
-  {
-    icon: "🌐",
-    headline: "Multilingual",
-    description: "Switch to a non-.en model to transcribe any language, or translate it to English live",
-    target: "settings:transcription",
-  },
-  {
     icon: "✨",
     headline: "Smart Dictation",
     description: "⌘⇧B sends your voice through AI — cleans grammar, writes emails, formats meeting notes",
@@ -58,8 +46,12 @@ interface TipsSectionProps {
 
 export default function TipsSection({ onNavigate }: TipsSectionProps) {
   return (
+    <div className="flex-shrink-0">
+      <p className="text-xs font-semibold uppercase tracking-widest px-1 mb-2" style={{ color: "var(--t4)" }}>
+        Tips
+      </p>
     <div
-      className="rounded-2xl overflow-hidden flex-shrink-0"
+      className="rounded-2xl overflow-hidden"
       style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
     >
       {TIPS.map((tip, i) => (
@@ -92,6 +84,7 @@ export default function TipsSection({ onNavigate }: TipsSectionProps) {
           )}
         </div>
       ))}
+    </div>
     </div>
   );
 }

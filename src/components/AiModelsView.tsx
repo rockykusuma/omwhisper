@@ -57,7 +57,11 @@ function SettingRow({ label, description, children }: { label: string; descripti
 
 const MODEL_PRESETS: Record<string, string[]> = {
   openai: ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
+  anthropic: ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6"],
+  google: ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"],
   groq: ["llama3-8b-8192", "llama3-70b-8192", "mixtral-8x7b-32768", "gemma-7b-it"],
+  mistral: ["mistral-small-latest", "mistral-medium-latest", "mistral-large-latest"],
+  openrouter: ["openai/gpt-4o-mini", "anthropic/claude-3-haiku", "google/gemini-flash-1.5"],
   custom: [],
 };
 
@@ -578,14 +582,22 @@ function SmartDictationTab() {
             <select
               value={
                 settings.ai_cloud_api_url.includes("openai.com") ? "openai"
+                : settings.ai_cloud_api_url.includes("anthropic.com") ? "anthropic"
+                : settings.ai_cloud_api_url.includes("googleapis.com") || settings.ai_cloud_api_url.includes("generativelanguage") ? "google"
                 : settings.ai_cloud_api_url.includes("groq.com") ? "groq"
+                : settings.ai_cloud_api_url.includes("mistral.ai") ? "mistral"
+                : settings.ai_cloud_api_url.includes("openrouter.ai") ? "openrouter"
                 : "custom"
               }
               onChange={(e) => {
                 const presets: Record<string, { url: string; model: string }> = {
-                  openai: { url: "https://api.openai.com/v1", model: "gpt-4o-mini" },
-                  groq: { url: "https://api.groq.com/openai/v1", model: "llama3-8b-8192" },
-                  custom: { url: settings.ai_cloud_api_url, model: settings.ai_cloud_model },
+                  openai:     { url: "https://api.openai.com/v1",                                    model: "gpt-4o-mini" },
+                  anthropic:  { url: "https://api.anthropic.com/v1",                                 model: "claude-haiku-4-5-20251001" },
+                  google:     { url: "https://generativelanguage.googleapis.com/v1beta/openai",       model: "gemini-2.0-flash" },
+                  groq:       { url: "https://api.groq.com/openai/v1",                               model: "llama3-8b-8192" },
+                  mistral:    { url: "https://api.mistral.ai/v1",                                    model: "mistral-small-latest" },
+                  openrouter: { url: "https://openrouter.ai/api/v1",                                 model: "openai/gpt-4o-mini" },
+                  custom:     { url: "", model: "" },
                 };
                 const p = presets[e.target.value];
                 update({ ai_cloud_api_url: p.url, ai_cloud_model: p.model });
@@ -594,10 +606,30 @@ function SmartDictationTab() {
               style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
             >
               <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="google">Google Gemini</option>
               <option value="groq">Groq</option>
+              <option value="mistral">Mistral</option>
+              <option value="openrouter">OpenRouter</option>
               <option value="custom">Custom</option>
             </select>
           </SettingRow>
+          {(() => {
+            const isCustom = !["openai.com","anthropic.com","googleapis.com","generativelanguage","groq.com","mistral.ai","openrouter.ai"]
+              .some((s) => settings.ai_cloud_api_url.includes(s));
+            return isCustom ? (
+              <SettingRow label="API URL" description="Base URL of your OpenAI-compatible endpoint">
+                <input
+                  type="text"
+                  value={settings.ai_cloud_api_url}
+                  onChange={(e) => update({ ai_cloud_api_url: e.target.value })}
+                  placeholder="https://your-api.example.com/v1"
+                  className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-56 font-mono"
+                  style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                />
+              </SettingRow>
+            ) : null;
+          })()}
           <SettingRow label="API Key" description={apiKeySet ? "Key stored in macOS Keychain" : "Paste your API key"}>
             {apiKeySet ? (
               <div className="flex items-center gap-2">
@@ -610,8 +642,8 @@ function SmartDictationTab() {
                   type={showApiKey ? "text" : "password"}
                   value={apiKeyInput}
                   onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder="sk-…"
-                  className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-32 font-mono"
+                  placeholder="API key…"
+                  className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-56 font-mono"
                   style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                   onKeyDown={(e) => e.key === "Enter" && handleSaveApiKey()}
                 />
@@ -624,51 +656,35 @@ function SmartDictationTab() {
             <div className="flex flex-col items-end gap-1.5">
               {(() => {
                 const activeProvider = settings.ai_cloud_api_url.includes("openai.com") ? "openai"
+                  : settings.ai_cloud_api_url.includes("anthropic.com") ? "anthropic"
+                  : settings.ai_cloud_api_url.includes("googleapis.com") || settings.ai_cloud_api_url.includes("generativelanguage") ? "google"
                   : settings.ai_cloud_api_url.includes("groq.com") ? "groq"
+                  : settings.ai_cloud_api_url.includes("mistral.ai") ? "mistral"
+                  : settings.ai_cloud_api_url.includes("openrouter.ai") ? "openrouter"
                   : "custom";
                 const presets = MODEL_PRESETS[activeProvider] ?? [];
-                const isCustomValue = presets.length > 0 && !presets.includes(settings.ai_cloud_model);
-                const selectValue = isCustomValue ? "__custom__" : settings.ai_cloud_model;
-                return (
-                  <>
-                    <select
-                      value={selectValue}
-                      onChange={(e) => {
-                        if (e.target.value === "__custom__") {
-                          setCustomModelInput(settings.ai_cloud_model);
-                        } else {
-                          setCustomModelInput("");
-                          update({ ai_cloud_model: e.target.value });
-                        }
-                      }}
-                      className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none w-40 font-mono"
-                      style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                    >
-                      {presets.map((m) => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
-                      {presets.length === 0 ? null : <option value="__custom__">Custom…</option>}
-                      {presets.length === 0 && (
-                        <option value={settings.ai_cloud_model}>{settings.ai_cloud_model || "Enter model…"}</option>
-                      )}
-                    </select>
-                    {(selectValue === "__custom__" || presets.length === 0) && (
-                      <input
-                        type="text"
-                        value={customModelInput || (presets.length === 0 ? settings.ai_cloud_model : "")}
-                        onChange={(e) => setCustomModelInput(e.target.value)}
-                        onBlur={() => { if (customModelInput.trim()) update({ ai_cloud_model: customModelInput.trim() }); }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && customModelInput.trim()) {
-                            update({ ai_cloud_model: customModelInput.trim() });
-                          }
-                        }}
-                        placeholder="model-name"
-                        className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-40 font-mono"
-                        style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                      />
-                    )}
-                  </>
+                return presets.length > 0 ? (
+                  <select
+                    value={presets.includes(settings.ai_cloud_model) ? settings.ai_cloud_model : presets[0]}
+                    onChange={(e) => update({ ai_cloud_model: e.target.value })}
+                    className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none w-40 font-mono"
+                    style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                  >
+                    {presets.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={customModelInput || settings.ai_cloud_model}
+                    onChange={(e) => setCustomModelInput(e.target.value)}
+                    onBlur={() => { if (customModelInput.trim()) update({ ai_cloud_model: customModelInput.trim() }); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" && customModelInput.trim()) update({ ai_cloud_model: customModelInput.trim() }); }}
+                    placeholder="model-name"
+                    className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-40 font-mono"
+                    style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                  />
                 );
               })()}
             </div>
@@ -730,42 +746,6 @@ function SmartDictationTab() {
             </select>
           </SettingRow>
         )}
-        <SettingRow
-          label="Apply AI polish to regular recording"
-          description={
-            settings.ai_backend === "disabled"
-              ? "Enable an AI backend above to use this feature."
-              : "⌘⇧V recordings are polished using Professional style before pasting. Falls back to raw paste if AI is unavailable."
-          }
-        >
-          <button
-            onClick={() => {
-              if (settings.ai_backend !== "disabled") {
-                update({ apply_polish_to_regular: !settings.apply_polish_to_regular });
-              }
-            }}
-            role="switch"
-            aria-checked={settings.apply_polish_to_regular}
-            aria-label="Apply AI polish to regular recording"
-            disabled={settings.ai_backend === "disabled"}
-            className="relative w-10 h-6 rounded-full transition-all duration-200"
-            style={{
-              cursor: settings.ai_backend === "disabled" ? "not-allowed" : "pointer",
-              background: "var(--bg)",
-              boxShadow: "var(--nm-pressed-sm)",
-              opacity: settings.ai_backend === "disabled" ? 0.4 : 1,
-            }}
-          >
-            <div
-              className="absolute top-1 w-4 h-4 rounded-full transition-all duration-200"
-              style={{
-                transform: settings.apply_polish_to_regular ? "translateX(20px)" : "translateX(4px)",
-                background: settings.apply_polish_to_regular ? "var(--accent)" : "var(--t4)",
-                boxShadow: settings.apply_polish_to_regular ? "0 0 6px var(--accent-glow), var(--nm-raised-sm)" : "var(--nm-raised-sm)",
-              }}
-            />
-          </button>
-        </SettingRow>
       </div>
 
       {/* Polish styles — built-in */}
