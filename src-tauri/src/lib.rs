@@ -12,6 +12,8 @@ mod styles;
 mod analytics;
 #[cfg(target_os = "macos")]
 mod fn_key;
+#[cfg(target_os = "macos")]
+mod macos;
 
 const SENTRY_DSN: &str = match option_env!("SENTRY_DSN") {
     Some(s) => s,
