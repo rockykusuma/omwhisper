@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # build-release.sh — Build OmWhisper release .dmg and print distribution info
+# macOS only. Windows builds are produced by GitHub Actions (.github/workflows/build-windows.yml).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
