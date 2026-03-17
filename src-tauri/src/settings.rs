@@ -102,6 +102,12 @@ pub struct Settings {
     /// VAD engine: "silero" (neural ONNX) | "rms" (energy threshold fallback).
     #[serde(default = "default_vad_engine")]
     pub vad_engine: String,
+    /// Allow anonymous usage analytics via Aptabase. Default: true.
+    #[serde(default = "default_true")]
+    pub analytics_enabled: bool,
+    /// Allow crash reports to be sent via Sentry. Default: true. Takes effect after restart.
+    #[serde(default = "default_true")]
+    pub crash_reporting_enabled: bool,
 }
 
 fn default_clipboard_restore_delay_ms() -> u64 { 2000 }
@@ -170,6 +176,8 @@ impl Default for Settings {
             llm_nudge_shown: false,
             apply_polish_to_regular: false,
             vad_engine: default_vad_engine(),
+            analytics_enabled: true,
+            crash_reporting_enabled: true,
         }
     }
 }
@@ -295,6 +303,24 @@ mod tests {
     #[test]
     fn default_vad_engine_is_rms() {
         assert_eq!(Settings::default().vad_engine, "rms");
+    }
+
+    #[test]
+    fn default_analytics_enabled_is_true() {
+        assert!(Settings::default().analytics_enabled);
+    }
+
+    #[test]
+    fn default_crash_reporting_enabled_is_true() {
+        assert!(Settings::default().crash_reporting_enabled);
+    }
+
+    #[test]
+    fn analytics_fields_default_when_missing_from_json() {
+        let json = r#"{"hotkey":"CmdOrCtrl+Shift+V","active_model":"tiny.en","language":"en","auto_launch":false,"auto_paste":true,"show_overlay":true,"vad_sensitivity":0.5,"onboarding_complete":false}"#;
+        let s: Settings = serde_json::from_str(json).unwrap();
+        assert!(s.analytics_enabled);
+        assert!(s.crash_reporting_enabled);
     }
 
     #[test]
