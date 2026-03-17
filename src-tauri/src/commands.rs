@@ -989,6 +989,11 @@ pub async fn polish_text_cmd(
         return result.map_err(|e: anyhow::Error| e.to_string());
     }
 
+    #[cfg(not(target_os = "macos"))]
+    if settings.ai_backend == "built_in" {
+        return Err("On-Device LLM is not available on this platform".to_string());
+    }
+
     // ollama / cloud path — unchanged
     let system_prompt = crate::styles::system_prompt_for(&style, &settings.translate_target_language);
     let request = crate::ai::PolishRequest { text, system_prompt };

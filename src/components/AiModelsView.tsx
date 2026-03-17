@@ -421,8 +421,8 @@ function SmartDictationTab() {
                 }}
                 className="px-3 py-1.5 text-xs transition-all duration-150 cursor-pointer"
                 style={{
-                  background: settings.ai_backend === b ? "rgba(139,92,246,0.15)" : "transparent",
-                  color: settings.ai_backend === b ? "rgb(167,139,250)" : "var(--t3)",
+                  background: effectiveBackend === b ? "rgba(139,92,246,0.15)" : "transparent",
+                  color: effectiveBackend === b ? "rgb(167,139,250)" : "var(--t3)",
                 }}
               >
                 {b === "ollama" ? "On-Device (Ollama)"
