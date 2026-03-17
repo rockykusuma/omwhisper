@@ -160,6 +160,8 @@ impl AudioCapture {
         // (err_tx drop = success).
         match err_rx.recv() {
             Ok(err) => {
+                // Signal the thread to stop so it doesn't linger after a startup failure.
+                running.store(false, Ordering::SeqCst);
                 sentry_anyhow::capture_anyhow(&err);
                 Err(err)
             }

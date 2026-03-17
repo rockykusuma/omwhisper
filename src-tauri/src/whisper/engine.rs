@@ -91,8 +91,9 @@ fn apply_replacements(text: &str, replacements: &HashMap<String, String>) -> Str
     for (from, to) in replacements {
         // Case-insensitive whole-word replacement
         let pattern = format!("(?i)\\b{}\\b", regex_escape(from));
-        if let Ok(re) = regex::Regex::new(&pattern) {
-            result = re.replace_all(&result, to.as_str()).to_string();
+        match regex::Regex::new(&pattern) {
+            Ok(re) => result = re.replace_all(&result, to.as_str()).to_string(),
+            Err(e) => tracing::warn!("word replacement: invalid regex for '{from}': {e}"),
         }
     }
     result

@@ -91,14 +91,13 @@ pub fn paste_to_app(app_name: &str) -> Result<()> {
     // Give a brief moment for the recording to fully stop
     std::thread::sleep(std::time::Duration::from_millis(200));
 
-    // Activate target app via osascript (no Accessibility needed for activation)
-    let activate_script = format!(
-        r#"tell application "{}" to activate"#,
-        app_name.replace('"', "\\\"")
-    );
+    // Activate target app via osascript (no Accessibility needed for activation).
+    // Pass app_name as a separate osascript variable to avoid any quoting issues.
     let _ = std::process::Command::new("osascript")
-        .arg("-e")
-        .arg(&activate_script)
+        .args([
+            "-e", &format!("set appName to \"{}\"", app_name.replace('\\', "\\\\").replace('"', "\\\"")),
+            "-e", "tell application appName to activate",
+        ])
         .output();
 
     // Wait for the app to come to front
