@@ -406,19 +406,19 @@ mod tests {
     // ── LSTM state reset after utterance (Silero path) ───────────────────────
 
     #[test]
-    fn lstm_state_reset_after_utterance_via_silence_timeout() {
-        // Uses the real Silero model. Verifies h/c state is zeroed after a
-        // completed utterance so successive utterances don't bleed LSTM context.
+    fn lstm_state_zeroed_after_flush() {
+        // Uses the real Silero model. Verifies that flush() resets LSTM h/c state to zeros.
+        // This exercises the reset_lstm_state() code path that also runs after utterance completion.
         let mut vad = silero_vad();
-        // Feed enough silence to trigger timeout without any prior speech.
-        // State should start zeroed and stay zeroed (no utterance produced).
-        for _ in 0..30 {
-            vad.process(&vec![0.0f32; 512]);
+        // Run some frames to let ONNX accumulate non-zero LSTM state
+        for _ in 0..10 {
+            vad.process(&vec![0.5f32; 512]);
         }
+        // Flush resets all state including LSTM
+        let _ = vad.flush();
         if let super::VadImpl::Silero { h_state, c_state, .. } = &vad.impl_ {
-            // After silence-only run, LSTM state must still be all zeros
-            assert!(h_state.iter().all(|&v| v == 0.0), "h_state not zeroed");
-            assert!(c_state.iter().all(|&v| v == 0.0), "c_state not zeroed");
+            assert!(h_state.iter().all(|&v| v == 0.0), "h_state not zeroed after flush");
+            assert!(c_state.iter().all(|&v| v == 0.0), "c_state not zeroed after flush");
         }
     }
 
