@@ -72,6 +72,8 @@ pub async fn transcribe_file(path: String, model_path: String) -> Result<Vec<Seg
 
     tokio::task::spawn_blocking(move || {
         let resolved = resolve_model_path(&model_path);
+        // File transcription always uses Whisper — Apple's Speech framework does not support
+        // file-mode (buffer-based) transcription.
         let engine = WhisperEngine::new(&resolved).map_err(|e| e.to_string())?;
         let audio = load_wav_as_f32(Path::new(&path)).map_err(|e| e.to_string())?;
         let prompt = if initial_prompt.is_empty() { None } else { Some(initial_prompt.as_str()) };
@@ -111,6 +113,9 @@ pub async fn start_transcription(
 
     // Clear any cancellation from a previous quick tap before we begin.
     state.lock().expect("state mutex poisoned").start_cancelled = false;
+    // Reset active_engine so get_transcription_engine never returns a stale value
+    // from a previous session if engine selection fails later in this call.
+    state.lock().expect("state mutex poisoned").active_engine = "whisper";
 
     // Load settings and play start chime BEFORE the mic starts,
     // then wait briefly so the chime finishes and room echo clears.
@@ -1193,7 +1198,7 @@ pub fn open_feedback_url(url: String, app: AppHandle) -> Result<(), String> {
 /// Note: not yet registered in invoke_handler! — that happens in Task 4.
 #[tauri::command]
 pub fn get_transcription_engine(state: tauri::State<'_, SharedState>) -> &'static str {
-    state.lock().unwrap().active_engine
+    state.lock().expect("state mutex poisoned").active_engine
 }
 
 #[cfg(test)]
