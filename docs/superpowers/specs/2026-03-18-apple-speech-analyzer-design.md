@@ -34,18 +34,25 @@ OmWhisper currently uses `whisper-rs` (whisper.cpp) for all transcription. This 
 
 | File | Action | Responsibility |
 |------|--------|---------------|
+| `src-tauri/src/macos/mod.rs` | Create | Module root: `pub mod speech_analyzer;` gated to macOS |
 | `src-tauri/src/macos/speech_analyzer.swift` | Create | Swift shim — wraps Apple speech API, exposes C FFI |
 | `src-tauri/src/macos/speech_analyzer.rs` | Create | Rust FFI declarations + safe `SpeechAnalyzerEngine` wrapper |
 | `src-tauri/src/engine.rs` | Create | `TranscriptionEngine` enum unifying both engines |
 | `src-tauri/src/commands.rs` | Modify | Use `TranscriptionEngine` instead of `WhisperEngine` directly; store engine name in `TranscriptionState` |
-| `src-tauri/src/lib.rs` | Modify | Register `get_transcription_engine` in `invoke_handler!` and use-imports |
+| `src-tauri/src/lib.rs` | Modify | Add `mod macos;` + `mod engine;` declarations; add `get_transcription_engine` to `use commands::{...}` import and `invoke_handler!` |
 | `src-tauri/build.rs` | Modify | Compile Swift shim into static library + link frameworks on macOS |
-| `src-tauri/src/lib.rs` | Modify | Add `mod macos;` + `mod engine;` declarations; register `get_transcription_engine` in `invoke_handler!` |
 | `src/components/HomeView.tsx` | Modify | Show engine badge (⚡ Apple Speech / ◎ Whisper) near record button |
 
 ---
 
 ## Design
+
+### 0. Module Root (`macos/mod.rs`)
+
+```rust
+#[cfg(target_os = "macos")]
+pub mod speech_analyzer;
+```
 
 ### 1. Swift Shim (`speech_analyzer.swift`)
 
@@ -159,6 +166,9 @@ impl SpeechAnalyzerEngine {
 
         // Heap-allocate the output buffer; pass its raw pointer as context
         // so the Swift callback (which runs on a different thread) can write to it.
+        // Safety: DispatchSemaphore on Apple platforms provides acquire/release
+        // semantics — after sema.wait() returns, all callback writes are visible
+        // to this thread without an additional fence.
         let mut segments: Vec<crate::whisper::engine::Segment> = Vec::new();
         let segments_ptr: *mut Vec<_> = &mut segments;
 
@@ -212,18 +222,21 @@ pub enum TranscriptionEngine {
 }
 
 impl TranscriptionEngine {
-    pub fn select(model_path: &Path) -> Self {
+    /// Returns the best available engine. Propagates `WhisperEngine::new` failure so
+    /// the caller (`start_transcription`) can emit the existing `transcription-error`
+    /// event rather than panicking the transcription thread.
+    pub fn select(model_path: &Path) -> anyhow::Result<Self> {
         #[cfg(target_os = "macos")]
         if crate::macos::speech_analyzer::SpeechAnalyzerEngine::is_available() {
             tracing::info!("Using Apple speech engine");
-            return TranscriptionEngine::Apple(
+            return Ok(TranscriptionEngine::Apple(
                 crate::macos::speech_analyzer::SpeechAnalyzerEngine
-            );
+            ));
         }
         tracing::info!("Using Whisper engine");
-        TranscriptionEngine::Whisper(
-            WhisperEngine::new(model_path).expect("failed to load whisper model")
-        )
+        Ok(TranscriptionEngine::Whisper(
+            WhisperEngine::new(model_path)?
+        ))
     }
 
     /// Unified transcribe — matches WhisperEngine::transcribe signature exactly.
@@ -292,7 +305,13 @@ pub fn get_transcription_engine(state: tauri::State<'_, SharedState>) -> &'stati
 }
 ```
 
-Register in `lib.rs` both in the `use` block and in `invoke_handler!`.
+Register in `lib.rs` in the `use commands::{...}` import block (add `get_transcription_engine` to the existing list) and in `invoke_handler!`:
+```rust
+// In the use commands::{...} block, add:
+get_transcription_engine,
+// In invoke_handler!, add:
+commands::get_transcription_engine,
+```
 
 **Also add to `lib.rs` at the top-level (before `use` imports):**
 ```rust
@@ -354,11 +373,17 @@ fn compile_swift_shim() {
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
     {
+        // swift path: .../Toolchains/XcodeDefault.xctoolchain/usr/bin/swift
+        //  parent 1 → .../Toolchains/XcodeDefault.xctoolchain/usr/bin
+        //  parent 2 → .../Toolchains/XcodeDefault.xctoolchain/usr
+        //  parent 3 → .../Toolchains/XcodeDefault.xctoolchain
+        //  parent 4 → .../Toolchains
+        // then join "XcodeDefault.xctoolchain/usr/lib/swift/macosx"
         let toolchain_lib = std::path::Path::new(&swift_bin_path)
-            .parent()  // bin/
-            .and_then(|p| p.parent())  // usr/
-            .and_then(|p| p.parent())  // XcodeDefault.xctoolchain/
-            .and_then(|p| p.parent())  // Toolchains/
+            .parent()                       // → usr/bin
+            .and_then(|p| p.parent())       // → usr
+            .and_then(|p| p.parent())       // → XcodeDefault.xctoolchain
+            .and_then(|p| p.parent())       // → Toolchains
             .map(|p| p.join("XcodeDefault.xctoolchain/usr/lib/swift/macosx"))
             .unwrap_or_default();
         println!("cargo:rustc-link-search=native={}", toolchain_lib.display());
@@ -388,6 +413,8 @@ Badge near the record button:
   {engine === "apple" ? "⚡ Apple Speech" : "◎ Whisper"}
 </span>
 ```
+
+> **Note:** The badge is also refreshed after each recording completes by listening to the `transcription-complete` event and re-invoking `get_transcription_engine`. This handles the case where a user upgrades to macOS 26 between recordings.
 
 ---
 
