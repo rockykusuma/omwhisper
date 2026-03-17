@@ -74,6 +74,19 @@ export default function HomeView({
     () => localStorage.getItem("omw_model_nudge_dismissed") === "1"
   );
 
+  // ── Engine badge ──
+  const [engineName, setEngineName] = useState<string>("whisper");
+
+  useEffect(() => {
+    invoke<string>("get_transcription_engine").then(setEngineName).catch(() => {});
+
+    const unlisten = listen("transcription-complete", () => {
+      invoke<string>("get_transcription_engine").then(setEngineName).catch(() => {});
+    });
+
+    return () => { unlisten.then((f) => f()); };
+  }, []);
+
   // ── Smart Dictation nudge ──
   const [smartDictationNudge, setSmartDictationNudge] = useState<"not_configured" | "model_not_downloaded" | null>(null);
   const [sdNudgeDismissed, setSdNudgeDismissed] = useState(
@@ -202,6 +215,15 @@ export default function HomeView({
         <Mic size={11} style={{ color: "var(--accent)", flexShrink: 0 }} strokeWidth={2} />
         <span className="text-[11px] truncate max-w-[140px]" style={{ color: "var(--t3)" }}>{micName}</span>
       </button>
+
+      {/* ── Engine badge ─────────────────────────────────────────────── */}
+      <div className="flex justify-center pt-1 pb-0">
+        {engineName === "apple" ? (
+          <span className="text-[10px] font-medium text-blue-400/70">⚡ Apple Speech</span>
+        ) : (
+          <span className="text-[10px] font-medium" style={{ color: "var(--t4)" }}>◎ Whisper</span>
+        )}
+      </div>
 
       {/* ── Record / Stop button ────────────────────────────────────────── */}
       <div className="flex flex-col items-center gap-3 py-5">
