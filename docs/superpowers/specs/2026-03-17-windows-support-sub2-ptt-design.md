@@ -61,13 +61,15 @@ This prevents `fn_key.rs` from being compiled on Windows. The CoreGraphics and C
 
 **Change 2 — Gate PTT plugin shortcut registration:**
 
-The block starting at `// --- Push-to-talk shortcut: hold to record, release to stop ---` (currently lines 366–388) is wrapped in `#[cfg(not(target_os = "windows"))]`:
+The block starting at `// --- Push-to-talk shortcut: hold to record, release to stop ---` (currently lines 366–388) is wrapped in a `#[cfg(not(target_os = "windows"))]` block. Using a block (not an attribute on the `if let` expression directly) is the idiomatic stable Rust pattern:
 
 ```rust
 // --- Push-to-talk shortcut: hold to record, release to stop ---
 #[cfg(not(target_os = "windows"))]
-if let Some(ptt_sc) = parse_hotkey(&initial_settings.push_to_talk_hotkey) {
-    ...
+{
+    if let Some(ptt_sc) = parse_hotkey(&initial_settings.push_to_talk_hotkey) {
+        ...
+    }
 }
 ```
 
