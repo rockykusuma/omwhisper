@@ -99,6 +99,9 @@ pub struct Settings {
     /// Apply AI polish to regular ⌘⇧V recordings using the Professional style.
     #[serde(default)]
     pub apply_polish_to_regular: bool,
+    /// VAD engine: "silero" (neural ONNX) | "rms" (energy threshold fallback).
+    #[serde(default = "default_vad_engine")]
+    pub vad_engine: String,
 }
 
 fn default_clipboard_restore_delay_ms() -> u64 { 2000 }
@@ -120,6 +123,7 @@ fn default_ptt_key() -> String { "custom".to_string() }
 fn default_true() -> bool { true }
 fn default_sound_volume() -> f32 { 0.2 }
 fn default_llm_model_name() -> String { "qwen2.5-0.5b-instruct-q4_k_m.gguf".to_string() }
+fn default_vad_engine() -> String { "silero".to_string() }
 
 fn default_log_level() -> String {
     "normal".to_string()
@@ -165,6 +169,7 @@ impl Default for Settings {
             llm_model_name: "qwen2.5-0.5b-instruct-q4_k_m.gguf".to_string(),
             llm_nudge_shown: false,
             apply_polish_to_regular: false,
+            vad_engine: default_vad_engine(),
         }
     }
 }
@@ -288,6 +293,11 @@ mod tests {
     }
 
     #[test]
+    fn default_vad_engine_is_silero() {
+        assert_eq!(Settings::default().vad_engine, "silero");
+    }
+
+    #[test]
     fn default_ai_backend_is_disabled() {
         assert_eq!(Settings::default().ai_backend, "disabled");
     }
@@ -383,6 +393,7 @@ mod tests {
         assert_eq!(s.recording_mode, "toggle");
         assert_eq!(s.ai_backend, "disabled");
         assert_eq!(s.overlay_placement, "top-center");
+        assert_eq!(s.vad_engine, "silero");
         assert!(s.custom_vocabulary.is_empty());
     }
 
