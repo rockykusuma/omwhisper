@@ -102,12 +102,6 @@ pub struct Settings {
     /// VAD engine: "silero" (neural ONNX) | "rms" (energy threshold fallback).
     #[serde(default = "default_vad_engine")]
     pub vad_engine: String,
-    /// Allow anonymous usage analytics via Aptabase. Default: true.
-    #[serde(default = "default_true")]
-    pub analytics_enabled: bool,
-    /// Allow crash reports to be sent via Sentry. Default: true. Takes effect after restart.
-    #[serde(default = "default_true")]
-    pub crash_reporting_enabled: bool,
 }
 
 fn default_clipboard_restore_delay_ms() -> u64 { 2000 }
