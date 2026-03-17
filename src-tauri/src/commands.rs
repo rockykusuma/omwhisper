@@ -234,8 +234,8 @@ pub async fn start_transcription(
                     sentry_anyhow::capture_anyhow(&err);
                 }
                 Err(_) => {
-                    tracing::error!("whisper engine panicked — recovering");
-                    let _ = app.emit("transcription-error", "Whisper crashed on this audio chunk, continuing.");
+                    tracing::error!("{engine_name} engine panicked — recovering");
+                    let _ = app.emit("transcription-error", "Transcription engine crashed on this audio chunk, continuing.");
                 }
             }
         }
@@ -1195,7 +1195,6 @@ pub fn open_feedback_url(url: String, app: AppHandle) -> Result<(), String> {
 // ─── Transcription Engine ─────────────────────────────────────────────────────
 
 /// Returns the name of the currently active transcription engine ("whisper" or "apple").
-/// Note: not yet registered in invoke_handler! — that happens in Task 4.
 #[tauri::command]
 pub fn get_transcription_engine(state: tauri::State<'_, SharedState>) -> &'static str {
     state.lock().expect("state mutex poisoned").active_engine

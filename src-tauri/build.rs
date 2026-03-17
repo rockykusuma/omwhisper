@@ -39,9 +39,11 @@ fn compile_swift_shim() {
 
     // Compile Swift source to object file, then archive into static lib
     let obj_path = format!("{out_dir}/speech_analyzer.o");
+    let arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_else(|_| "arm64".to_string());
+    let swift_target = format!("{arch}-apple-macosx13.0");
     let status = std::process::Command::new("swiftc")
         .args([
-            "-target", "arm64-apple-macosx13.0",
+            "-target", &swift_target,
             "-sdk", sdk,
             "-emit-object",
             "-o", &obj_path,
