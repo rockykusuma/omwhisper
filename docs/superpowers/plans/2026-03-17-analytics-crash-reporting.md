@@ -238,21 +238,30 @@ git commit -m "feat(analytics): add Aptabase HTTP ingest module with opt-out gat
 - Modify: `src-tauri/src/commands.rs`
 - Modify: `src-tauri/src/whisper/models.rs`
 
-- [ ] **Step 1: Fire `app_launched` in `lib.rs`**
+- [ ] **Step 1: Init analytics session and fire `app_launched` in `lib.rs`**
 
-In `src-tauri/src/lib.rs`, in the `run()` function, after the `_log_guard` line (after line 139) and before `let shared_state`, add:
+`analytics::init()` only sets a `OnceLock` — safe to call anywhere. But `analytics::track()` calls `tokio::spawn`, which requires an active tokio runtime. Tauri's runtime is only live inside the `setup` closure, so the `track()` call must go there.
+
+**Part A — call `analytics::init()` after the log guard** (before the builder, line ~140):
 
 ```rust
-    // Init analytics session — must be before any track() calls
     crate::analytics::init();
-    {
-        let s = crate::settings::load_settings_sync();
-        crate::analytics::track(s.analytics_enabled, "app_launched", serde_json::json!({
-            "version": env!("CARGO_PKG_VERSION"),
-            "platform": if cfg!(target_os = "macos") { "macos" } else { "windows" }
-        }));
-    }
 ```
+
+**Part B — fire `app_launched` inside the `setup` closure**, alongside the existing `load_settings_sync()` call at line ~170:
+
+```rust
+        // Analytics: fire app_launched (tokio runtime is live here)
+        {
+            let s = crate::settings::load_settings_sync();
+            crate::analytics::track(s.analytics_enabled, "app_launched", serde_json::json!({
+                "version": env!("CARGO_PKG_VERSION"),
+                "platform": if cfg!(target_os = "macos") { "macos" } else { "windows" }
+            }));
+        }
+```
+
+Place this block at the top of the `setup` closure body (after the opening `move |app| {`), before the tray setup begins.
 
 - [ ] **Step 2: Fire `recording_started` in `commands.rs`**
 
