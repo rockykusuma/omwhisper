@@ -128,6 +128,14 @@ pub async fn start_transcription(
         return Err("cancelled".to_string());
     }
 
+    // Analytics: record_started
+    {
+        let is_smart_dictation = state.lock().unwrap().is_smart_dictation;
+        crate::analytics::track(settings.analytics_enabled, "recording_started", serde_json::json!({
+            "mode": if is_smart_dictation { "smart_dictation" } else { &settings.recording_mode as &str }
+        }));
+    }
+
     // Build capture object and start the audio pipeline.
     // AudioCapture::new signature is (vad_sensitivity, vad_engine) — sensitivity first, engine second.
     let capture = AudioCapture::new(settings.vad_sensitivity, &settings.vad_engine);
@@ -234,6 +242,10 @@ pub async fn stop_transcription(state: tauri::State<'_, SharedState>) -> Result<
     if settings.sound_enabled {
         crate::sounds::play(crate::sounds::Sound::Stop, settings.sound_volume);
     }
+    crate::analytics::track(settings.analytics_enabled, "transcription_completed", serde_json::json!({
+        "model": &settings.active_model,
+        "vad_engine": &settings.vad_engine,
+    }));
     Ok(())
 }
 
@@ -572,7 +584,9 @@ pub fn is_running_from_dmg() -> bool {
 pub async fn complete_onboarding() -> Result<(), String> {
     let mut s = crate::settings::load_settings().await;
     s.onboarding_complete = true;
-    crate::settings::save_settings(&s).await.map_err(|e| e.to_string())
+    crate::settings::save_settings(&s).await.map_err(|e| e.to_string())?;
+    crate::analytics::track(s.analytics_enabled, "onboarding_completed", serde_json::json!({}));
+    Ok(())
 }
 
 #[tauri::command]
@@ -1002,10 +1016,17 @@ pub async fn polish_text_cmd(
     // ollama / cloud path — unchanged
     let system_prompt = crate::styles::system_prompt_for(&style, &settings.translate_target_language);
     let request = crate::ai::PolishRequest { text, system_prompt };
-    crate::ai::polish(request, &settings)
+    let result = crate::ai::polish(request, &settings)
         .await
         .map(|r| r.text)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string());
+    if result.is_ok() {
+        crate::analytics::track(settings.analytics_enabled, "ai_polish_used", serde_json::json!({
+            "backend": &settings.ai_backend,
+            "style": &settings.active_polish_style,
+        }));
+    }
+    result
 }
 
 #[tauri::command]

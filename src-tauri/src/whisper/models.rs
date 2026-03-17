@@ -244,6 +244,13 @@ where
     // Move tmp → final path
     fs::rename(&tmp_path, &dest).await.context("failed to move model file")?;
 
+    {
+        let s = crate::settings::load_settings_sync();
+        crate::analytics::track(s.analytics_enabled, "model_downloaded", serde_json::json!({
+            "model_name": name
+        }));
+    }
+
     Ok(dest)
 }
 

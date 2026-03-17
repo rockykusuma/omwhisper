@@ -139,6 +139,7 @@ pub fn run() {
     // Set up file logging (guard must live for the duration of the app)
     let _log_guard = setup_logging();
     tracing::info!("OmWhisper v{} starting", env!("CARGO_PKG_VERSION"));
+    crate::analytics::init();
 
     let shared_state: SharedState = Arc::new(Mutex::new(TranscriptionState::new()));
 
@@ -167,6 +168,15 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(move |app| {
+            // Analytics: fire app_launched (tokio runtime is live inside setup)
+            {
+                let s = crate::settings::load_settings_sync();
+                crate::analytics::track(s.analytics_enabled, "app_launched", serde_json::json!({
+                    "version": env!("CARGO_PKG_VERSION"),
+                    "platform": if cfg!(target_os = "macos") { "macos" } else { "windows" }
+                }));
+            }
+
             // --- System Tray ---
             let current_settings = crate::settings::load_settings_sync();
             let selected_device = current_settings.audio_input_device.clone().unwrap_or_default();
