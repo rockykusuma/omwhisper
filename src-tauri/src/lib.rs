@@ -276,8 +276,10 @@ pub fn run() {
                                     capture.stop();
                                 }
                                 let _ = app.emit("recording-state", false);
+                                let _ = toggle_item.set_text("Start Recording");
                             } else {
                                 let _ = app.emit("hotkey-toggle-recording", ());
+                                let _ = toggle_item.set_text("Stop Recording");
                             }
                         }
                         "quit" => {
