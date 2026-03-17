@@ -13,6 +13,11 @@ mod analytics;
 #[cfg(target_os = "macos")]
 mod fn_key;
 
+const SENTRY_DSN: &str = match option_env!("SENTRY_DSN") {
+    Some(s) => s,
+    None => "",
+};
+
 use commands::{
     activate_license, capture_focused_app, check_accessibility_permission, cmd_clear_history,
     cmd_delete_transcription, cmd_export_history, complete_onboarding, deactivate_license,
@@ -130,6 +135,13 @@ fn setup_logging() -> tracing_appender::non_blocking::WorkerGuard {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let _crash_settings = crate::settings::load_settings_sync();
+    let _sentry_dsn = if _crash_settings.crash_reporting_enabled { SENTRY_DSN } else { "" };
+    let _sentry_guard = sentry::init((_sentry_dsn, sentry::ClientOptions {
+        release: sentry::release_name!(),
+        ..Default::default()
+    }));
+
     // Single instance guard
     if !ensure_single_instance() {
         eprintln!("OmWhisper is already running.");

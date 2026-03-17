@@ -90,6 +90,7 @@ impl Vad {
             }
             Err(e) => {
                 tracing::error!("Silero VAD init failed, falling back to RMS VAD: {e}");
+                sentry::capture_error(&e);
                 // RMS energy scale (0.0–1.0 amplitude) is very different from Silero
                 // probability scale. Map sensitivity to a sensible energy threshold:
                 // sensitivity=0.5 → 0.01 (old default), higher sensitivity → lower threshold.
