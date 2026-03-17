@@ -364,27 +364,32 @@ pub fn run() {
             })?;
 
             // --- Push-to-talk shortcut: hold to record, release to stop ---
-            if let Some(ptt_sc) = parse_hotkey(&initial_settings.push_to_talk_hotkey) {
-                let state_ptt = shared_state.clone();
-                if let Err(e) = app.global_shortcut().on_shortcut(ptt_sc, move |app, _shortcut, event| {
-                    let is_recording = state_ptt.lock().unwrap().capture.is_some();
-                    match event.state {
-                        ShortcutState::Pressed => {
-                            if !is_recording {
-                                let focused = crate::paste::get_frontmost_app();
-                                tracing::info!("ptt pressed: captured frontmost app = {:?}", focused);
-                                *crate::commands::get_previous_app().lock().unwrap() = focused;
-                                let _ = app.emit("hotkey-toggle-recording", ());
+            // Not(windows): PTT is toggle-only on Windows; plugin shortcut not registered there.
+            // Uses not(target_os = "windows") rather than macos so Linux can use PTT if added in future.
+            #[cfg(not(target_os = "windows"))]
+            {
+                if let Some(ptt_sc) = parse_hotkey(&initial_settings.push_to_talk_hotkey) {
+                    let state_ptt = shared_state.clone();
+                    if let Err(e) = app.global_shortcut().on_shortcut(ptt_sc, move |app, _shortcut, event| {
+                        let is_recording = state_ptt.lock().unwrap().capture.is_some();
+                        match event.state {
+                            ShortcutState::Pressed => {
+                                if !is_recording {
+                                    let focused = crate::paste::get_frontmost_app();
+                                    tracing::info!("ptt pressed: captured frontmost app = {:?}", focused);
+                                    *crate::commands::get_previous_app().lock().unwrap() = focused;
+                                    let _ = app.emit("hotkey-toggle-recording", ());
+                                }
+                            }
+                            // Always emit stop on release — avoids the race where the key is
+                            // released before the 500 ms sound delay finishes setting `capture`.
+                            ShortcutState::Released => {
+                                let _ = app.emit("hotkey-stop-recording", ());
                             }
                         }
-                        // Always emit stop on release — avoids the race where the key is
-                        // released before the 500 ms sound delay finishes setting `capture`.
-                        ShortcutState::Released => {
-                            let _ = app.emit("hotkey-stop-recording", ());
-                        }
+                    }) {
+                        tracing::warn!("Could not register PTT shortcut: {}", e);
                     }
-                }) {
-                    tracing::warn!("Could not register PTT shortcut: {}", e);
                 }
             }
 
