@@ -124,7 +124,7 @@ The three `vad_engine_*` tests live inside the existing `#[cfg(test)]` block in 
 | `vad_engine_silero_loads_model` | `vad.rs` | `Vad::new("silero", 0.5, 16000)` → `VadImpl::Silero` variant |
 | `vad_engine_rms_forces_fallback` | `vad.rs` | `Vad::new("rms", 0.5, 16000)` → `VadImpl::Rms` variant |
 | `vad_engine_unknown_falls_back_to_rms` | `vad.rs` | `Vad::new("unknown", 0.5, 16000)` → `VadImpl::Rms` variant (safe default) |
-| `settings_default_vad_engine_is_silero` | `settings.rs` | `Settings::default().vad_engine == "silero"` |
+| `default_vad_engine_is_silero` | `settings.rs` | `Settings::default().vad_engine == "silero"` |
 
 **Companion change — existing test helper:** The `silero_vad()` helper in `vad.rs` currently calls `Vad::new(0.5, 16000)` (old 2-argument signature). After adding `vad_engine` as the first argument to `Vad::new`, this call must be updated to `Vad::new("silero", 0.5, 16000)` or the crate will not compile.
 
