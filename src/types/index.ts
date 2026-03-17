@@ -70,6 +70,8 @@ export interface AppSettings {
   llm_nudge_shown: boolean;
   apply_polish_to_regular: boolean;
   vad_engine: string;
+  analytics_enabled: boolean;
+  crash_reporting_enabled: boolean;
 }
 
 // ─── AI ────────────────────────────────────────────────────────────────────────

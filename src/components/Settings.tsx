@@ -786,6 +786,33 @@ function AboutSection({ settings, update }: { settings: Settings; update: (patch
     <div>
       <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">About</h3>
       <div className="card px-5">
+        {/* Privacy subsection */}
+        <div className="py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
+          <h4 className="text-t3 text-[10px] uppercase tracking-widest mb-3 font-mono">Privacy</h4>
+          <SettingRow
+            label="Usage Analytics"
+            description="Anonymous feature usage. No audio or text is sent."
+          >
+            <Toggle
+              value={settings.analytics_enabled}
+              onChange={(v) => update({ analytics_enabled: v })}
+              label="Usage analytics"
+            />
+          </SettingRow>
+          <SettingRow
+            label="Crash Reporting"
+            description="Sends crash reports to help fix bugs. Takes effect after restart."
+          >
+            <Toggle
+              value={settings.crash_reporting_enabled}
+              onChange={(v) => {
+                update({ crash_reporting_enabled: v });
+                localStorage.setItem("crash_reporting_enabled", String(v));
+              }}
+              label="Crash reporting"
+            />
+          </SettingRow>
+        </div>
         <SettingRow label="Version">
           <span className="text-white/50 text-xs font-mono">{version}</span>
         </SettingRow>
