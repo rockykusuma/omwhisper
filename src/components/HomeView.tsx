@@ -74,11 +74,41 @@ export default function HomeView({
     () => localStorage.getItem("omw_model_nudge_dismissed") === "1"
   );
 
+  // ── Smart Dictation nudge ──
+  const [smartDictationNudge, setSmartDictationNudge] = useState<"not_configured" | "model_not_downloaded" | null>(null);
+  const [sdNudgeDismissed, setSdNudgeDismissed] = useState(
+    () => localStorage.getItem("omw_sd_nudge_dismissed") === "1"
+  );
+
   // ── Data loaders ──
   const loadSettings = useCallback(async () => {
-    const s = await invoke<{ audio_input_device: string | null; apply_polish_to_regular: boolean }>("get_settings").catch(() => null);
+    const s = await invoke<{ audio_input_device: string | null; apply_polish_to_regular: boolean; ai_backend: string }>("get_settings").catch(() => null);
     setMicName(s?.audio_input_device || "Default Microphone");
     setApplyPolishToRegular(s?.apply_polish_to_regular ?? false);
+
+    // Check smart dictation readiness
+    if (!s || s.ai_backend === "disabled") {
+      setSmartDictationNudge("not_configured");
+      setSdNudgeDismissed(false);
+      localStorage.removeItem("omw_sd_nudge_dismissed");
+    } else if (s.ai_backend === "built_in") {
+      try {
+        const models = await invoke<{ is_downloaded: boolean; is_active: boolean }[]>("get_llm_models");
+        const ready = models.some((m) => m.is_active && m.is_downloaded);
+        if (ready) {
+          setSmartDictationNudge(null);
+        } else {
+          setSmartDictationNudge("model_not_downloaded");
+          setSdNudgeDismissed(false);
+          localStorage.removeItem("omw_sd_nudge_dismissed");
+        }
+      } catch {
+        setSmartDictationNudge("model_not_downloaded");
+      }
+    } else {
+      // ollama or cloud — assume configured
+      setSmartDictationNudge(null);
+    }
   }, []);
 
   const handleToggleCleanup = useCallback(async () => {
@@ -238,9 +268,36 @@ export default function HomeView({
               </div>
             </>
           ) : (
-            <p className="text-[11px] font-mono text-center leading-relaxed" style={{ color: "var(--t4)" }}>
-              ⌘⇧V to dictate anywhere · ⌘⇧B for AI polish
-            </p>
+            <div className="flex items-start justify-center gap-6">
+              <div className="flex flex-col items-center gap-1.5">
+                <div className="flex items-center gap-0.5 px-3 py-2 rounded-xl"
+                  style={{ background: "color-mix(in srgb, var(--t1) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--t1) 12%, transparent)" }}>
+                  {["⌘", "⇧", "V"].map((k) => (
+                    <kbd key={k} className="inline-flex items-center justify-center rounded px-1.5 py-0.5 text-[11px] font-mono leading-none"
+                      style={{ background: "color-mix(in srgb, var(--t1) 15%, transparent)", color: "var(--t2)", border: "1px solid color-mix(in srgb, var(--t1) 20%, transparent)" }}>
+                      {k}
+                    </kbd>
+                  ))}
+                </div>
+                <span className="text-[10px] font-medium" style={{ color: "var(--t3)" }}>Dictate</span>
+              </div>
+
+              <div className="flex flex-col items-center gap-1.5">
+                <div className="flex items-center gap-0.5 px-3 py-2 rounded-xl"
+                  style={{ background: "color-mix(in srgb, var(--t1) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--t1) 12%, transparent)" }}>
+                  {["⌘", "⇧", "B"].map((k) => (
+                    <kbd key={k} className="inline-flex items-center justify-center rounded px-1.5 py-0.5 text-[11px] font-mono leading-none"
+                      style={{ background: "color-mix(in srgb, var(--t1) 15%, transparent)", color: "var(--t2)", border: "1px solid color-mix(in srgb, var(--t1) 20%, transparent)" }}>
+                      {k}
+                    </kbd>
+                  ))}
+                </div>
+                <span className="text-[10px] font-medium inline-flex items-center gap-1" style={{ color: "var(--t3)" }}>
+                  <Sparkles size={10} />
+                  AI Polish
+                </span>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -336,6 +393,43 @@ export default function HomeView({
       )}
 
 
+
+      {/* ── Smart Dictation setup nudge ──────────────────────────────────── */}
+      {smartDictationNudge && !sdNudgeDismissed && !isRecording && !showLiveTranscript && (
+        <div
+          className="rounded-2xl flex-shrink-0 overflow-hidden"
+          style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)", border: "1px solid color-mix(in srgb, var(--accent) 20%, transparent)" }}
+        >
+          <div className="flex items-center justify-between px-4 pt-3 pb-2">
+            <div className="flex items-center gap-2">
+              <Sparkles size={13} style={{ color: "var(--accent)" }} />
+              <p className="text-xs font-semibold" style={{ color: "var(--t2)" }}>Smart Dictation needs setup</p>
+            </div>
+            <button
+              onClick={() => { setSdNudgeDismissed(true); localStorage.setItem("omw_sd_nudge_dismissed", "1"); }}
+              className="text-[11px] cursor-pointer transition-colors"
+              style={{ color: "var(--t4)" }}
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="px-4 pb-3 space-y-1">
+            <p className="text-[11px]" style={{ color: "var(--t3)" }}>
+              {smartDictationNudge === "not_configured"
+                ? "AI backend is not configured. Enable an AI backend to use Smart Dictation (⌘B)."
+                : "The local AI model isn't downloaded yet. Download it to start using Smart Dictation (⌘B)."}
+            </p>
+            <button
+              onClick={() => onNavigate("models:smart-dictation")}
+              className="mt-2 text-[11px] font-semibold cursor-pointer transition-colors"
+              style={{ color: "var(--accent)" }}
+            >
+              {smartDictationNudge === "not_configured" ? "Configure AI →" : "Download model →"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Model nudge ──────────────────────────────────────────────────── */}
       {!modelNudgeDismissed && !isRecording && !showLiveTranscript && (

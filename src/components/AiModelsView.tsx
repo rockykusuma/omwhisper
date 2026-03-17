@@ -462,11 +462,11 @@ function SmartDictationTab() {
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2 mb-0.5">
-                      {model.is_active && (
+                      {model.is_downloaded && model.is_active && (
                         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "var(--accent)" }} />
                       )}
                       <span className="text-white/80 text-sm font-medium">{model.name}</span>
-                      {model.is_active && (
+                      {model.is_downloaded && model.is_active && (
                         <span className="text-[10px] px-1.5 py-px rounded font-mono" style={{ color: "var(--accent)", border: "1px solid color-mix(in srgb, var(--accent) 35%, transparent)" }}>Active</span>
                       )}
                     </div>

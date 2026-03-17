@@ -181,6 +181,10 @@ function App() {
       const rawText = segmentsRef.current.map((s) => s.text).join(" ").trim();
       if (!rawText) return;
 
+      // In smart dictation mode, skip if the transcription is too short to be
+      // real speech (empty recording / silence hallucination from Whisper).
+      if (smartDictation && rawText.split(/\s+/).filter(Boolean).length < 3) return;
+
       const durationSeconds = (Date.now() - recordingStartRef.current) / 1000;
       const modelUsed = activeModelRef.current;
 
