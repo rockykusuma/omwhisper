@@ -10,9 +10,9 @@ import type { AppSettings, StorageInfo } from "../types";
 
 type Settings = AppSettings;
 
-type Tab = "general" | "audio" | "transcription" | "shortcuts" | "about";
+export type SettingsTab = "general" | "audio" | "transcription" | "shortcuts" | "about";
 
-const TABS: { id: Tab; icon: React.ElementType; label: string }[] = [
+const TABS: { id: SettingsTab; icon: React.ElementType; label: string }[] = [
   { id: "general",       icon: Sliders,    label: "General"       },
   { id: "audio",         icon: Mic,        label: "Audio"         },
   { id: "transcription", icon: FileText,   label: "Transcription" },
@@ -167,11 +167,11 @@ function SettingRow({
   );
 }
 
-export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?: Tab; onNavigate?: (target: string) => void }) {
+export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?: SettingsTab; onNavigate?: (target: string) => void }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [devices, setDevices] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? "general");
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab ?? "general");
 
   useEffect(() => {
     if (initialTab) setActiveTab(initialTab);
@@ -774,12 +774,12 @@ function AboutSection({ settings, update }: { settings: Settings; update: (patch
 
   async function handleSendFeedback() {
     const debugInfo = await invoke<string>("get_debug_info").catch(() => "");
-    const subject = encodeURIComponent(`OmWhisper Beta Feedback — v${version}`);
+    const subject = encodeURIComponent(`OmWhisper Feedback — v${version}`);
     const body = encodeURIComponent(
       `Hi,\n\n[Your feedback here — what's working, what's not, what's missing]\n\n---\n${debugInfo}`
     );
     const mailto = `mailto:feedback@omwhisper.com?subject=${subject}&body=${body}`;
-    invoke("plugin:opener|open_url", { url: mailto }).catch(() => {});
+    invoke("open_feedback_url", { url: mailto }).catch(() => {});
   }
 
   return (

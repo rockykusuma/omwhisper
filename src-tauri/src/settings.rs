@@ -192,7 +192,16 @@ pub fn settings_path() -> PathBuf {
 pub async fn load_settings() -> Settings {
     let path = settings_path();
     match fs::read_to_string(&path).await {
-        Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+        Ok(content) => match serde_json::from_str::<Settings>(&content) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!("settings.json parse error: {e} — reverting to defaults");
+                // Back up the corrupt file so the user can recover it manually
+                let backup = path.with_extension("json.bak");
+                let _ = fs::copy(&path, &backup).await;
+                Settings::default()
+            }
+        },
         Err(_) => Settings::default(),
     }
 }

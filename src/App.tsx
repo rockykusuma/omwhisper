@@ -5,7 +5,7 @@ import { Sparkles } from "lucide-react";
 import Sidebar, { type View } from "./components/Sidebar";
 import HomeView from "./components/HomeView";
 import AiModelsView from "./components/AiModelsView";
-import SettingsPanel from "./components/Settings";
+import SettingsPanel, { type SettingsTab } from "./components/Settings";
 import Onboarding from "./components/Onboarding";
 import TranscriptionHistory from "./components/TranscriptionHistory";
 import Vocabulary from "./components/Vocabulary";
@@ -23,7 +23,7 @@ function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [isSmartDictation, setIsSmartDictation] = useState(false);
   const [activeView, setActiveView] = useState<View>("home");
-  const [settingsInitialTab, setSettingsInitialTab] = useState<string | undefined>(undefined);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab | undefined>(undefined);
   const [activeModel, setActiveModel] = useState("tiny.en");
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
@@ -58,7 +58,7 @@ function App() {
   const navigate = (target: string) => {
     const [view, tab] = target.split(":");
     setActiveView(view as View);
-    setSettingsInitialTab(tab);
+    setSettingsInitialTab(tab as SettingsTab | undefined);
   };
 
   // ── Centralised start / stop ────────────────────────────────────────────
@@ -382,15 +382,11 @@ function App() {
                     await invoke("update_settings", { newSettings: { ...s, active_model: name } });
                   } catch {}
                 }}
-                initialTab={
-                  settingsInitialTab === "whisper" || settingsInitialTab === "smart-dictation"
-                    ? settingsInitialTab
-                    : undefined
-                }
+                initialTab={settingsInitialTab as "whisper" | "smart-dictation" | undefined}
               />
             )}
             <div className={activeView === "settings" ? "h-full" : "hidden"}>
-              <SettingsPanel initialTab={settingsInitialTab as any} onNavigate={navigate} />
+              <SettingsPanel initialTab={settingsInitialTab} onNavigate={navigate} />
             </div>
             {activeView === "history" && <TranscriptionHistory />}
             {activeView === "vocabulary" && <Vocabulary />}

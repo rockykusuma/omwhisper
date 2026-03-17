@@ -268,9 +268,9 @@ pub fn run() {
                             let _ = app.emit("tray-navigate", "settings");
                         }
                         "toggle" => {
-                            let is_recording = state.lock().unwrap().capture.is_some();
+                            let is_recording = state.lock().expect("state mutex poisoned").capture.is_some();
                             if is_recording {
-                                let mut s = state.lock().unwrap();
+                                let mut s = state.lock().expect("state mutex poisoned");
                                 s.usage_running.store(false, std::sync::atomic::Ordering::SeqCst);
                                 if let Some(capture) = s.capture.take() {
                                     capture.stop();
@@ -392,13 +392,13 @@ pub fn run() {
             let state_toggle = shared_state.clone();
             app.global_shortcut().on_shortcut(toggle_sc, move |app, _shortcut, event| {
                 if event.state != ShortcutState::Pressed { return; }
-                let is_recording = state_toggle.lock().unwrap().capture.is_some();
+                let is_recording = state_toggle.lock().expect("state mutex poisoned").capture.is_some();
                 if is_recording {
                     let _ = app.emit("hotkey-stop-recording", ());
                 } else {
                     let focused = crate::paste::get_frontmost_app();
                     tracing::info!("toggle hotkey: captured frontmost app = {:?}", focused);
-                    *crate::commands::get_previous_app().lock().unwrap() = focused;
+                    *crate::commands::get_previous_app().lock().expect("state mutex poisoned") = focused;
                     let _ = app.emit("hotkey-toggle-recording", ());
                 }
             })?;
@@ -411,13 +411,13 @@ pub fn run() {
                 if let Some(ptt_sc) = parse_hotkey(&initial_settings.push_to_talk_hotkey) {
                     let state_ptt = shared_state.clone();
                     if let Err(e) = app.global_shortcut().on_shortcut(ptt_sc, move |app, _shortcut, event| {
-                        let is_recording = state_ptt.lock().unwrap().capture.is_some();
+                        let is_recording = state_ptt.lock().expect("state mutex poisoned").capture.is_some();
                         match event.state {
                             ShortcutState::Pressed => {
                                 if !is_recording {
                                     let focused = crate::paste::get_frontmost_app();
                                     tracing::info!("ptt pressed: captured frontmost app = {:?}", focused);
-                                    *crate::commands::get_previous_app().lock().unwrap() = focused;
+                                    *crate::commands::get_previous_app().lock().expect("state mutex poisoned") = focused;
                                     let _ = app.emit("hotkey-toggle-recording", ());
                                 }
                             }
@@ -453,10 +453,10 @@ pub fn run() {
                             let app_release = app.handle().clone();
                             let state_press = shared_state.clone();
                             let on_press = move || {
-                                let is_recording = state_press.lock().unwrap().capture.is_some();
+                                let is_recording = state_press.lock().expect("state mutex poisoned").capture.is_some();
                                 if !is_recording {
                                     let focused = crate::paste::get_frontmost_app();
-                                    *crate::commands::get_previous_app().lock().unwrap() = focused;
+                                    *crate::commands::get_previous_app().lock().expect("state mutex poisoned") = focused;
                                     let _ = app_press.emit("hotkey-toggle-recording", ());
                                 }
                             };
@@ -508,14 +508,14 @@ pub fn run() {
 
                 match event.state {
                     ShortcutState::Pressed => {
-                        let is_recording = state_for_sd.lock().unwrap().capture.is_some();
+                        let is_recording = state_for_sd.lock().expect("state mutex poisoned").capture.is_some();
                         if is_push_to_talk {
                             if !is_recording {
                                 // Capture focused app before showing window
                                 let focused = crate::paste::get_frontmost_app();
                                 tracing::info!("smart-dictation hotkey: captured frontmost app = {:?}", focused);
-                                *crate::commands::get_previous_app().lock().unwrap() = focused;
-                                state_for_sd.lock().unwrap().is_smart_dictation = true;
+                                *crate::commands::get_previous_app().lock().expect("state mutex poisoned") = focused;
+                                state_for_sd.lock().expect("state mutex poisoned").is_smart_dictation = true;
                                 // Don't show/focus the main window — overlay handles visual feedback
                                 let _ = app.emit("hotkey-smart-dictation", ());
                             }
@@ -527,8 +527,8 @@ pub fn run() {
                                 // Capture focused app before doing anything
                                 let focused = crate::paste::get_frontmost_app();
                                 tracing::info!("smart-dictation hotkey: captured frontmost app = {:?}", focused);
-                                *crate::commands::get_previous_app().lock().unwrap() = focused;
-                                state_for_sd.lock().unwrap().is_smart_dictation = true;
+                                *crate::commands::get_previous_app().lock().expect("state mutex poisoned") = focused;
+                                state_for_sd.lock().expect("state mutex poisoned").is_smart_dictation = true;
                                 // Don't show/focus the main window — overlay handles visual feedback
                                 let _ = app.emit("hotkey-smart-dictation", ());
                             }
@@ -537,7 +537,7 @@ pub fn run() {
                     ShortcutState::Released => {
                         if is_push_to_talk {
                             // Push-to-talk: delegate to frontend so isPendingPaste is set
-                            let is_recording = state_for_sd.lock().unwrap().capture.is_some();
+                            let is_recording = state_for_sd.lock().expect("state mutex poisoned").capture.is_some();
                             if is_recording {
                                 let _ = app.emit("hotkey-stop-recording", ());
                             }
@@ -621,7 +621,7 @@ pub fn run() {
                             .await
                             {
                                 Ok(Ok(engine)) => {
-                                    let mut guard = engine_state.lock().unwrap();
+                                    let mut guard = engine_state.lock().expect("state mutex poisoned");
                                     *guard = Some(engine);
                                     tracing::info!("LlmEngine loaded at launch");
                                 }
@@ -730,6 +730,7 @@ pub fn run() {
             styles::add_custom_style,
             styles::remove_custom_style,
             get_platform,
+            commands::open_feedback_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

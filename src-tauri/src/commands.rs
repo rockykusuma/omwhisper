@@ -107,7 +107,7 @@ pub async fn start_transcription(
     }
 
     // Clear any cancellation from a previous quick tap before we begin.
-    state.lock().unwrap().start_cancelled = false;
+    state.lock().expect("state mutex poisoned").start_cancelled = false;
 
     // Load settings and play start chime BEFORE the mic starts,
     // then wait briefly so the chime finishes and room echo clears.
@@ -126,14 +126,14 @@ pub async fn start_transcription(
 
     // PTT: if the key was released during the sound delay, abort.
     // Return a sentinel error so the frontend knows not to set isRecording=true.
-    if state.lock().unwrap().start_cancelled {
-        state.lock().unwrap().start_cancelled = false;
+    if state.lock().expect("state mutex poisoned").start_cancelled {
+        state.lock().expect("state mutex poisoned").start_cancelled = false;
         return Err("cancelled".to_string());
     }
 
     // Analytics: record_started
     {
-        let is_smart_dictation = state.lock().unwrap().is_smart_dictation;
+        let is_smart_dictation = state.lock().expect("state mutex poisoned").is_smart_dictation;
         crate::analytics::track(settings.analytics_enabled, "recording_started", serde_json::json!({
             "mode": if is_smart_dictation { "smart_dictation" } else { &settings.recording_mode as &str }
         }));
@@ -146,7 +146,7 @@ pub async fn start_transcription(
 
     // Store the capture handle so stop_transcription can reach it.
     let usage_running = {
-        let mut s = state.lock().unwrap();
+        let mut s = state.lock().expect("state mutex poisoned");
         s.capture = Some(capture);
         s.recording_start_time = Some(std::time::Instant::now());
         s.usage_running.store(true, Ordering::SeqCst);
@@ -236,7 +236,7 @@ pub async fn start_transcription(
 #[tauri::command]
 pub async fn stop_transcription(state: tauri::State<'_, SharedState>) -> Result<(), String> {
     {
-        let mut s = state.lock().unwrap();
+        let mut s = state.lock().expect("state mutex poisoned");
         s.usage_running.store(false, Ordering::SeqCst);
         if let Some(capture) = s.capture.take() {
             capture.stop();
@@ -247,7 +247,7 @@ pub async fn stop_transcription(state: tauri::State<'_, SharedState>) -> Result<
     } // MutexGuard dropped here before the await below
 
     let duration_ms = {
-        let mut s = state.lock().unwrap();
+        let mut s = state.lock().expect("state mutex poisoned");
         s.recording_start_time.take().map(|t| t.elapsed().as_millis() as u64).unwrap_or(0)
     };
 
@@ -457,7 +457,7 @@ pub async fn load_llm_engine(
     .map_err(|e| format!("spawn_blocking error: {}", e))?
     .map_err(|e| e.to_string())?;
 
-    let mut guard = engine_state.lock().unwrap();
+    let mut guard = engine_state.lock().expect("state mutex poisoned");
     *guard = Some(engine);
     Ok(())
 }
@@ -468,7 +468,7 @@ pub async fn load_llm_engine(
 pub async fn unload_llm_engine(
     engine_state: tauri::State<'_, LlmEngineState>,
 ) -> Result<(), String> {
-    let mut guard = engine_state.lock().unwrap();
+    let mut guard = engine_state.lock().expect("state mutex poisoned");
     *guard = None;
     Ok(())
 }
@@ -490,7 +490,7 @@ pub fn get_previous_app() -> &'static Mutex<Option<String>> {
 #[tauri::command]
 pub async fn capture_focused_app() -> Result<Option<String>, String> {
     let app_name = paste::get_frontmost_app();
-    *previous_app().lock().unwrap() = app_name.clone();
+    *previous_app().lock().expect("state mutex poisoned") = app_name.clone();
     Ok(app_name)
 }
 
@@ -511,7 +511,7 @@ pub async fn paste_transcription(text: String) -> Result<(), String> {
     // Paste into previously focused app if auto_paste is on
     if settings.auto_paste {
         let app_name = {
-            let guard = previous_app().lock().unwrap();
+            let guard = previous_app().lock().expect("state mutex poisoned");
             guard.clone()
         };
         tracing::info!("paste_transcription: previous_app={:?}", app_name);
@@ -1014,7 +1014,7 @@ pub async fn polish_text_cmd(
         let engine_state = app.state::<LlmEngineState>();
         let vocab = settings.custom_vocabulary.clone();
         let result: anyhow::Result<String> = {
-            let guard = engine_state.lock().unwrap();
+            let guard = engine_state.lock().expect("state mutex poisoned");
             match guard.as_ref() {
                 Some(engine) => engine.polish(&text, &style, &vocab),
                 None => return Err("llm_not_ready".to_string()),
@@ -1171,4 +1171,10 @@ pub fn get_platform() -> &'static str {
     if cfg!(target_os = "macos") { "macos" }
     else if cfg!(target_os = "windows") { "windows" }
     else { "linux" }
+}
+
+#[tauri::command]
+pub fn open_feedback_url(url: String, app: AppHandle) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener().open_url(&url, None::<&str>).map_err(|e| e.to_string())
 }

@@ -21,6 +21,10 @@ const SILERO_MODEL: &[u8] = include_bytes!("../../assets/silero_vad.onnx");
 /// Seconds of silence after which the current utterance is finalised.
 const SILENCE_TIMEOUT_SECS: f32 = 1.5;
 
+/// Maximum speech buffer size: 60 seconds at 16kHz. Utterances longer than this
+/// are flushed automatically to prevent unbounded memory growth.
+const MAX_SPEECH_BUFFER_SAMPLES: usize = 60 * 16_000;
+
 /// Audio is captured at 16kHz; we buffer 512-sample frames.
 const FRAME_SIZE: usize = 512;
 
@@ -156,6 +160,11 @@ impl Vad {
         if is_speech {
             self.speech_buffer.extend_from_slice(samples);
             self.silence_samples = 0;
+            // Flush if buffer exceeds 60-second limit
+            if self.speech_buffer.len() >= MAX_SPEECH_BUFFER_SAMPLES {
+                tracing::warn!("VAD: speech buffer exceeded 60s limit, flushing");
+                return Some(std::mem::take(&mut self.speech_buffer));
+            }
             None
         } else {
             if self.speech_buffer.is_empty() {
@@ -187,6 +196,13 @@ impl Vad {
                 // Speech frame
                 self.speech_buffer.extend_from_slice(&frame);
                 self.silence_samples = 0;
+                // Flush if buffer exceeds 60-second limit
+                if self.speech_buffer.len() >= MAX_SPEECH_BUFFER_SAMPLES {
+                    tracing::warn!("VAD: speech buffer exceeded 60s limit, flushing");
+                    result = Some(std::mem::take(&mut self.speech_buffer));
+                    self.silence_samples = 0;
+                    self.reset_state();
+                }
             } else {
                 // Silence frame
                 if !self.speech_buffer.is_empty() {

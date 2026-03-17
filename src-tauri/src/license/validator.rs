@@ -1,5 +1,6 @@
 use anyhow::Result;
 use serde::Deserialize;
+use std::sync::OnceLock;
 
 const BASE_URL: &str = "https://api.lemonsqueezy.com/v1/licenses";
 
@@ -46,11 +47,14 @@ pub struct MetaData {
 
 // ─── API calls ────────────────────────────────────────────────────────────────
 
-fn client() -> reqwest::Client {
-    reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .unwrap_or_default()
+fn client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(15))
+            .build()
+            .unwrap_or_default()
+    })
 }
 
 pub async fn activate(key: &str, instance_name: &str) -> Result<ActivateResponse> {
