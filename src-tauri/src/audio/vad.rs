@@ -6,9 +6,11 @@
 //! The `rms()` static helper is kept for the frontend audio level meter in
 //! `capture.rs` and is not involved in VAD decisions.
 //!
-//! Silero v5 ONNX interface:
-//!   Inputs:  `input [1, N]` f32, `state [2, 1, 128]` f32, `sr []` i64
+//! Silero v5 ONNX interface (8kHz path — the 16kHz STFT path in v5 is broken):
+//!   Inputs:  `input [1, 256]` f32 (8kHz audio), `state [2, 1, 128]` f32, `sr []` i64 (= 8000)
 //!   Outputs: `output [1, 1]` f32 (speech probability), `stateN [2, 1, 128]` f32
+//!
+//! Audio captured at 16kHz is decimated to 8kHz (every other sample) before inference.
 
 use ndarray::{Array2, Array3};
 use ort::{session::Session, value::TensorRef};
@@ -19,8 +21,11 @@ const SILERO_MODEL: &[u8] = include_bytes!("../../assets/silero_vad.onnx");
 /// Seconds of silence after which the current utterance is finalised.
 const SILENCE_TIMEOUT_SECS: f32 = 1.5;
 
-/// Silero VAD processes audio in 512-sample frames at 16kHz.
+/// Audio is captured at 16kHz; we buffer 512-sample frames.
 const FRAME_SIZE: usize = 512;
+
+/// After decimation (every other sample), the 8kHz frame fed to Silero is 256 samples.
+const SILERO_FRAME_SIZE: usize = 256;
 
 // ── Internal implementation ───────────────────────────────────────────────────
 
@@ -81,7 +86,11 @@ impl Vad {
             }
             Err(e) => {
                 tracing::error!("Silero VAD init failed, falling back to RMS VAD: {e}");
-                VadImpl::Rms { threshold }
+                // RMS energy scale (0.0–1.0 amplitude) is very different from Silero
+                // probability scale. Map sensitivity to a sensible energy threshold:
+                // sensitivity=0.5 → 0.01 (old default), higher sensitivity → lower threshold.
+                let rms_threshold = 0.02 * (1.0 - vad_sensitivity.clamp(0.0, 1.0)) + 0.001;
+                VadImpl::Rms { threshold: rms_threshold }
             }
         };
 
@@ -191,26 +200,27 @@ impl Vad {
         result
     }
 
-    /// Runs one 512-sample frame through the Silero v5 ONNX session.
+    /// Runs one 512-sample 16kHz frame through the Silero v5 ONNX session.
+    ///
+    /// The frame is decimated to 8kHz (256 samples) before inference — the v5 model's
+    /// 16kHz STFT path is broken; the 8kHz LSTM path works correctly.
+    ///
     /// Updates LSTM state in place. Returns speech probability [0.0, 1.0].
     /// Returns 0.0 on inference error (treated as silence).
-    ///
-    /// Silero v5 API:
-    ///   input  "input"  [1, 512] f32
-    ///   input  "state"  [2, 1, 128] f32  — combined LSTM state (replaces v4 h/c)
-    ///   input  "sr"     [] i64
-    ///   output "output" [1, 1] f32       — speech probability
-    ///   output "stateN" [2, 1, 128] f32  — updated state
     fn run_silero_inference(&mut self, frame: &[f32]) -> f32 {
         let VadImpl::Silero { session, state } = &mut self.impl_ else {
             return 0.0;
         };
 
-        let input = match Array2::<f32>::from_shape_vec((1, FRAME_SIZE), frame.to_vec()) {
+        // Decimate 16kHz → 8kHz: take every other sample.
+        let frame_8k: Vec<f32> = frame.iter().step_by(2).copied().collect();
+
+        let input = match Array2::<f32>::from_shape_vec((1, SILERO_FRAME_SIZE), frame_8k) {
             Ok(a) => a,
             Err(_) => return 0.0,
         };
-        let sr_arr = ndarray::arr1(&[16000i64]);
+        // sr must be a 0D scalar tensor (shape []); arr0 produces this.
+        let sr_scalar = ndarray::arr0(8000i64);
 
         let input_ref = match TensorRef::<f32>::from_array_view(input.view()) {
             Ok(t) => t,
@@ -220,7 +230,7 @@ impl Vad {
             Ok(t) => t,
             Err(_) => return 0.0,
         };
-        let sr_ref = match TensorRef::<i64>::from_array_view(sr_arr.view()) {
+        let sr_ref = match TensorRef::<i64>::from_array_view(sr_scalar.view()) {
             Ok(t) => t,
             Err(_) => return 0.0,
         };
@@ -237,19 +247,17 @@ impl Vad {
             }
         };
 
-        // Extract speech probability
+        // Extract speech probability from output [1, 1]
         let prob = outputs["output"]
             .try_extract_tensor::<f32>()
             .map(|(_shape, data)| data.first().copied().unwrap_or(0.0))
             .unwrap_or(0.0);
 
-        // Update LSTM state from stateN output
-        if let Some(new_state) = outputs["stateN"]
-            .try_extract_tensor::<f32>()
-            .ok()
-            .and_then(|(_shape, data)| Array3::from_shape_vec((2, 1, 128), data.to_vec()).ok())
-        {
-            *state = new_state;
+        // Update LSTM state from stateN output [2, 1, 128]
+        if let Ok((_shape, data)) = outputs["stateN"].try_extract_tensor::<f32>() {
+            if let Ok(new_state) = Array3::from_shape_vec((2, 1, 128), data.to_vec()) {
+                *state = new_state;
+            }
         }
 
         prob
