@@ -324,7 +324,9 @@ function SmartDictationTab() {
           setLlmErrors((prev) => ({ ...prev, [name]: error }));
         } else {
           invoke<LlmModelInfo[]>("get_llm_models").then(setLlmModels).catch(() => {});
-          invoke("load_llm_engine", { name }).catch(() => {});
+          if (platform === "macos") {
+            invoke("load_llm_engine", { name }).catch(() => {});
+          }
         }
       } else {
         setLlmDownloading((prev) => ({ ...prev, [name]: progress }));
@@ -412,7 +414,7 @@ function SmartDictationTab() {
                   if (b === "built_in") {
                     invoke<LlmModelInfo[]>("get_llm_models").then((models) => {
                       const active = models.find((m) => m.is_active && m.is_downloaded);
-                      if (active) {
+                      if (active && platform === "macos") {
                         invoke("load_llm_engine", { name: active.name }).catch(() => {});
                       }
                       setLlmModels(models);
