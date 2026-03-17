@@ -5,7 +5,7 @@ const APTABASE_APP_KEY: &str = match option_env!("APTABASE_APP_KEY") {
     Some(k) => k,
     None => "",
 };
-const APTABASE_URL: &str = "https://eu.aptabase.com/api/v0/events";
+const APTABASE_URL: &str = "https://us.aptabase.com/api/v0/events";
 
 static SESSION_ID: OnceLock<String> = OnceLock::new();
 
@@ -27,19 +27,18 @@ pub fn track(enabled: bool, name: &str, props: Value) {
     let os_name = if cfg!(target_os = "macos") { "macOS" } else { "Windows" };
     let version = env!("CARGO_PKG_VERSION");
 
-    tokio::spawn(async move {
-        let body = json!({
-            "events": [{
-                "timestamp": chrono::Utc::now().to_rfc3339(),
-                "sessionId": session_id,
-                "eventName": event_name,
-                "props": props,
-                "systemProps": {
-                    "appVersion": version,
-                    "osName": os_name,
-                }
-            }]
-        });
+    tauri::async_runtime::spawn(async move {
+        let body = json!([{
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+            "sessionId": session_id,
+            "eventName": event_name,
+            "props": props,
+            "systemProps": {
+                "appVersion": version,
+                "osName": os_name,
+                "sdkVersion": "omwhisper@0.1.0",
+            }
+        }]);
         let client = reqwest::Client::new();
         let result = client
             .post(APTABASE_URL)
