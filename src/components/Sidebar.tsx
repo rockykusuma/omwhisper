@@ -1,9 +1,6 @@
-import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { Clock, Brain, Settings, BookMarked, Sparkles, House } from "lucide-react";
+import { Clock, Brain, Settings, BookMarked, House } from "lucide-react";
 
-export type View = "home" | "history" | "models" | "vocabulary" | "license" | "settings";
+export type View = "home" | "history" | "models" | "vocabulary" | "settings";
 
 interface Props {
   activeView: View;
@@ -22,38 +19,6 @@ const NAV_ITEMS: { id: View; icon: React.ElementType; label: string }[] = [
 ];
 
 export default function Sidebar({ activeView, onNavigate, appVersion, isOpen, onToggle }: Props) {
-  const [usageSeconds, setUsageSeconds] = useState<number | null>(null);
-  const [isFreeTier, setIsFreeTier] = useState(false);
-  const [isLicensed, setIsLicensed] = useState(false);
-
-  useEffect(() => {
-    invoke<{ seconds_used: number; is_free_tier: boolean }>("get_usage_today")
-      .then((u) => { setIsFreeTier(u.is_free_tier); setUsageSeconds(u.seconds_used); })
-      .catch(() => {});
-    invoke<string>("get_license_status")
-      .then((s) => setIsLicensed(s === "Licensed" || s === "GracePeriod"))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    const unlisten = listen<{ seconds_used: number; is_free_tier: boolean }>(
-      "usage-update",
-      (e) => { setUsageSeconds(e.payload.seconds_used); setIsFreeTier(e.payload.is_free_tier); }
-    );
-    return () => { unlisten.then((f) => f()); };
-  }, []);
-
-  useEffect(() => {
-    const unlisten = listen("license-status", () => {
-      invoke<string>("get_license_status")
-        .then((s) => setIsLicensed(s === "Licensed" || s === "GracePeriod"))
-        .catch(() => {});
-    });
-    return () => { unlisten.then((f) => f()); };
-  }, []);
-
-  const remaining = usageSeconds !== null ? Math.max(0, 1800 - usageSeconds) : null;
-  const usagePct = usageSeconds !== null ? Math.min(100, (usageSeconds / 1800) * 100) : 0;
 
   return (
     <div
@@ -110,14 +75,12 @@ export default function Sidebar({ activeView, onNavigate, appVersion, isOpen, on
           <span className="font-semibold text-sm tracking-tight leading-tight" style={{ color: "var(--t1)" }}>
             Whisper
           </span>
-          {isLicensed && (
-            <span
-              className="text-[9px] font-mono leading-none mt-0.5 w-fit px-1.5 py-0.5 rounded-full"
-              style={{ color: "var(--accent)", background: "var(--accent-bg)", boxShadow: "var(--nm-pressed-sm)" }}
-            >
-              PRO
-            </span>
-          )}
+          <span
+            className="text-[9px] font-mono leading-none mt-0.5 w-fit px-1.5 py-0.5 rounded-full"
+            style={{ color: "var(--accent)", background: "var(--accent-bg)", boxShadow: "var(--nm-pressed-sm)" }}
+          >
+            BETA
+          </span>
         </div>
       </div>
 
@@ -175,82 +138,7 @@ export default function Sidebar({ activeView, onNavigate, appVersion, isOpen, on
       </nav>
 
       {/* Footer */}
-      <div className="px-2 pb-3 pt-2 space-y-2 shrink-0">
-        {/* Free tier: usage bar + upgrade CTA */}
-        {isFreeTier && remaining !== null && (
-          <div
-            className="rounded-xl overflow-hidden cursor-pointer transition-all duration-150"
-            style={{ boxShadow: "var(--nm-pressed-sm)" }}
-            onClick={() => onNavigate("license")}
-            title={!isOpen ? "Upgrade to Pro" : undefined}
-          >
-            {isOpen ? (
-              <div className="px-3 py-2.5">
-                <span className="text-[10px] mb-2 font-mono block" style={{ color: "var(--t2)" }}>
-                  {Math.floor(remaining / 60)}m {remaining % 60}s left · resets at midnight
-                </span>
-                <div className="h-1 rounded-full overflow-hidden mb-2.5" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}>
-                  <div
-                    className={`h-full rounded-full transition-all duration-1000 ${
-                      usagePct >= 100 ? "bg-red-400" : usagePct >= 83 ? "bg-amber-400" : "bg-emerald-400"
-                    }`}
-                    style={{ width: `${usagePct}%`, boxShadow: usagePct > 0 ? "0 0 6px var(--accent-glow)" : "none" }}
-                  />
-                </div>
-                {/* Upgrade CTA — only shown in free tier */}
-                <div
-                  className="flex items-center justify-between rounded-lg px-2.5 py-1.5 transition-all duration-150"
-                  style={{
-                    background: "var(--accent-bg)",
-                    border: "1px solid var(--accent-glow-weak)",
-                  }}
-                >
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles size={10} style={{ color: "var(--accent)" }} />
-                    <span className="text-[10px] font-semibold" style={{ color: "var(--accent)" }}>
-                      Upgrade to Pro
-                    </span>
-                  </div>
-                  <span style={{ color: "var(--accent)", fontSize: 10 }}>→</span>
-                </div>
-              </div>
-            ) : (
-              /* Collapsed: just a glowing sparkle icon button */
-              <div
-                className="flex items-center justify-center py-2.5"
-                title="Upgrade to Pro"
-              >
-                <Sparkles size={14} style={{ color: "var(--accent)" }} />
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Licensed: compact manage link */}
-        {isLicensed && (
-          <button
-            onClick={() => onNavigate("license")}
-            title={!isOpen ? "License" : undefined}
-            className="w-full flex items-center rounded-xl px-3 py-2 cursor-pointer transition-all duration-150"
-            style={{
-              gap: isOpen ? 8 : 0,
-              justifyContent: isOpen ? "flex-start" : "center",
-              color: "var(--t3)",
-              background: "var(--bg)",
-              boxShadow: activeView === "license" ? "var(--nm-pressed-sm)" : "none",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--accent)")}
-            onMouseLeave={(e) => (e.currentTarget.style.color = "var(--t3)")}
-          >
-            <Sparkles size={12} style={{ flexShrink: 0 }} />
-            {isOpen && (
-              <span className="text-[10px] font-mono" style={{ whiteSpace: "nowrap" }}>
-                Pro · Manage
-              </span>
-            )}
-          </button>
-        )}
-
+      <div className="px-2 pb-3 pt-2 shrink-0">
         {appVersion && isOpen && (
           <p className="text-[10px] font-mono px-1" style={{ color: "var(--t4)" }}>v{appVersion}</p>
         )}

@@ -800,9 +800,124 @@ function FileTranscriptionSection({ activeModel }: { activeModel: string }) {
 }
 
 // ─── About ─────────────────────────────────────────────────────────────────────
+function FeedbackModal({ version, onClose }: { version: string; onClose: () => void }) {
+  const [category, setCategory] = useState("Bug Report");
+  const [message, setMessage] = useState("");
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  async function handleSubmit() {
+    if (!message.trim()) return;
+    setStatus("sending");
+    try {
+      const debugInfo = await invoke<string>("get_debug_info").catch(() => "");
+      await invoke("send_feedback", {
+        category,
+        message: message.trim(),
+        userEmail: email.trim() || null,
+        appVersion: version,
+        debugInfo,
+      });
+      setStatus("success");
+    } catch (e) {
+      setStatus("error");
+      setErrorMsg(String(e));
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-t-2xl p-5 space-y-4"
+        style={{ background: "var(--bg)", boxShadow: "var(--nm-raised), 0 -8px 40px rgba(0,0,0,0.4)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold" style={{ color: "var(--t1)" }}>Send Feedback</p>
+          <button onClick={onClose} className="text-xs cursor-pointer" style={{ color: "var(--t4)" }}>✕</button>
+        </div>
+
+        {status === "success" ? (
+          <div className="py-6 text-center space-y-2">
+            <p className="text-2xl">🎉</p>
+            <p className="text-sm font-semibold" style={{ color: "var(--t1)" }}>Thank you!</p>
+            <p className="text-xs" style={{ color: "var(--t3)" }}>Your feedback has been sent. We'll review it shortly.</p>
+            <button onClick={onClose} className="mt-3 btn-primary text-xs py-1.5 px-4">Done</button>
+          </div>
+        ) : (
+          <>
+            {/* Category */}
+            <div className="flex gap-2">
+              {["Bug Report", "Feature Request", "General"].map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setCategory(cat)}
+                  className="flex-1 py-1.5 rounded-xl text-xs transition-all duration-150 cursor-pointer"
+                  style={{
+                    background: "var(--bg)",
+                    boxShadow: category === cat ? "var(--nm-pressed-sm)" : "var(--nm-raised-sm)",
+                    border: category === cat ? "1px solid color-mix(in srgb, var(--accent) 45%, transparent)" : "1px solid transparent",
+                    color: category === cat ? "var(--accent)" : "var(--t3)",
+                  }}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
+            {/* Message */}
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Describe the bug, idea, or anything on your mind…"
+              rows={4}
+              className="w-full resize-none rounded-xl px-3 py-2.5 text-xs outline-none leading-relaxed"
+              style={{
+                background: "var(--bg)",
+                boxShadow: "var(--nm-pressed-sm)",
+                color: "var(--t1)",
+                border: "1px solid color-mix(in srgb, var(--t1) 8%, transparent)",
+              }}
+            />
+
+            {/* Optional email */}
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Your email (optional — for follow-up)"
+              className="w-full rounded-xl px-3 py-2 text-xs outline-none"
+              style={{
+                background: "var(--bg)",
+                boxShadow: "var(--nm-pressed-sm)",
+                color: "var(--t1)",
+                border: "1px solid color-mix(in srgb, var(--t1) 8%, transparent)",
+              }}
+            />
+
+            {status === "error" && (
+              <p className="text-red-400/70 text-xs">{errorMsg}</p>
+            )}
+
+            <button
+              onClick={handleSubmit}
+              disabled={!message.trim() || status === "sending"}
+              className="w-full btn-primary text-xs py-2 disabled:opacity-40"
+            >
+              {status === "sending" ? "Sending…" : "Send Feedback"}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AboutSection({ settings, update }: { settings: Settings; update: (patch: Partial<Settings>) => void }) {
   const [version, setVersion] = useState("0.1.0");
   const [copying, setCopying] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
 
   useEffect(() => {
     invoke<string>("get_app_version").then(setVersion).catch((e) => logger.debug("get_app_version:", e));
@@ -821,89 +936,82 @@ function AboutSection({ settings, update }: { settings: Settings; update: (patch
     }
   }
 
-  async function handleSendFeedback() {
-    const debugInfo = await invoke<string>("get_debug_info").catch(() => "");
-    const subject = encodeURIComponent(`OmWhisper Feedback — v${version}`);
-    const body = encodeURIComponent(
-      `Hi,\n\n[Your feedback here — what's working, what's not, what's missing]\n\n---\n${debugInfo}`
-    );
-    const mailto = `mailto:feedback@omwhisper.com?subject=${subject}&body=${body}`;
-    invoke("open_feedback_url", { url: mailto }).catch(() => {});
-  }
-
   return (
-    <div>
-      <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">About</h3>
-      <div className="card px-5">
-        {/* Privacy subsection */}
-        <div className="py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
-          <h4 className="text-t3 text-[10px] uppercase tracking-widest mb-3 font-mono">Privacy</h4>
-          <SettingRow
-            label="Usage Analytics"
-            description="Anonymous feature usage. No audio or text is sent."
-          >
-            <Toggle
-              value={settings.analytics_enabled}
-              onChange={(v) => update({ analytics_enabled: v })}
-              label="Usage analytics"
-            />
+    <>
+      {showFeedback && <FeedbackModal version={version} onClose={() => setShowFeedback(false)} />}
+      <div>
+        <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">About</h3>
+        <div className="card px-5">
+          {/* Privacy subsection */}
+          <div className="py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
+            <h4 className="text-t3 text-[10px] uppercase tracking-widest mb-3 font-mono">Privacy</h4>
+            <SettingRow
+              label="Usage Analytics"
+              description="Anonymous feature usage. No audio or text is sent."
+            >
+              <Toggle
+                value={settings.analytics_enabled}
+                onChange={(v) => update({ analytics_enabled: v })}
+                label="Usage analytics"
+              />
+            </SettingRow>
+            <SettingRow
+              label="Crash Reporting"
+              description="Sends crash reports to help fix bugs. Takes effect after restart."
+            >
+              <Toggle
+                value={settings.crash_reporting_enabled}
+                onChange={(v) => {
+                  update({ crash_reporting_enabled: v });
+                  localStorage.setItem("crash_reporting_enabled", String(v));
+                }}
+                label="Crash reporting"
+              />
+            </SettingRow>
+          </div>
+          <SettingRow label="Version">
+            <span className="text-white/50 text-xs font-mono">{version}</span>
           </SettingRow>
-          <SettingRow
-            label="Crash Reporting"
-            description="Sends crash reports to help fix bugs. Takes effect after restart."
-          >
-            <Toggle
-              value={settings.crash_reporting_enabled}
-              onChange={(v) => {
-                update({ crash_reporting_enabled: v });
-                localStorage.setItem("crash_reporting_enabled", String(v));
-              }}
-              label="Crash reporting"
-            />
+          <div className="py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
+            <p className="text-white/80 text-sm mb-1">Model Storage</p>
+            <p className="text-white/50 text-xs font-mono break-all">~/Library/Application Support/com.omwhisper.app</p>
+          </div>
+          <SettingRow label="Log Level" description="Increase for troubleshooting">
+            <select
+              value={settings.log_level ?? "normal"}
+              onChange={(e) => update({ log_level: e.target.value })}
+              className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
+              style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+              aria-label="Log level"
+            >
+              <option value="normal">Normal</option>
+              <option value="debug">Debug</option>
+            </select>
           </SettingRow>
-        </div>
-        <SettingRow label="Version">
-          <span className="text-white/50 text-xs font-mono">{version}</span>
-        </SettingRow>
-        <div className="py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
-          <p className="text-white/80 text-sm mb-1">Model Storage</p>
-          <p className="text-white/50 text-xs font-mono break-all">~/Library/Application Support/com.omwhisper.app</p>
-        </div>
-        <SettingRow label="Log Level" description="Increase for troubleshooting">
-          <select
-            value={settings.log_level ?? "normal"}
-            onChange={(e) => update({ log_level: e.target.value })}
-            className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
-            style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-            aria-label="Log level"
-          >
-            <option value="normal">Normal</option>
-            <option value="debug">Debug</option>
-          </select>
-        </SettingRow>
-        <SettingRow label="Debug Info" description="Copy diagnostics for bug reports">
-          <button
-            onClick={handleCopyDebugInfo}
-            aria-label="Copy debug info to clipboard"
-            className="btn-ghost text-xs py-1.5"
-          >
-            {copying ? "✓ Copied" : "Copy"}
-          </button>
-        </SettingRow>
-        <SettingRow label="Send Feedback" description="Opens your email client">
-          <button
-            onClick={handleSendFeedback}
-            aria-label="Send feedback by email"
-            className="btn-ghost text-xs py-1.5"
-          >
-            Send Feedback
-          </button>
-        </SettingRow>
-        <div className="py-4 text-center">
-          <p className="text-white/35 text-xs">Made with ॐ by Rakesh Kusuma</p>
+          <SettingRow label="Debug Info" description="Copy diagnostics for bug reports">
+            <button
+              onClick={handleCopyDebugInfo}
+              aria-label="Copy debug info to clipboard"
+              className="btn-ghost text-xs py-1.5"
+            >
+              {copying ? "✓ Copied" : "Copy"}
+            </button>
+          </SettingRow>
+          <SettingRow label="Send Feedback" description="Bug report, feature request, or general thoughts">
+            <button
+              onClick={() => setShowFeedback(true)}
+              aria-label="Send feedback"
+              className="btn-ghost text-xs py-1.5"
+            >
+              Feedback →
+            </button>
+          </SettingRow>
+          <div className="py-4 text-center">
+            <p className="text-white/35 text-xs">Made with ॐ by Rakesh Kusuma</p>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 

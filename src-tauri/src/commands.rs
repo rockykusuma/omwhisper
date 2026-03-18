@@ -1193,6 +1193,68 @@ pub fn open_feedback_url(url: String, app: AppHandle) -> Result<(), String> {
     app.opener().open_url(&url, None::<&str>).map_err(|e| e.to_string())
 }
 
+/// Send beta feedback via Resend email API.
+/// RESEND_KEY must be set at build time via the environment variable.
+#[tauri::command]
+pub async fn send_feedback(
+    category: String,
+    message: String,
+    user_email: Option<String>,
+    app_version: String,
+    debug_info: String,
+) -> Result<(), String> {
+    const RESEND_API_KEY: &str = match option_env!("RESEND_API_KEY") {
+        Some(k) => k,
+        None => "",
+    };
+
+    if RESEND_API_KEY.is_empty() {
+        return Err("Feedback is not configured in this build.".to_string());
+    }
+
+    let from_label = user_email
+        .as_deref()
+        .filter(|e| !e.is_empty())
+        .unwrap_or("anonymous");
+
+    let subject = format!("[Beta Feedback] {} — OmWhisper v{}", category, app_version);
+
+    let html = format!(
+        r#"<h3>Category</h3><p>{category}</p>
+<h3>Message</h3><p style="white-space:pre-wrap">{message}</p>
+<h3>From</h3><p>{from_label}</p>
+<h3>Debug Info</h3><pre style="font-size:12px;background:#f4f4f4;padding:12px;border-radius:6px">{debug_info}</pre>"#,
+        category = category,
+        message = message,
+        from_label = from_label,
+        debug_info = debug_info,
+    );
+
+    let body = serde_json::json!({
+        "from": "OmWhisper Beta <feedback@omwhisper.com>",
+        "to": ["rockykusuma@gmail.com"],
+        "subject": subject,
+        "html": html,
+    });
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post("https://api.resend.com/emails")
+        .bearer_auth(RESEND_API_KEY)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        Err(format!("Resend API error {}: {}", status, text))
+    }
+}
+
 // ─── Transcription Engine ─────────────────────────────────────────────────────
 
 /// Returns the name of the currently active transcription engine ("whisper" or "apple").
