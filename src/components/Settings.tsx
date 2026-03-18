@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
-  Sliders, Mic, FileText, Info, ShieldCheck, ShieldAlert, Keyboard, Brain, Activity
+  Sliders, Mic, FileText, Info, ShieldCheck, ShieldAlert, Keyboard, Brain, Activity, Zap, Sparkles, Cpu
 } from "lucide-react";
 import { logger } from "../utils/logger";
 import { useTheme, THEMES } from "../hooks/useTheme";
@@ -179,10 +179,12 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
   const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
   const [accessibilityGranted, setAccessibilityGranted] = useState<boolean | null>(null);
   const [platform, setPlatform] = useState<string>("macos");
+  const [appleAvailable, setAppleAvailable] = useState<boolean>(true);
   const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     invoke<string>("get_platform").then(setPlatform).catch(() => {});
+    invoke<boolean>("is_apple_speech_available").then(setAppleAvailable).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -580,25 +582,50 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                   </div>
                 </div>
                 {platform === "macos" && (
-                  <div className="flex items-center justify-between gap-4 py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
-                    <div>
-                      <p className="text-white/80 text-sm">Engine</p>
-                      <p className="text-white/50 text-xs mt-0.5">Apple Speech is on-device and fast; Whisper supports all models</p>
-                    </div>
-                    <div className="flex rounded-lg overflow-hidden shrink-0" style={{ boxShadow: "var(--nm-pressed-sm)" }}>
-                      {(["auto", "apple", "whisper"] as const).map((opt) => (
-                        <button
-                          key={opt}
-                          onClick={() => update({ transcription_engine: opt })}
-                          className="px-3 py-1.5 text-xs font-medium transition-all duration-150 cursor-pointer capitalize"
-                          style={{
-                            background: settings.transcription_engine === opt ? "var(--accent)" : "var(--bg)",
-                            color: settings.transcription_engine === opt ? "#0a1a12" : "var(--t3)",
-                          }}
-                        >
-                          {opt === "auto" ? "Auto" : opt === "apple" ? "⚡ Apple" : "◎ Whisper"}
-                        </button>
-                      ))}
+                  <div className="py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
+                    <p className="text-white/80 text-sm mb-1">Engine</p>
+                    <p className="text-white/50 text-xs mb-3">Choose how your voice is transcribed</p>
+                    <div className="flex gap-2">
+                      {([
+                        { id: "auto",    Icon: Zap,       label: "Auto",          sub: "Apple Speech if available" },
+                        { id: "apple",   Icon: Sparkles,  label: "Apple Speech",  sub: "On-device · fast" },
+                        { id: "whisper", Icon: Cpu,       label: "Whisper",       sub: "Local model · all languages" },
+                      ] as const).map(({ id, Icon, label, sub }) => {
+                        const disabled = id === "apple" && !appleAvailable;
+                        const active = settings.transcription_engine === id && !disabled;
+                        return (
+                          <button
+                            key={id}
+                            onClick={() => !disabled && update({ transcription_engine: id })}
+                            aria-pressed={active}
+                            aria-disabled={disabled}
+                            className={`flex-1 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all duration-150 ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+                            style={{
+                              background: "var(--bg)",
+                              boxShadow: active ? "var(--nm-pressed-sm)" : "var(--nm-raised-sm)",
+                              border: active
+                                ? "1px solid color-mix(in srgb, var(--accent) 45%, transparent)"
+                                : "1px solid transparent",
+                              opacity: disabled ? 0.45 : 1,
+                            }}
+                          >
+                            <div
+                              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                              style={{ background: active ? "var(--accent-bg)" : "color-mix(in srgb, var(--t1) 6%, transparent)" }}
+                            >
+                              <Icon size={14} style={{ color: active ? "var(--accent)" : "var(--t3)" }} />
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium leading-tight" style={{ color: active ? "var(--accent)" : "var(--t1)" }}>
+                                {label}
+                              </p>
+                              <p className="text-[10px] leading-tight mt-0.5" style={{ color: "var(--t4)" }}>
+                                {disabled ? "Not available on this device" : sub}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

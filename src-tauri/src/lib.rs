@@ -735,6 +735,7 @@ pub fn run() {
             styles::remove_custom_style,
             get_platform,
             get_transcription_engine,
+            commands::is_apple_speech_available,
             commands::open_feedback_url,
         ])
         .run(tauri::generate_context!())
