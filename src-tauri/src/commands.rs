@@ -1201,6 +1201,18 @@ pub fn get_transcription_engine(state: tauri::State<'_, SharedState>) -> &'stati
     state.lock().expect("state mutex poisoned").active_engine
 }
 
+/// Returns whether Apple Speech is available on this device.
+/// Always false on non-macOS and in dev mode (no .app bundle).
+#[tauri::command]
+pub fn is_apple_speech_available() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        return crate::macos::speech_analyzer::SpeechAnalyzerEngine::is_available();
+    }
+    #[cfg(not(target_os = "macos"))]
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::TranscriptionState;

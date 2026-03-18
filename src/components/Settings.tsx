@@ -260,45 +260,36 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
             <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Appearance</h3>
             <div className="card px-5 py-4 mb-6">
               <p className="text-t3 text-xs mb-4">Theme</p>
-              <div className="flex flex-col gap-4">
-                {(["neomorphism", "glassmorphism"] as const).map((style) => (
-                  <div key={style}>
-                    <p className="text-[10px] uppercase tracking-widest mb-2 font-mono" style={{ color: "var(--t3)" }}>
-                      {style === "neomorphism" ? "Neomorphism" : "Glassmorphism"}
-                    </p>
-                    <div className="flex items-center gap-3 flex-wrap">
-                      {THEMES.filter((t) => t.style === style).map((t) => (
-                        <button
-                          key={t.id}
-                          onClick={() => setTheme(t.id)}
-                          title={t.label}
-                          className="flex flex-col items-center gap-1.5 cursor-pointer group"
-                          aria-pressed={theme === t.id}
-                        >
-                          <div
-                            className="w-11 h-11 rounded-xl transition-all duration-200 relative"
-                            style={{
-                              background: t.bg,
-                              boxShadow: theme === t.id
-                                ? `0 0 0 2.5px ${t.accent}, 0 0 14px ${t.accent}55`
-                                : "inset 2px 2px 5px rgba(0,0,0,0.25), inset -2px -2px 5px rgba(255,255,255,0.12)",
-                            }}
-                          >
-                            <span
-                              className="absolute bottom-1.5 right-1.5 w-2 h-2 rounded-full"
-                              style={{ background: t.accent }}
-                            />
-                          </div>
-                          <span
-                            className="text-[10px] font-mono transition-colors"
-                            style={{ color: theme === t.id ? "var(--accent)" : "var(--t3)" }}
-                          >
-                            {t.label}
-                          </span>
-                        </button>
-                      ))}
+              <div className="flex items-end gap-3 flex-wrap">
+                {THEMES.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTheme(t.id)}
+                    title={t.label}
+                    className="flex flex-col items-center gap-1.5 cursor-pointer group"
+                    aria-pressed={theme === t.id}
+                  >
+                    <div
+                      className="w-11 h-11 rounded-xl transition-all duration-200 relative"
+                      style={{
+                        background: t.bg,
+                        boxShadow: theme === t.id
+                          ? `0 0 0 2.5px ${t.accent}, 0 0 14px ${t.accent}55`
+                          : "inset 2px 2px 5px rgba(0,0,0,0.25), inset -2px -2px 5px rgba(255,255,255,0.12)",
+                      }}
+                    >
+                      <span
+                        className="absolute bottom-1.5 right-1.5 w-2 h-2 rounded-full"
+                        style={{ background: t.accent }}
+                      />
                     </div>
-                  </div>
+                    <span
+                      className="text-[10px] font-mono transition-colors"
+                      style={{ color: theme === t.id ? "var(--accent)" : "var(--t3)" }}
+                    >
+                      {t.label}
+                    </span>
+                  </button>
                 ))}
               </div>
             </div>
