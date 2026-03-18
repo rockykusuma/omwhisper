@@ -1231,7 +1231,7 @@ pub async fn send_feedback(
     );
 
     let body = serde_json::json!({
-        "from": "OmWhisper Beta <feedback@omwhisper.com>",
+        "from": "OmWhisper Beta <feedback@omwhisper.in>",
         "to": ["rockykusuma@gmail.com"],
         "subject": subject,
         "html": html,
