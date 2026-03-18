@@ -4,10 +4,28 @@ import AVFoundation
 
 // MARK: - Authorization
 
+/// Returns true only when running inside a proper .app bundle that contains
+/// NSSpeechRecognitionUsageDescription in its Info.plist.
+///
+/// Two checks are required:
+/// 1. Bundle.main must have a bundle identifier — raw dev binaries have none.
+/// 2. The usage description key must be present in the bundle's Info.plist.
+///
+/// Both are necessary because macOS's TCC daemon (tccd) reads the Info.plist
+/// from the .app bundle directory on disk, not from the binary's __info_plist section.
+/// Calling requestAuthorization without a bundle causes tccd to crash with
+/// __TCC_CRASHING_DUE_TO_PRIVACY_VIOLATION__ even if Bundle.main can read the key
+/// via an embedded section.
+private func hasSpeechUsageDescription() -> Bool {
+    guard Bundle.main.bundleIdentifier != nil else { return false }
+    return Bundle.main.object(forInfoDictionaryKey: "NSSpeechRecognitionUsageDescription") != nil
+}
+
 /// Ensures the app has speech recognition authorization.
 /// Blocks the calling thread until the user responds (first call only).
-/// Returns true if authorized, false if denied or restricted.
+/// Returns true if authorized, false if denied, restricted, or usage description is missing.
 private func ensureAuthorized() -> Bool {
+    guard hasSpeechUsageDescription() else { return false }
     let status = SFSpeechRecognizer.authorizationStatus()
     switch status {
     case .authorized:
@@ -30,11 +48,16 @@ private func ensureAuthorized() -> Bool {
 
 // MARK: - C-compatible exports
 
-/// Returns true when Apple on-device speech recognition is available and authorized.
-/// Requests authorization on first call if status is not yet determined.
+/// Returns true when Apple on-device speech recognition is available.
+/// Does NOT request authorization — only checks the current status.
+/// Authorization is requested lazily on the first call to apple_transcribe_buffer.
 @_cdecl("apple_speech_available")
 public func appleSpeechAvailable() -> Bool {
-    guard ensureAuthorized() else { return false }
+    guard hasSpeechUsageDescription() else { return false }
+    // Only report available if already authorized or not-yet-determined.
+    // Never trigger a TCC prompt here — that happens in apple_transcribe_buffer.
+    let status = SFSpeechRecognizer.authorizationStatus()
+    guard status != .denied && status != .restricted else { return false }
     guard let recognizer = SFSpeechRecognizer() else { return false }
     return recognizer.isAvailable
 }
