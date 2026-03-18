@@ -52,7 +52,7 @@ export default function TipsSection({ onNavigate }: TipsSectionProps) {
       </p>
     <div
       className="rounded-2xl overflow-hidden"
-      style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
+      style={{ background: "var(--surface)", boxShadow: "var(--surface-shadow)", border: "1px solid var(--surface-border)", backdropFilter: "var(--surface-blur)", WebkitBackdropFilter: "var(--surface-blur)" }}
     >
       {TIPS.map((tip, i) => (
         <div key={tip.headline}>

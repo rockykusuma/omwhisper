@@ -13,7 +13,7 @@ export interface ThemeMeta {
 
 export const THEMES: ThemeMeta[] = [
   { id: "charcoal",   label: "Charcoal",   bg: "#1e2229", accent: "#34d399", dark: true, style: "neomorphism"   },
-  { id: "dark-glass", label: "Dark Glass", bg: "#050d12", accent: "#34d399", dark: true, style: "glassmorphism" },
+  { id: "dark-glass", label: "Dark Glass", bg: "#06100c", accent: "#34d399", dark: true, style: "glassmorphism" },
 ];
 
 const STORAGE_KEY = "omwhisper-theme";

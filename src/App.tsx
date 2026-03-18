@@ -256,7 +256,7 @@ function App() {
   }, []);
 
   if (showOnboarding === null) {
-    return <div className="min-h-screen" style={{ background: "var(--bg)" }} />;
+    return <div className="min-h-screen" />;
   }
 
   if (showOnboarding === true) {
@@ -264,7 +264,7 @@ function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden" style={{ background: "var(--bg)" }}>
+    <div className="flex flex-col h-screen overflow-hidden">
       <div
         data-tauri-drag-region
         className="w-full shrink-0"

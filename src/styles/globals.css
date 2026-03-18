@@ -59,40 +59,60 @@ input, textarea, [contenteditable] {
   --accent-grad-to:   #25b87e;
 }
 
-/* ══ THEME 1 — Dark Glass ════════════════════════════════════════════════ */
+/* ══ THEME 1 — Cosmic / Nebula (Dark Glass) ══════════════════════════════ */
 [data-theme="dark-glass"] {
-  --bg:           #050d12;
+  --bg:           #06100c;
   --glass-bg:     rgba(255, 255, 255, 0.06);
-  --glass-border: rgba(255, 255, 255, 0.10);
-  --glass-blur:   blur(16px);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-blur:   blur(24px);
 
-  --shadow-dark:  rgba(0, 0, 0, 0.40);
+  --shadow-dark:  rgba(0, 0, 0, 0.50);
   --shadow-light: rgba(255, 255, 255, 0.04);
 
-  --t1: rgba(255, 255, 255, 0.90);
-  --t2: rgba(255, 255, 255, 0.55);
-  --t3: rgba(255, 255, 255, 0.35);
-  --t4: rgba(255, 255, 255, 0.20);
+  --t1: rgba(255, 255, 255, 0.94);
+  --t2: rgba(255, 255, 255, 0.65);
+  --t3: rgba(255, 255, 255, 0.42);
+  --t4: rgba(255, 255, 255, 0.25);
 
   --accent:           #34d399;
-  --accent-glow:      rgba(52, 211, 153, 0.50);
-  --accent-glow-weak: rgba(52, 211, 153, 0.25);
+  --accent-glow:      rgba(52, 211, 153, 0.55);
+  --accent-glow-weak: rgba(52, 211, 153, 0.28);
   --accent-bg:        rgba(52, 211, 153, 0.12);
   --accent-grad-from: #3de0a8;
   --accent-grad-to:   #25b87e;
 }
 
-/* Background mesh: three radial orbs over near-black base.               */
-/* Both html and body are targeted so overscroll bounce areas on macOS    */
-/* also show the mesh rather than the solid --bg fallback.                */
+/* Emerald nebula — dark forest-green base so the darkest corner breathes  */
+/* green, never black. Vivid emerald, teal and cyan orbs create luminous   */
+/* bioluminescent hotspots. Glass panels blur the glow so the emerald      */
+/* accent (icon, record button, nav) feels perfectly native to the canvas. */
 html[data-theme="dark-glass"],
 html[data-theme="dark-glass"] body {
   background:
-    radial-gradient(ellipse 60% 40% at 80% 10%,  rgba(52, 211, 153, 0.12) 0%, transparent 70%),
-    radial-gradient(ellipse 55% 45% at 15% 85%,  rgba(13, 148, 136, 0.08) 0%, transparent 70%),
-    radial-gradient(ellipse 70% 60% at 50% 50%,  rgba(30,  58,  95, 0.15) 0%, transparent 70%),
-    #050d12;
+    radial-gradient(ellipse 55% 50% at 75% 10%,  rgba(52,  211, 153, 0.55) 0%, transparent 58%),
+    radial-gradient(ellipse 50% 48% at 12% 82%,  rgba(20,  184, 166, 0.48) 0%, transparent 58%),
+    radial-gradient(ellipse 48% 44% at 30% 20%,  rgba(6,   182, 212, 0.32) 0%, transparent 55%),
+    radial-gradient(ellipse 40% 38% at 88% 70%,  rgba(110, 231, 183, 0.22) 0%, transparent 55%),
+    linear-gradient(135deg, #06100c 0%, #071410 55%, #050f14 100%);
   background-attachment: fixed;
+}
+
+/* ── Surface tokens: theme-adaptive card background + shadow ─────────── */
+/* Components use var(--surface-*) in inline styles so both themes work   */
+/* without needing to swap CSS classes.                                   */
+:root,
+[data-theme="charcoal"] {
+  --surface:        var(--bg);
+  --surface-border: transparent;
+  --surface-shadow: var(--nm-raised-sm);
+  --surface-blur:   none;
+}
+
+[data-theme="dark-glass"] {
+  --surface:        rgba(255, 255, 255, 0.06);
+  --surface-border: rgba(255, 255, 255, 0.12);
+  --surface-shadow: 0 8px 32px rgba(0, 0, 0, 0.40), 0 1px 0 rgba(255, 255, 255, 0.08) inset;
+  --surface-blur:   blur(24px);
 }
 
 /* ── Base styles ─────────────────────────────────────────────────────── */
@@ -168,16 +188,16 @@ html[data-theme="dark-glass"] body {
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--glass-border);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.40);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.40),
+    0 1px 0 rgba(255, 255, 255, 0.08) inset;
 }
 
-/* .card-inset uses blur(8px) intentionally (half of --glass-blur).      */
-/* Full 16px blur on nested inset wells creates stacked-glass noise.     */
 [data-theme="dark-glass"] .card-inset {
   background: rgba(0, 0, 0, 0.20);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.30);
 }
 
@@ -194,17 +214,17 @@ html[data-theme="dark-glass"] body {
 }
 
 [data-theme="dark-glass"] .btn-ghost {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border: 1px solid var(--glass-border);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: none;
 }
 [data-theme="dark-glass"] .btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.10);
   box-shadow: none;
 }
 [data-theme="dark-glass"] .btn-ghost:active {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.04);
   box-shadow: none;
 }
