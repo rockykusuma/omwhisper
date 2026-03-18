@@ -579,6 +579,29 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                     </button>
                   </div>
                 </div>
+                {platform === "macos" && (
+                  <div className="flex items-center justify-between gap-4 py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
+                    <div>
+                      <p className="text-white/80 text-sm">Engine</p>
+                      <p className="text-white/50 text-xs mt-0.5">Apple Speech is on-device and fast; Whisper supports all models</p>
+                    </div>
+                    <div className="flex rounded-lg overflow-hidden shrink-0" style={{ boxShadow: "var(--nm-pressed-sm)" }}>
+                      {(["auto", "apple", "whisper"] as const).map((opt) => (
+                        <button
+                          key={opt}
+                          onClick={() => update({ transcription_engine: opt })}
+                          className="px-3 py-1.5 text-xs font-medium transition-all duration-150 cursor-pointer capitalize"
+                          style={{
+                            background: settings.transcription_engine === opt ? "var(--accent)" : "var(--bg)",
+                            color: settings.transcription_engine === opt ? "#0a1a12" : "var(--t3)",
+                          }}
+                        >
+                          {opt === "auto" ? "Auto" : opt === "apple" ? "⚡ Apple" : "◎ Whisper"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <SettingRow label="Language" description="Transcription language">
                   <select
                     value={settings.language}

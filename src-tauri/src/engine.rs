@@ -10,15 +10,29 @@ pub enum TranscriptionEngine {
 
 impl TranscriptionEngine {
     /// Returns the best available engine for this platform.
+    /// `engine_preference` is "auto" | "apple" | "whisper".
     /// Propagates `WhisperEngine::new` failure so the caller can emit
     /// `transcription-error` to the frontend rather than panicking.
-    pub fn select(model_path: &Path) -> anyhow::Result<Self> {
+    pub fn select(model_path: &Path, engine_preference: &str) -> anyhow::Result<Self> {
         #[cfg(target_os = "macos")]
-        if crate::macos::speech_analyzer::SpeechAnalyzerEngine::is_available() {
-            tracing::info!("Using Apple speech engine");
-            return Ok(TranscriptionEngine::Apple(
-                crate::macos::speech_analyzer::SpeechAnalyzerEngine,
-            ));
+        {
+            use crate::macos::speech_analyzer::SpeechAnalyzerEngine;
+            match engine_preference {
+                "apple" => {
+                    if SpeechAnalyzerEngine::is_available() {
+                        tracing::info!("Using Apple speech engine (user preference)");
+                        return Ok(TranscriptionEngine::Apple(SpeechAnalyzerEngine));
+                    }
+                    tracing::warn!("Apple Speech requested but not available, falling back to Whisper");
+                }
+                "auto" => {
+                    if SpeechAnalyzerEngine::is_available() {
+                        tracing::info!("Using Apple speech engine (auto)");
+                        return Ok(TranscriptionEngine::Apple(SpeechAnalyzerEngine));
+                    }
+                }
+                _ => {} // "whisper" — fall through to Whisper
+            }
         }
         tracing::info!("Using Whisper engine");
         Ok(TranscriptionEngine::Whisper(WhisperEngine::new(model_path)?))

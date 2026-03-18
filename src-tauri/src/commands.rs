@@ -126,6 +126,7 @@ pub async fn start_transcription(
     let sound_enabled = settings.sound_enabled;
     let sound_volume = settings.sound_volume;
     let translate_to_english = settings.translate_to_english;
+    let engine_preference = settings.transcription_engine.clone();
 
     if sound_enabled {
         crate::sounds::play(crate::sounds::Sound::Start, sound_volume);
@@ -164,7 +165,7 @@ pub async fn start_transcription(
     let model_path = resolve_model_path(&model);
 
     // Select the transcription engine (Apple or Whisper) before spawning the thread.
-    let engine = match crate::engine::TranscriptionEngine::select(&model_path) {
+    let engine = match crate::engine::TranscriptionEngine::select(&model_path, &engine_preference) {
         Ok(e) => e,
         Err(err) => {
             eprintln!("failed to select transcription engine: {err}");
