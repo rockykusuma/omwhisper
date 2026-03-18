@@ -6,12 +6,13 @@ Thanks for testing OmWhisper! This document covers what to expect, known issues,
 
 ## Setup (2 minutes)
 
-1. **Download** `OmWhisper.dmg` from the link you received
+1. **Download** `OmWhisper_0.1.0-beta.1_x64.dmg` from the link you received
 2. Open the DMG and drag OmWhisper to your **Applications** folder
 3. Launch from **Applications** (not from the DMG)
 4. First launch: right-click → **Open** to bypass the Gatekeeper warning (app is unsigned for beta)
 5. Complete the onboarding — grant microphone access and download the `tiny.en` model (~77 MB)
-6. **Activate your beta license key** in Settings → License
+
+> See `BETA_INSTALL.md` for detailed installation steps with screenshots.
 
 ---
 
@@ -24,14 +25,28 @@ Thanks for testing OmWhisper! This document covers what to expect, known issues,
 
 ---
 
+## What's Included in This Beta
+
+All features are fully unlocked for beta testers:
+
+- **All Whisper models** — tiny.en, base.en, small.en (download from Settings → Models)
+- **Transcription history** — search, export, delete
+- **Smart Dictation** — AI-powered cleanup via Ollama or Cloud API (Settings → AI)
+- **Custom vocabulary** — word replacements and phonetic biasing (Settings → Vocabulary)
+- **Push-to-talk mode** — hold hotkey instead of toggle (Settings → General)
+- **Recording sound effects** — audio cues on start/stop
+- **Auto-paste** — pastes directly into the focused app (requires Accessibility permission)
+
+---
+
 ## Known Issues
 
 - **App is unsigned** — you must right-click → Open on first launch (Gatekeeper warning)
 - **ॐ icon may appear as a square** on some macOS versions — working on it
 - **Whisper may hallucinate** on silence (e.g., "Thank you for watching.") — VAD filtering is in place but not perfect
-- **tiny.en model** is the only model available on the free tier; `base.en` and `small.en` require a license
 - **Long pauses mid-sentence** may cause the segment to be committed early
 - **Intel Macs**: not tested yet — please report any issues
+- **Smart Dictation** requires Ollama running locally or a Cloud API key — it does not work out of the box
 
 ---
 
@@ -43,19 +58,19 @@ Please share your experience in any of these areas:
 2. **Latency** — Does it feel fast enough? Any noticeable delay?
 3. **Paste behaviour** — Did it paste into the right app? Any issues?
 4. **UI/UX** — Is anything confusing or hard to find?
-5. **Crashes or errors** — Please include the debug info (Settings → About → Copy)
+5. **Crashes or errors** — Please include the debug info (Settings → About → Copy Debug Info)
 6. **Missing features** — What would make you use this every day?
-7. **Pricing** — Would you pay $12 for this? Too much / too little?
+7. **Pricing** — Would you pay for this? What feels fair?
 
 ---
 
 ## How to Report a Bug
 
-**Option A — Email (preferred)**
-Go to Settings → About → **Send Feedback**. This opens your email client with a pre-filled template including your system info. Just add your message and send.
+**Option A — In-app (preferred)**
+Go to **Settings → About → Send Feedback**. Fill in the category, describe the issue, and submit — it goes directly to the team.
 
-**Option B — Manual**
-Email: feedback@omwhisper.com
+**Option B — Email**
+Email: `feedback@omwhisper.in`
 Subject: `OmWhisper Beta — [brief description]`
 Include: app version, macOS version, what you did, what happened (copy from Settings → About → Copy Debug Info)
 
@@ -70,20 +85,19 @@ Try each of these and note any issues:
 - [ ] Record a long paragraph (30+ seconds) — does it stay accurate?
 - [ ] Use the hotkey `⌘⇧V` from: Notes, TextEdit, VS Code, Slack, Chrome
 - [ ] Check that text pastes into the focused app automatically
-- [ ] Try transcribing an audio file (Settings → Transcribe file)
 - [ ] Open the app after sleep/wake — does it still work?
 - [ ] Download a larger model (base.en or small.en) and compare accuracy
+- [ ] Try Smart Dictation (`⌘⇧B`) if you have Ollama or a Cloud API key set up
 
 ---
 
 ## Roadmap (what's coming)
 
 - Code signing (no more Gatekeeper warning)
-- Custom vocabulary / word replacements
-- AI-powered cleanup (grammar, formatting, translate)
-- Push-to-talk mode
+- Windows support
 - Speaker detection for meetings
+- Improved VAD to eliminate silence hallucinations
 
 ---
 
-*OmWhisper v0.1.0 beta — built by Rakesh Kusuma*
+*OmWhisper v0.1.0-beta.1 — built by Rakesh Kusuma · feedback@omwhisper.in*
