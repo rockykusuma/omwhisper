@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-export type Theme = "emerald" | "charcoal" | "warm-amber";
+export type Theme = "charcoal" | "dark-glass";
 
 export interface ThemeMeta {
   id: Theme;
@@ -8,12 +8,12 @@ export interface ThemeMeta {
   bg: string;       // swatch background
   accent: string;   // swatch accent dot
   dark: boolean;
+  style: "neomorphism" | "glassmorphism";
 }
 
 export const THEMES: ThemeMeta[] = [
-  { id: "charcoal",   label: "Charcoal", bg: "#1e2229", accent: "#34d399", dark: true  },
-  { id: "emerald",    label: "Emerald",  bg: "#dff0eb", accent: "#10b981", dark: false },
-  { id: "warm-amber", label: "Amber",    bg: "#e2d8c8", accent: "#b45309", dark: false },
+  { id: "charcoal",   label: "Charcoal",   bg: "#1e2229", accent: "#34d399", dark: true, style: "neomorphism"   },
+  { id: "dark-glass", label: "Dark Glass", bg: "#06100c", accent: "#34d399", dark: true, style: "glassmorphism" },
 ];
 
 const STORAGE_KEY = "omwhisper-theme";

@@ -59,50 +59,60 @@ input, textarea, [contenteditable] {
   --accent-grad-to:   #25b87e;
 }
 
-/* ══ THEME 1 — Emerald ═══════════════════════════════════════════════════ */
-[data-theme="emerald"] {
-  --bg:           #dff0eb;
-  --shadow-dark:  #a0bdb6;
-  --shadow-light: #f0fdf4;
+/* ══ THEME 1 — Cosmic / Nebula (Dark Glass) ══════════════════════════════ */
+[data-theme="dark-glass"] {
+  --bg:           #06100c;
+  --glass-bg:     rgba(255, 255, 255, 0.06);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-blur:   blur(24px);
 
-  --t1: rgba(26, 46, 40, 0.88);
-  --t2: rgba(26, 46, 40, 0.55);
-  --t3: rgba(26, 46, 40, 0.38);
-  --t4: rgba(26, 46, 40, 0.22);
+  --shadow-dark:  rgba(0, 0, 0, 0.50);
+  --shadow-light: rgba(255, 255, 255, 0.04);
 
-  --accent:           #10b981;
-  --accent-glow:      rgba(16, 185, 129, 0.50);
-  --accent-glow-weak: rgba(16, 185, 129, 0.25);
-  --accent-bg:        rgba(16, 185, 129, 0.12);
-  --accent-grad-from: #6ee7b7;
-  --accent-grad-to:   #10b981;
+  --t1: rgba(255, 255, 255, 0.94);
+  --t2: rgba(255, 255, 255, 0.65);
+  --t3: rgba(255, 255, 255, 0.42);
+  --t4: rgba(255, 255, 255, 0.25);
 
-  --color-emerald-300: #6ee7b7;
-  --color-emerald-400: #10b981;
-  --color-emerald-500: #059669;
+  --accent:           #34d399;
+  --accent-glow:      rgba(52, 211, 153, 0.55);
+  --accent-glow-weak: rgba(52, 211, 153, 0.28);
+  --accent-bg:        rgba(52, 211, 153, 0.12);
+  --accent-grad-from: #3de0a8;
+  --accent-grad-to:   #25b87e;
 }
 
-/* ══ THEME 2 — Warm Amber ════════════════════════════════════════════════ */
-[data-theme="warm-amber"] {
-  --bg:           #e2d8c8;
-  --shadow-dark:  #c4baa8;
-  --shadow-light: #fcf4e4;
+/* Emerald nebula — dark forest-green base so the darkest corner breathes  */
+/* green, never black. Vivid emerald, teal and cyan orbs create luminous   */
+/* bioluminescent hotspots. Glass panels blur the glow so the emerald      */
+/* accent (icon, record button, nav) feels perfectly native to the canvas. */
+html[data-theme="dark-glass"],
+html[data-theme="dark-glass"] body {
+  background:
+    radial-gradient(ellipse 55% 50% at 75% 10%,  rgba(52,  211, 153, 0.55) 0%, transparent 58%),
+    radial-gradient(ellipse 50% 48% at 12% 82%,  rgba(20,  184, 166, 0.48) 0%, transparent 58%),
+    radial-gradient(ellipse 48% 44% at 30% 20%,  rgba(6,   182, 212, 0.32) 0%, transparent 55%),
+    radial-gradient(ellipse 40% 38% at 88% 70%,  rgba(110, 231, 183, 0.22) 0%, transparent 55%),
+    linear-gradient(135deg, #06100c 0%, #071410 55%, #050f14 100%);
+  background-attachment: fixed;
+}
 
-  --t1: rgba(28, 18, 8, 0.88);
-  --t2: rgba(28, 18, 8, 0.55);
-  --t3: rgba(28, 18, 8, 0.38);
-  --t4: rgba(28, 18, 8, 0.22);
+/* ── Surface tokens: theme-adaptive card background + shadow ─────────── */
+/* Components use var(--surface-*) in inline styles so both themes work   */
+/* without needing to swap CSS classes.                                   */
+:root,
+[data-theme="charcoal"] {
+  --surface:        var(--bg);
+  --surface-border: transparent;
+  --surface-shadow: var(--nm-raised-sm);
+  --surface-blur:   none;
+}
 
-  --accent:           #b45309;
-  --accent-glow:      rgba(180, 83, 9, 0.45);
-  --accent-glow-weak: rgba(180, 83, 9, 0.22);
-  --accent-bg:        rgba(180, 83, 9, 0.12);
-  --accent-grad-from: #fbbf24;
-  --accent-grad-to:   #d97706;
-
-  --color-emerald-300: #fbbf24;
-  --color-emerald-400: #d97706;
-  --color-emerald-500: #b45309;
+[data-theme="dark-glass"] {
+  --surface:        rgba(255, 255, 255, 0.06);
+  --surface-border: rgba(255, 255, 255, 0.12);
+  --surface-shadow: 0 8px 32px rgba(0, 0, 0, 0.40), 0 1px 0 rgba(255, 255, 255, 0.08) inset;
+  --surface-blur:   blur(24px);
 }
 
 /* ── Base styles ─────────────────────────────────────────────────────── */
@@ -168,58 +178,53 @@ input, textarea, [contenteditable] {
   }
 }
 
-/* ── Light-theme overrides for Tailwind text-white/XX utilities ──────── */
-/*
-   These selectors have higher specificity than the generated utilities,
-   so they win without !important. All three light themes share the same
-   override block — each defines its own --t1..--t4 values.
-*/
-html.theme-light .text-white\/90,
-html.theme-light .text-white\/85,
-html.theme-light .text-white\/80,
-html.theme-light .text-white\/75 { color: var(--t1); }
+/* ── Dark Glass component overrides ─────────────────────────────────── */
+/* These replace neumorphic box-shadows when [data-theme="dark-glass"]   */
+/* is active. The --nm-* variables are left intact for the Charcoal      */
+/* theme. border-radius is inherited from base class definitions.         */
 
-html.theme-light .text-white\/70,
-html.theme-light .text-white\/65,
-html.theme-light .text-white\/60,
-html.theme-light .text-white\/55,
-html.theme-light .text-white\/50 { color: var(--t2); }
+[data-theme="dark-glass"] .card {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.40),
+    0 1px 0 rgba(255, 255, 255, 0.08) inset;
+}
 
-html.theme-light .text-white\/45,
-html.theme-light .text-white\/40,
-html.theme-light .text-white\/35 { color: var(--t3); }
+[data-theme="dark-glass"] .card-inset {
+  background: rgba(0, 0, 0, 0.20);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.30);
+}
 
-html.theme-light .text-white\/30,
-html.theme-light .text-white\/25,
-html.theme-light .text-white\/20,
-html.theme-light .text-white\/15,
-html.theme-light .text-white\/10 { color: var(--t4); }
+[data-theme="dark-glass"] .btn-primary {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 0 20px var(--accent-glow-weak), 0 4px 12px rgba(0, 0, 0, 0.30);
+}
+[data-theme="dark-glass"] .btn-primary:hover:not(:disabled) {
+  box-shadow: 0 0 28px var(--accent-glow), 0 4px 16px rgba(0, 0, 0, 0.40);
+}
+[data-theme="dark-glass"] .btn-primary:active:not(:disabled) {
+  box-shadow: 0 0 12px var(--accent-glow-weak), inset 0 2px 4px rgba(0, 0, 0, 0.30);
+}
 
-/* Hover variants */
-html.theme-light .hover\:text-white\/90:hover,
-html.theme-light .hover\:text-white\/80:hover,
-html.theme-light .hover\:text-white\/70:hover { color: var(--t1); }
-
-html.theme-light .hover\:text-white\/65:hover,
-html.theme-light .hover\:text-white\/60:hover,
-html.theme-light .hover\:text-white\/55:hover,
-html.theme-light .hover\:text-white\/50:hover { color: var(--t2); }
-
-html.theme-light .hover\:text-white\/40:hover { color: var(--t3); }
-
-/* Placeholder variants */
-html.theme-light .placeholder\:text-white\/25::placeholder,
-html.theme-light .placeholder\:text-white\/30::placeholder,
-html.theme-light .placeholder\:text-white\/35::placeholder { color: var(--t4); }
-
-/* White background opacity (waveform inactive bars, overlays) */
-html.theme-light .bg-white\/\[0\.08\] { background: color-mix(in srgb, var(--t1) 8%, transparent); }
-html.theme-light .bg-white\/\[0\.04\] { background: color-mix(in srgb, var(--t1) 4%, transparent); }
-html.theme-light .bg-white\/\[0\.06\] { background: color-mix(in srgb, var(--t1) 6%, transparent); }
-html.theme-light .bg-white\/10       { background: color-mix(in srgb, var(--t1) 10%, transparent); }
-html.theme-light .bg-white\/20       { background: color-mix(in srgb, var(--t1) 20%, transparent); }
-
-/* Border white opacity */
-html.theme-light .border-white\/\[0\.04\] { border-color: color-mix(in srgb, var(--t1) 4%, transparent); }
-html.theme-light .border-white\/\[0\.06\] { border-color: color-mix(in srgb, var(--t1) 6%, transparent); }
-html.theme-light .border-white\/10        { border-color: color-mix(in srgb, var(--t1) 10%, transparent); }
+[data-theme="dark-glass"] .btn-ghost {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+}
+[data-theme="dark-glass"] .btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.10);
+  box-shadow: none;
+}
+[data-theme="dark-glass"] .btn-ghost:active {
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: none;
+}

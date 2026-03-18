@@ -194,9 +194,9 @@ export default function HomeView({
       <button
         onClick={() => onNavigate("settings:audio")}
         className="absolute top-2 right-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition-all duration-150 cursor-pointer"
-        style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "color-mix(in srgb, var(--t1) 6%, var(--bg))")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "var(--bg)")}
+        style={{ background: "var(--surface)", boxShadow: "var(--surface-shadow)", border: "1px solid var(--surface-border)", backdropFilter: "var(--surface-blur)", WebkitBackdropFilter: "var(--surface-blur)" }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "color-mix(in srgb, var(--t1) 6%, var(--surface))")}
+        onMouseLeave={(e) => (e.currentTarget.style.background = "var(--surface)")}
         title="Change Microphone"
       >
         <Mic size={11} style={{ color: "var(--accent)", flexShrink: 0 }} strokeWidth={2} />
@@ -308,18 +308,21 @@ export default function HomeView({
         className="group w-full flex items-center gap-3 px-4 py-3 rounded-2xl flex-shrink-0 transition-all duration-150"
         style={{
           background: applyPolishToRegular
-            ? "color-mix(in srgb, var(--accent) 8%, var(--bg))"
-            : "var(--bg)",
-          boxShadow: "var(--nm-raised-sm)",
+            ? "color-mix(in srgb, var(--accent) 8%, var(--surface))"
+            : "var(--surface)",
+          boxShadow: "var(--surface-shadow)",
+          border: "1px solid var(--surface-border)",
+          backdropFilter: "var(--surface-blur)",
+          WebkitBackdropFilter: "var(--surface-blur)",
           cursor: isRecording ? "default" : "pointer",
           pointerEvents: isRecording ? "none" : "auto",
         }}
         onMouseEnter={(e) => {
           if (!isRecording && !applyPolishToRegular)
-            e.currentTarget.style.background = "color-mix(in srgb, var(--t1) 4%, var(--bg))";
+            e.currentTarget.style.background = "color-mix(in srgb, var(--t1) 4%, var(--surface))";
         }}
         onMouseLeave={(e) => {
-          if (!applyPolishToRegular) e.currentTarget.style.background = "var(--bg)";
+          if (!applyPolishToRegular) e.currentTarget.style.background = "var(--surface)";
         }}
         title="Toggle AI Cleanup"
         aria-label="Apply AI Polish to regular recording"
@@ -398,7 +401,7 @@ export default function HomeView({
       {smartDictationNudge && !sdNudgeDismissed && !isRecording && !showLiveTranscript && (
         <div
           className="rounded-2xl flex-shrink-0 overflow-hidden"
-          style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)", border: "1px solid color-mix(in srgb, var(--accent) 20%, transparent)" }}
+          style={{ background: "var(--surface)", boxShadow: "var(--surface-shadow)", border: "1px solid color-mix(in srgb, var(--accent) 20%, transparent)", backdropFilter: "var(--surface-blur)", WebkitBackdropFilter: "var(--surface-blur)" }}
         >
           <div className="flex items-center justify-between px-4 pt-3 pb-2">
             <div className="flex items-center gap-2">
@@ -435,7 +438,7 @@ export default function HomeView({
       {!modelNudgeDismissed && !isRecording && !showLiveTranscript && (
         <div
           className="rounded-2xl flex-shrink-0 overflow-hidden"
-          style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
+          style={{ background: "var(--surface)", boxShadow: "var(--surface-shadow)", border: "1px solid var(--surface-border)", backdropFilter: "var(--surface-blur)", WebkitBackdropFilter: "var(--surface-blur)" }}
         >
           <div className="flex items-center justify-between px-4 pt-3 pb-2">
             <p className="text-xs font-semibold" style={{ color: "var(--t2)" }}>Choosing the right model</p>
