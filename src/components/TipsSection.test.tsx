@@ -10,21 +10,14 @@ beforeEach(() => {
 });
 
 describe("TipsSection", () => {
-  it("renders all 7 tips", () => {
+  it("renders all 6 tips", () => {
     render(<TipsSection onNavigate={mockNavigate} />);
-    expect(screen.getByText("Speed vs accuracy")).toBeInTheDocument();
-    expect(screen.getByText("Multilingual")).toBeInTheDocument();
     expect(screen.getByText("Smart Dictation")).toBeInTheDocument();
+    expect(screen.getByText("Best AI for Smart Dictation")).toBeInTheDocument();
     expect(screen.getByText("Custom Vocabulary")).toBeInTheDocument();
     expect(screen.getByText("Word Replacements")).toBeInTheDocument();
     expect(screen.getByText("Push-to-Talk")).toBeInTheDocument();
     expect(screen.getByText("History & Export")).toBeInTheDocument();
-  });
-
-  it("clicking Speed vs accuracy navigates to models:whisper", async () => {
-    render(<TipsSection onNavigate={mockNavigate} />);
-    await userEvent.click(screen.getByText("Speed vs accuracy").closest("button")!);
-    expect(mockNavigate).toHaveBeenCalledWith("models:whisper");
   });
 
   it("clicking Smart Dictation navigates to models:smart-dictation", async () => {
@@ -33,10 +26,10 @@ describe("TipsSection", () => {
     expect(mockNavigate).toHaveBeenCalledWith("models:smart-dictation");
   });
 
-  it("clicking Multilingual navigates to settings:transcription", async () => {
+  it("clicking Best AI for Smart Dictation navigates to models:smart-dictation", async () => {
     render(<TipsSection onNavigate={mockNavigate} />);
-    await userEvent.click(screen.getByText("Multilingual").closest("button")!);
-    expect(mockNavigate).toHaveBeenCalledWith("settings:transcription");
+    await userEvent.click(screen.getByText("Best AI for Smart Dictation").closest("button")!);
+    expect(mockNavigate).toHaveBeenCalledWith("models:smart-dictation");
   });
 
   it("clicking Push-to-Talk navigates to settings:general", async () => {
@@ -63,10 +56,10 @@ describe("TipsSection", () => {
     expect(mockNavigate).toHaveBeenCalledWith("history");
   });
 
-  it("renders 6 dividers between 7 tips", () => {
+  it("renders 5 dividers between 6 tips", () => {
     render(<TipsSection onNavigate={mockNavigate} />);
     // Each divider is a 1px-height div with tip-divider testid
     const dividers = screen.getAllByTestId("tip-divider");
-    expect(dividers).toHaveLength(6);
+    expect(dividers).toHaveLength(5);
   });
 });
