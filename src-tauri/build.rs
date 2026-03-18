@@ -64,6 +64,10 @@ fn compile_swift_shim() {
     println!("cargo:rustc-link-lib=static=speech_analyzer");
     println!("cargo:rustc-link-search=native={}", swift_lib.display());
     println!("cargo:rustc-link-lib=dylib=swiftCore");
+    println!("cargo:rustc-link-lib=dylib=swiftFoundation");
+    // Speech and AVFoundation are required by the Swift shim
+    println!("cargo:rustc-link-lib=framework=Speech");
+    println!("cargo:rustc-link-lib=framework=AVFoundation");
 
     // Rebuild if Swift source changes
     println!("cargo:rerun-if-changed={swift_src}");
