@@ -313,13 +313,6 @@ export default function Onboarding({ onComplete }: Props) {
         </div>
       </div>
 
-      <div className="w-full rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 mb-8 text-left">
-        <p className="text-white/40 text-xs mb-2 uppercase tracking-wider" style={{ fontFamily: "'DM Mono', monospace" }}>Free Tier</p>
-        <p className="text-white/60 text-sm" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-          30 minutes of transcription per day. Upgrade for unlimited access — just $12, one time.
-        </p>
-      </div>
-
       <button onClick={handleFinish}
         className="px-10 py-3.5 rounded-xl bg-emerald-500 text-black font-bold hover:bg-emerald-400 transition-all duration-300 hover:-translate-y-0.5 cursor-pointer"
         style={{ fontFamily: "'DM Sans', sans-serif" }}>

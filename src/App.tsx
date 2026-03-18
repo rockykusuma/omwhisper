@@ -9,8 +9,6 @@ import SettingsPanel, { type SettingsTab } from "./components/Settings";
 import Onboarding from "./components/Onboarding";
 import TranscriptionHistory from "./components/TranscriptionHistory";
 import Vocabulary from "./components/Vocabulary";
-import LicensePage from "./components/License";
-import LicenseActivation from "./components/LicenseActivation";
 import { logger } from "./utils/logger";
 import { initTheme } from "./hooks/useTheme";
 import { useToast } from "./hooks/useToast";
@@ -34,7 +32,6 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     return localStorage.getItem("omwhisper-sidebar") !== "closed";
   });
-  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const { toast, showToast } = useToast();
 
   // ── Paste machinery (always-active, view-independent) ──────────────────
@@ -243,17 +240,6 @@ function App() {
     return () => { unlisten.then((f) => f()); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Usage limit ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    const unlisten = listen("usage-limit-reached", async () => {
-      try { await invoke("stop_transcription"); } catch {}
-      setIsRecording(false);
-      setIsSmartDictation(false);
-      setTimeout(() => invoke("hide_overlay").catch((e) => logger.debug("hide_overlay:", e)), 500);
-      setShowUpgradePrompt(true);
-    });
-    return () => { unlisten.then((f) => f()); };
-  }, []);
 
   if (showOnboarding === null) {
     return <div className="min-h-screen" />;
@@ -390,7 +376,6 @@ function App() {
             </div>
             {activeView === "history" && <TranscriptionHistory />}
             {activeView === "vocabulary" && <Vocabulary />}
-            {activeView === "license" && <LicensePage />}
           </div>
         </div>
       </div>
@@ -405,22 +390,6 @@ function App() {
         </div>
       )}
 
-      {/* Upgrade modal */}
-      {showUpgradePrompt && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/50" role="dialog" aria-modal="true">
-          <div className="rounded-2xl p-7 max-w-sm w-full mx-4 text-center" style={{ background: "var(--bg)", boxShadow: "var(--nm-raised), 0 0 60px rgba(0,0,0,0.5)" }}>
-            <div className="text-3xl mb-3 select-none" style={{ filter: "drop-shadow(0 0 10px var(--accent-glow))" }}>ॐ</div>
-            <h3 className="text-white/90 font-bold text-lg mb-2">You've used your 30 free minutes today</h3>
-            <p className="text-white/40 text-sm mb-5 leading-relaxed">
-              Upgrade for unlimited transcription — just $12, one time. Your usage resets at midnight.
-            </p>
-            <LicenseActivation onActivated={() => setShowUpgradePrompt(false)} />
-            <button onClick={() => setShowUpgradePrompt(false)} className="mt-3 w-full py-2 text-white/40 hover:text-white/55 text-sm transition-colors cursor-pointer">
-              Dismiss
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

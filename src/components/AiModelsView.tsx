@@ -71,7 +71,6 @@ function WhisperTab({ activeModel, onModelChange }: { activeModel: string; onMod
   const [downloading, setDownloading] = useState<Record<string, number>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [diskUsage, setDiskUsage] = useState(0);
-  const [_isLicensed, setIsLicensed] = useState(false);
   const [recommendation, setRecommendation] = useState<ModelRecommendation | null>(null);
   const [specExpanded, setSpecExpanded] = useState(false);
 
@@ -85,7 +84,6 @@ function WhisperTab({ activeModel, onModelChange }: { activeModel: string; onMod
   }
 
   useEffect(() => {
-    invoke<string>("get_license_status").then((s) => setIsLicensed(s === "Licensed" || s === "GracePeriod")).catch(() => {});
     loadModels();
     invoke<ModelRecommendation>("get_model_recommendation").then(setRecommendation).catch(() => {});
 

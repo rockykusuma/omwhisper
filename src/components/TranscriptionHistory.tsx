@@ -29,7 +29,6 @@ export default function TranscriptionHistory() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const { toast, showToast } = useToast();
   const [showConfirmClear, setShowConfirmClear] = useState(false);
-  const [isLicensed, setIsLicensed] = useState(false);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const PAGE = 30;
@@ -61,7 +60,6 @@ export default function TranscriptionHistory() {
   }, []);
 
   useEffect(() => {
-    invoke<string>("get_license_status").then((s) => setIsLicensed(s === "Licensed" || s === "GracePeriod")).catch((e) => logger.debug("get_license_status:", e));
     loadHistory(0, "");
   }, [loadHistory]);
 
@@ -159,38 +157,28 @@ export default function TranscriptionHistory() {
               Select
             </button>
           )}
-          {isLicensed ? (
-            <div className="relative group">
-              <button
-                className="text-white/50 hover:text-white/70 transition-colors text-xs px-3 py-1.5 rounded-lg cursor-pointer font-sans"
-                style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
-              >
-                Export ▾
-              </button>
-              <div
-                className="absolute right-0 top-full mt-2 hidden group-hover:flex flex-col rounded-xl overflow-hidden z-10 min-w-[100px]"
-                style={{ background: "var(--bg)", boxShadow: "var(--nm-raised)" }}
-              >
-                {["txt", "markdown", "json"].map((fmt) => (
-                  <button
-                    key={fmt}
-                    onClick={() => handleExport(fmt)}
-                    className="px-4 py-2 text-xs text-white/55 hover:text-white/80 text-left cursor-pointer font-sans transition-colors"
-                  >
-                    {fmt.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <span
-              className="text-white/30 text-xs px-3 py-1.5 rounded-lg cursor-default font-sans"
+          <div className="relative group">
+            <button
+              className="text-white/50 hover:text-white/70 transition-colors text-xs px-3 py-1.5 rounded-lg cursor-pointer font-sans"
               style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
-              title="Upgrade to export"
             >
-              🔒 Export
-            </span>
-          )}
+              Export ▾
+            </button>
+            <div
+              className="absolute right-0 top-full mt-2 hidden group-hover:flex flex-col rounded-xl overflow-hidden z-10 min-w-[100px]"
+              style={{ background: "var(--bg)", boxShadow: "var(--nm-raised)" }}
+            >
+              {["txt", "markdown", "json"].map((fmt) => (
+                <button
+                  key={fmt}
+                  onClick={() => handleExport(fmt)}
+                  className="px-4 py-2 text-xs text-white/55 hover:text-white/80 text-left cursor-pointer font-sans transition-colors"
+                >
+                  {fmt.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
           <button
             onClick={() => setShowConfirmClear(true)}
             className="text-red-400/45 hover:text-red-400 transition-colors text-xs px-3 py-1.5 rounded-lg cursor-pointer font-sans"

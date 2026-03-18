@@ -91,12 +91,14 @@ pub fn paste_to_app(app_name: &str) -> Result<()> {
     // Give a brief moment for the recording to fully stop
     std::thread::sleep(std::time::Duration::from_millis(200));
 
-    // Activate target app via osascript (no Accessibility needed for activation).
-    // Pass app_name as a separate osascript variable to avoid any quoting issues.
+    // Activate target app via System Events — set frontmost by process name.
+    // Using "tell application System Events to set frontmost of process" avoids
+    // the macOS "Choose Application" dialog that appears when AppleScript's
+    // "tell application <variable>" cannot resolve a name to an installed app.
     let _ = std::process::Command::new("osascript")
         .args([
             "-e", &format!("set appName to \"{}\"", app_name.replace('\\', "\\\\").replace('"', "\\\"")),
-            "-e", "tell application appName to activate",
+            "-e", "tell application \"System Events\" to set frontmost of process appName to true",
         ])
         .output();
 

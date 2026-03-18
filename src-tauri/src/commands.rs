@@ -102,15 +102,6 @@ pub async fn start_transcription(
     state: tauri::State<'_, SharedState>,
     app: AppHandle,
 ) -> Result<(), String> {
-    // --- License / Usage gate ---
-    let is_licensed = crate::license::is_active();
-    if !is_licensed {
-        let seconds_used = history::get_seconds_used_today().unwrap_or(0);
-        if seconds_used >= history::FREE_TIER_SECONDS {
-            return Err("free_tier_limit_reached".to_string());
-        }
-    }
-
     // Clear any cancellation from a previous quick tap before we begin.
     state.lock().expect("state mutex poisoned").start_cancelled = false;
     // Reset active_engine so get_transcription_engine never returns a stale value
@@ -154,12 +145,11 @@ pub async fn start_transcription(
     let (speech_rx, level_rx) = capture.start().map_err(|e| e.to_string())?;
 
     // Store the capture handle so stop_transcription can reach it.
-    let usage_running = {
+    {
         let mut s = state.lock().expect("state mutex poisoned");
         s.capture = Some(capture);
         s.recording_start_time = Some(std::time::Instant::now());
         s.usage_running.store(true, Ordering::SeqCst);
-        s.usage_running.clone()
     };
 
     let model_path = resolve_model_path(&model);
@@ -182,35 +172,6 @@ pub async fn start_transcription(
     std::thread::spawn(move || {
         for level in level_rx {
             let _ = app_for_level.emit("audio-level", level);
-        }
-    });
-
-    // Spawn usage-tracking timer — ticks every 10 s, emits usage-update, enforces limit.
-    let app_for_usage = app.clone();
-    let usage_running_timer = usage_running.clone();
-    let is_licensed_for_timer = is_licensed; // captured before async move
-    std::thread::spawn(move || {
-        const TICK: u64 = 10;
-        loop {
-            std::thread::sleep(std::time::Duration::from_secs(TICK));
-            if !usage_running_timer.load(Ordering::SeqCst) {
-                break;
-            }
-            if !is_licensed_for_timer {
-                let _ = history::add_seconds_today(TICK as i64);
-                let seconds_used = history::get_seconds_used_today().unwrap_or(0);
-                let seconds_remaining = (history::FREE_TIER_SECONDS - seconds_used).max(0);
-                let _ = app_for_usage.emit("usage-update", UsageUpdate {
-                    seconds_used,
-                    seconds_remaining,
-                    is_free_tier: true,
-                });
-                if seconds_used >= history::FREE_TIER_SECONDS {
-                    // Signal frontend to stop recording
-                    let _ = app_for_usage.emit("usage-limit-reached", ());
-                    break;
-                }
-            }
         }
     });
 
@@ -1191,6 +1152,68 @@ pub fn get_platform() -> &'static str {
 pub fn open_feedback_url(url: String, app: AppHandle) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
     app.opener().open_url(&url, None::<&str>).map_err(|e| e.to_string())
+}
+
+/// Send beta feedback via Resend email API.
+/// RESEND_KEY must be set at build time via the environment variable.
+#[tauri::command]
+pub async fn send_feedback(
+    category: String,
+    message: String,
+    user_email: Option<String>,
+    app_version: String,
+    debug_info: String,
+) -> Result<(), String> {
+    const RESEND_API_KEY: &str = match option_env!("RESEND_API_KEY") {
+        Some(k) => k,
+        None => "",
+    };
+
+    if RESEND_API_KEY.is_empty() {
+        return Err("Feedback is not configured in this build.".to_string());
+    }
+
+    let from_label = user_email
+        .as_deref()
+        .filter(|e| !e.is_empty())
+        .unwrap_or("anonymous");
+
+    let subject = format!("[Beta Feedback] {} — OmWhisper v{}", category, app_version);
+
+    let html = format!(
+        r#"<h3>Category</h3><p>{category}</p>
+<h3>Message</h3><p style="white-space:pre-wrap">{message}</p>
+<h3>From</h3><p>{from_label}</p>
+<h3>Debug Info</h3><pre style="font-size:12px;background:#f4f4f4;padding:12px;border-radius:6px">{debug_info}</pre>"#,
+        category = category,
+        message = message,
+        from_label = from_label,
+        debug_info = debug_info,
+    );
+
+    let body = serde_json::json!({
+        "from": "OmWhisper Beta <feedback@omwhisper.in>",
+        "to": ["rockykusuma@gmail.com"],
+        "subject": subject,
+        "html": html,
+    });
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post("https://api.resend.com/emails")
+        .bearer_auth(RESEND_API_KEY)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        Err(format!("Resend API error {}: {}", status, text))
+    }
 }
 
 // ─── Transcription Engine ─────────────────────────────────────────────────────

@@ -737,6 +737,7 @@ pub fn run() {
             get_transcription_engine,
             commands::is_apple_speech_available,
             commands::open_feedback_url,
+            commands::send_feedback,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
