@@ -2,7 +2,9 @@
 
 > Your voice, transcribed instantly. Private by design.
 
-A fast, privacy-first voice transcription app for **macOS and Windows**. Powered by OpenAI Whisper, running entirely on your device — no internet required, no audio ever leaves your machine.
+**🚧 Beta — v0.1.0-beta.1**
+
+A fast, privacy-first voice transcription app for **macOS** (Windows coming soon). Powered by OpenAI Whisper, running entirely on your device — no internet required, no audio ever leaves your machine.
 
 ---
 
@@ -47,11 +49,23 @@ A fast, privacy-first voice transcription app for **macOS and Windows**. Powered
 | Audio capture | cpal 0.15 |
 | AI polish | Ollama / OpenAI / Groq / llama-cpp-2 |
 | History | SQLite (rusqlite) |
-| License | Lemon Squeezy |
+| Crash reporting | Sentry |
+| Feedback | Resend |
 
 ---
 
-## Getting Started
+## Download (Beta)
+
+macOS `.dmg` is available via the [Releases](https://github.com/rockykusuma/omwhisper/releases) page.
+
+> First time opening? Right-click → **Open** to bypass the Gatekeeper warning (app is unsigned for beta).
+> See [BETA_INSTALL.md](./BETA_INSTALL.md) for full setup instructions.
+
+Found a bug or have feedback? Use **Settings → About → Send Feedback** in the app.
+
+---
+
+## Getting Started (Development)
 
 ### Prerequisites
 
@@ -89,6 +103,8 @@ bash scripts/build-release.sh
 ```
 
 **Windows:** Built automatically by GitHub Actions on every `v*` tag push. Download the `.exe` from the [Actions artifacts](https://github.com/rockykusuma/omwhisper/actions).
+
+> **Note:** Windows beta is not yet released. macOS only for now.
 
 ---
 
