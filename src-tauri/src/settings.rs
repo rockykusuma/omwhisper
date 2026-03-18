@@ -102,6 +102,10 @@ pub struct Settings {
     /// VAD engine: "silero" (neural ONNX) | "rms" (energy threshold fallback).
     #[serde(default = "default_vad_engine")]
     pub vad_engine: String,
+    /// Transcription engine preference: "auto" | "apple" | "whisper".
+    /// "auto" selects Apple Speech on macOS if available, else Whisper.
+    #[serde(default = "default_transcription_engine")]
+    pub transcription_engine: String,
     /// Allow anonymous usage analytics via Aptabase. Default: true.
     #[serde(default = "default_true")]
     pub analytics_enabled: bool,
@@ -130,6 +134,7 @@ fn default_true() -> bool { true }
 fn default_sound_volume() -> f32 { 0.2 }
 fn default_llm_model_name() -> String { "qwen2.5-0.5b-instruct-q4_k_m.gguf".to_string() }
 fn default_vad_engine() -> String { "rms".to_string() }
+fn default_transcription_engine() -> String { "auto".to_string() }
 
 fn default_log_level() -> String {
     "normal".to_string()
@@ -176,6 +181,7 @@ impl Default for Settings {
             llm_nudge_shown: false,
             apply_polish_to_regular: false,
             vad_engine: default_vad_engine(),
+            transcription_engine: default_transcription_engine(),
             analytics_enabled: true,
             crash_reporting_enabled: true,
         }

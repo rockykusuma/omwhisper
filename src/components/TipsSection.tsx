@@ -15,6 +15,12 @@ const TIPS: Tip[] = [
     target: "models:smart-dictation",
   },
   {
+    icon: "🤖",
+    headline: "Best AI for Smart Dictation",
+    description: "Use On-Device Ollama or a Cloud API for the most accurate Smart Dictation results — set it up in AI settings",
+    target: "models:smart-dictation",
+  },
+  {
     icon: "📖",
     headline: "Custom Vocabulary",
     description: "Whisper keeps mishearing a word? Add it once and it'll always get it right",

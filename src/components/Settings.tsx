@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
-  Sliders, Mic, FileText, Info, ShieldCheck, ShieldAlert, Keyboard, Brain, Activity
+  Sliders, Mic, FileText, Info, ShieldCheck, ShieldAlert, Keyboard, Brain, Activity, Zap, Sparkles, Cpu
 } from "lucide-react";
 import { logger } from "../utils/logger";
 import { useTheme, THEMES } from "../hooks/useTheme";
@@ -179,10 +179,12 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
   const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
   const [accessibilityGranted, setAccessibilityGranted] = useState<boolean | null>(null);
   const [platform, setPlatform] = useState<string>("macos");
+  const [appleAvailable, setAppleAvailable] = useState<boolean>(true);
   const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     invoke<string>("get_platform").then(setPlatform).catch(() => {});
+    invoke<boolean>("is_apple_speech_available").then(setAppleAvailable).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -258,45 +260,36 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
             <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Appearance</h3>
             <div className="card px-5 py-4 mb-6">
               <p className="text-t3 text-xs mb-4">Theme</p>
-              <div className="flex flex-col gap-4">
-                {(["neomorphism", "glassmorphism"] as const).map((style) => (
-                  <div key={style}>
-                    <p className="text-[10px] uppercase tracking-widest mb-2 font-mono" style={{ color: "var(--t3)" }}>
-                      {style === "neomorphism" ? "Neomorphism" : "Glassmorphism"}
-                    </p>
-                    <div className="flex items-center gap-3 flex-wrap">
-                      {THEMES.filter((t) => t.style === style).map((t) => (
-                        <button
-                          key={t.id}
-                          onClick={() => setTheme(t.id)}
-                          title={t.label}
-                          className="flex flex-col items-center gap-1.5 cursor-pointer group"
-                          aria-pressed={theme === t.id}
-                        >
-                          <div
-                            className="w-11 h-11 rounded-xl transition-all duration-200 relative"
-                            style={{
-                              background: t.bg,
-                              boxShadow: theme === t.id
-                                ? `0 0 0 2.5px ${t.accent}, 0 0 14px ${t.accent}55`
-                                : "inset 2px 2px 5px rgba(0,0,0,0.25), inset -2px -2px 5px rgba(255,255,255,0.12)",
-                            }}
-                          >
-                            <span
-                              className="absolute bottom-1.5 right-1.5 w-2 h-2 rounded-full"
-                              style={{ background: t.accent }}
-                            />
-                          </div>
-                          <span
-                            className="text-[10px] font-mono transition-colors"
-                            style={{ color: theme === t.id ? "var(--accent)" : "var(--t3)" }}
-                          >
-                            {t.label}
-                          </span>
-                        </button>
-                      ))}
+              <div className="flex items-end gap-3 flex-wrap">
+                {THEMES.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTheme(t.id)}
+                    title={t.label}
+                    className="flex flex-col items-center gap-1.5 cursor-pointer group"
+                    aria-pressed={theme === t.id}
+                  >
+                    <div
+                      className="w-11 h-11 rounded-xl transition-all duration-200 relative"
+                      style={{
+                        background: t.bg,
+                        boxShadow: theme === t.id
+                          ? `0 0 0 2.5px ${t.accent}, 0 0 14px ${t.accent}55`
+                          : "inset 2px 2px 5px rgba(0,0,0,0.25), inset -2px -2px 5px rgba(255,255,255,0.12)",
+                      }}
+                    >
+                      <span
+                        className="absolute bottom-1.5 right-1.5 w-2 h-2 rounded-full"
+                        style={{ background: t.accent }}
+                      />
                     </div>
-                  </div>
+                    <span
+                      className="text-[10px] font-mono transition-colors"
+                      style={{ color: theme === t.id ? "var(--accent)" : "var(--t3)" }}
+                    >
+                      {t.label}
+                    </span>
+                  </button>
                 ))}
               </div>
             </div>
@@ -579,6 +572,54 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                     </button>
                   </div>
                 </div>
+                {platform === "macos" && (
+                  <div className="py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
+                    <p className="text-white/80 text-sm mb-1">Engine</p>
+                    <p className="text-white/50 text-xs mb-3">Choose how your voice is transcribed</p>
+                    <div className="flex gap-2">
+                      {([
+                        { id: "auto",    Icon: Zap,       label: "Auto",          sub: "Apple Speech if available" },
+                        { id: "apple",   Icon: Sparkles,  label: "Apple Speech",  sub: "On-device · fast" },
+                        { id: "whisper", Icon: Cpu,       label: "Whisper",       sub: "Local model · all languages" },
+                      ] as const).map(({ id, Icon, label, sub }) => {
+                        const disabled = id === "apple" && !appleAvailable;
+                        const active = settings.transcription_engine === id && !disabled;
+                        return (
+                          <button
+                            key={id}
+                            onClick={() => !disabled && update({ transcription_engine: id })}
+                            aria-pressed={active}
+                            aria-disabled={disabled}
+                            className={`flex-1 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all duration-150 ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+                            style={{
+                              background: "var(--bg)",
+                              boxShadow: active ? "var(--nm-pressed-sm)" : "var(--nm-raised-sm)",
+                              border: active
+                                ? "1px solid color-mix(in srgb, var(--accent) 45%, transparent)"
+                                : "1px solid transparent",
+                              opacity: disabled ? 0.45 : 1,
+                            }}
+                          >
+                            <div
+                              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                              style={{ background: active ? "var(--accent-bg)" : "color-mix(in srgb, var(--t1) 6%, transparent)" }}
+                            >
+                              <Icon size={14} style={{ color: active ? "var(--accent)" : "var(--t3)" }} />
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium leading-tight" style={{ color: active ? "var(--accent)" : "var(--t1)" }}>
+                                {label}
+                              </p>
+                              <p className="text-[10px] leading-tight mt-0.5" style={{ color: "var(--t4)" }}>
+                                {disabled ? "Not available on this device" : sub}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 <SettingRow label="Language" description="Transcription language">
                   <select
                     value={settings.language}

@@ -19,6 +19,8 @@ pub struct TranscriptionState {
     pub start_cancelled: bool,
     /// Timestamp when the current recording started (for duration_ms in analytics).
     pub recording_start_time: Option<std::time::Instant>,
+    /// Name of the currently active transcription engine ("whisper" or "apple").
+    pub active_engine: &'static str,
 }
 
 impl TranscriptionState {
@@ -29,6 +31,7 @@ impl TranscriptionState {
             is_smart_dictation: false,
             start_cancelled: false,
             recording_start_time: None,
+            active_engine: "whisper",
         }
     }
 }
@@ -69,6 +72,8 @@ pub async fn transcribe_file(path: String, model_path: String) -> Result<Vec<Seg
 
     tokio::task::spawn_blocking(move || {
         let resolved = resolve_model_path(&model_path);
+        // File transcription always uses Whisper — Apple's Speech framework does not support
+        // file-mode (buffer-based) transcription.
         let engine = WhisperEngine::new(&resolved).map_err(|e| e.to_string())?;
         let audio = load_wav_as_f32(Path::new(&path)).map_err(|e| e.to_string())?;
         let prompt = if initial_prompt.is_empty() { None } else { Some(initial_prompt.as_str()) };
@@ -108,6 +113,9 @@ pub async fn start_transcription(
 
     // Clear any cancellation from a previous quick tap before we begin.
     state.lock().expect("state mutex poisoned").start_cancelled = false;
+    // Reset active_engine so get_transcription_engine never returns a stale value
+    // from a previous session if engine selection fails later in this call.
+    state.lock().expect("state mutex poisoned").active_engine = "whisper";
 
     // Load settings and play start chime BEFORE the mic starts,
     // then wait briefly so the chime finishes and room echo clears.
@@ -118,6 +126,7 @@ pub async fn start_transcription(
     let sound_enabled = settings.sound_enabled;
     let sound_volume = settings.sound_volume;
     let translate_to_english = settings.translate_to_english;
+    let engine_preference = settings.transcription_engine.clone();
 
     if sound_enabled {
         crate::sounds::play(crate::sounds::Sound::Start, sound_volume);
@@ -154,6 +163,19 @@ pub async fn start_transcription(
     };
 
     let model_path = resolve_model_path(&model);
+
+    // Select the transcription engine (Apple or Whisper) before spawning the thread.
+    let engine = match crate::engine::TranscriptionEngine::select(&model_path, &engine_preference) {
+        Ok(e) => e,
+        Err(err) => {
+            eprintln!("failed to select transcription engine: {err}");
+            sentry_anyhow::capture_anyhow(&err);
+            return Err(err.to_string());
+        }
+    };
+    // Capture the name before moving engine into the thread (borrow-checker requirement).
+    let engine_name = engine.name();
+    state.lock().expect("state mutex poisoned").active_engine = engine_name;
 
     // Spawn a thread to forward RMS level events to the frontend.
     let app_for_level = app.clone();
@@ -193,16 +215,8 @@ pub async fn start_transcription(
     });
 
     // Spawn a dedicated thread to load the model and consume speech utterances.
-    // (WhisperEngine is not Send/Sync, so we keep it on one thread.)
+    // TranscriptionEngine is Send (see engine.rs unsafe impl Send).
     std::thread::spawn(move || {
-        let engine = match WhisperEngine::new(&model_path) {
-            Ok(e) => e,
-            Err(err) => {
-                eprintln!("failed to load whisper model: {err}");
-                sentry_anyhow::capture_anyhow(&err);
-                return;
-            }
-        };
 
         let prompt_ref: Option<&str> = if initial_prompt.is_empty() { None } else { Some(&initial_prompt) };
 
@@ -221,8 +235,8 @@ pub async fn start_transcription(
                     sentry_anyhow::capture_anyhow(&err);
                 }
                 Err(_) => {
-                    tracing::error!("whisper engine panicked — recovering");
-                    let _ = app.emit("transcription-error", "Whisper crashed on this audio chunk, continuing.");
+                    tracing::error!("{engine_name} engine panicked — recovering");
+                    let _ = app.emit("transcription-error", "Transcription engine crashed on this audio chunk, continuing.");
                 }
             }
         }
@@ -1177,4 +1191,35 @@ pub fn get_platform() -> &'static str {
 pub fn open_feedback_url(url: String, app: AppHandle) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
     app.opener().open_url(&url, None::<&str>).map_err(|e| e.to_string())
+}
+
+// ─── Transcription Engine ─────────────────────────────────────────────────────
+
+/// Returns the name of the currently active transcription engine ("whisper" or "apple").
+#[tauri::command]
+pub fn get_transcription_engine(state: tauri::State<'_, SharedState>) -> &'static str {
+    state.lock().expect("state mutex poisoned").active_engine
+}
+
+/// Returns whether Apple Speech is available on this device.
+/// Always false on non-macOS and in dev mode (no .app bundle).
+#[tauri::command]
+pub fn is_apple_speech_available() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        return crate::macos::speech_analyzer::SpeechAnalyzerEngine::is_available();
+    }
+    #[cfg(not(target_os = "macos"))]
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TranscriptionState;
+
+    #[test]
+    fn transcription_state_default_active_engine_is_whisper() {
+        let state = TranscriptionState::new();
+        assert_eq!(state.active_engine, "whisper");
+    }
 }
