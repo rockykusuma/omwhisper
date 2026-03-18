@@ -59,6 +59,7 @@ All tokens live in `src/styles/globals.css` under `[data-theme="dark-glass"]`.
 Applied to `html, body` when `[data-theme="dark-glass"]` is active. Three radial gradient orbs over a near-black base:
 
 ```css
+[data-theme="dark-glass"] html,
 [data-theme="dark-glass"] body {
   background:
     radial-gradient(ellipse 60% 40% at 80% 10%,  rgba(52, 211, 153, 0.12) 0%, transparent 70%),
@@ -68,6 +69,8 @@ Applied to `html, body` when `[data-theme="dark-glass"]` is active. Three radial
   background-attachment: fixed;
 }
 ```
+
+Both `html` and `body` are targeted so that overscroll bounce areas (visible on macOS) also show the mesh rather than the solid `--bg` fallback from the `@layer base` rule.
 
 - **Orb 1** — emerald `#34d399` at 12%, top-right
 - **Orb 2** — teal `#0d9488` at 8%, bottom-left
