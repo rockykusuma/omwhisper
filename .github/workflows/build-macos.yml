@@ -74,6 +74,9 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          # Enable i8mm and full M1 instruction set for whisper.cpp / whisper-rs
+          CFLAGS: "-mcpu=apple-m1"
+          CXXFLAGS: "-mcpu=apple-m1"
         run: npx @tauri-apps/cli build
 
       - name: Upload DMG artifact
