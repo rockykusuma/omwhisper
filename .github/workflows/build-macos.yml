@@ -66,6 +66,17 @@ jobs:
           # Clean up cert file
           rm -f "$CERT_FILE"
 
+      - name: Create cmake toolchain to disable ggml native CPU detection
+        run: |
+          # GitHub Actions M1 runners fail the cmake CheckCXXSourceRuns i8mm test
+          # despite hardware support. ggml then enables MATMUL_INT8 but adds +noi8mm
+          # to compile flags, causing always_inline vmmlaq_s32 to conflict.
+          # Forcing GGML_NATIVE=OFF via a cmake toolchain file (the only reliable
+          # way to inject cache vars into whisper-rs-sys's cmake invocation).
+          cat > "$RUNNER_TEMP/ggml-toolchain.cmake" << 'EOF'
+          set(GGML_NATIVE OFF CACHE BOOL "Disable native CPU detection for CI" FORCE)
+          EOF
+
       - name: Build Tauri app (sign + notarize)
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -74,11 +85,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          # Disable ggml native CPU detection — GitHub Actions M1 runners fail the
-          # cmake CheckCXXSourceRuns i8mm test even though hardware supports it.
-          # Without this, ggml enables MATMUL_INT8 but adds +noi8mm to compile flags,
-          # causing a conflict with always_inline vmmlaq_s32 intrinsics.
-          GGML_NATIVE: "OFF"
+          CMAKE_TOOLCHAIN_FILE: "${{ runner.temp }}/ggml-toolchain.cmake"
         run: npx @tauri-apps/cli build
 
       - name: Upload DMG artifact
