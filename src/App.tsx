@@ -10,6 +10,7 @@ import Onboarding from "./components/Onboarding";
 import TranscriptionHistory from "./components/TranscriptionHistory";
 import Vocabulary from "./components/Vocabulary";
 import { logger } from "./utils/logger";
+import { STORAGE_KEYS } from "./utils/storageKeys";
 import { initTheme } from "./hooks/useTheme";
 import { useToast } from "./hooks/useToast";
 import type { UpdateInfo, TranscriptionSegment } from "./types";
@@ -32,7 +33,7 @@ function App() {
   const [noModelBanner, setNoModelBanner] = useState(false);
   const [appVersion, setAppVersion] = useState("0.1.0");
   const [sidebarOpen, setSidebarOpen] = useState(() => {
-    return localStorage.getItem("omwhisper-sidebar") !== "closed";
+    return localStorage.getItem(STORAGE_KEYS.SIDEBAR) !== "closed";
   });
   const { toast, showToast } = useToast();
 
@@ -291,7 +292,7 @@ function App() {
           isOpen={sidebarOpen}
           onToggle={() => setSidebarOpen((v) => {
             const next = !v;
-            localStorage.setItem("omwhisper-sidebar", next ? "open" : "closed");
+            localStorage.setItem(STORAGE_KEYS.SIDEBAR, next ? "open" : "closed");
             return next;
           })}
         />

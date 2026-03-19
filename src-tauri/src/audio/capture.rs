@@ -42,7 +42,7 @@ impl AudioCapture {
 
         // Store speech_tx so stop() can send a final flush.
         {
-            let mut guard = self.speech_tx.lock().unwrap();
+            let mut guard = self.speech_tx.lock().unwrap_or_else(|e| e.into_inner());
             *guard = Some(speech_tx.clone());
         }
 
@@ -116,7 +116,7 @@ impl AudioCapture {
                         let _ = level_tx.send(rms);
 
                         // Only send to Whisper when VAD detects end-of-utterance.
-                        if let Some(utterance) = vad.lock().unwrap().process(&resampled) {
+                        if let Some(utterance) = vad.lock().unwrap_or_else(|e| e.into_inner()).process(&resampled) {
                             let _ = speech_tx.send(utterance);
                         }
                     }
@@ -198,14 +198,14 @@ impl AudioCapture {
         self.running.store(false, Ordering::SeqCst);
 
         // Flush any speech that VAD was still accumulating.
-        if let Some(utterance) = self.vad.lock().unwrap().flush() {
-            if let Some(tx) = self.speech_tx.lock().unwrap().as_ref() {
+        if let Some(utterance) = self.vad.lock().unwrap_or_else(|e| e.into_inner()).flush() {
+            if let Some(tx) = self.speech_tx.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
                 let _ = tx.send(utterance);
             }
         }
 
         // Drop the sender so the speech receiver channel closes cleanly.
-        let mut guard = self.speech_tx.lock().unwrap();
+        let mut guard = self.speech_tx.lock().unwrap_or_else(|e| e.into_inner());
         *guard = None;
     }
 }

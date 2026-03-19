@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { STORAGE_KEYS } from "../utils/storageKeys";
 
 export type Theme = "charcoal";
 
@@ -14,7 +15,7 @@ export const THEMES: ThemeMeta[] = [
   { id: "charcoal", label: "Charcoal", bg: "#1e2229", accent: "#34d399", dark: true },
 ];
 
-const STORAGE_KEY = "omwhisper-theme";
+const STORAGE_KEY = STORAGE_KEYS.THEME;
 
 export function applyTheme(t: Theme): void {
   document.documentElement.setAttribute("data-theme", t);

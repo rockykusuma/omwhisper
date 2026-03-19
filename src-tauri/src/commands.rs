@@ -92,12 +92,6 @@ pub struct TranscriptionUpdate {
     pub segments: Vec<Segment>,
 }
 
-#[derive(Clone, serde::Serialize)]
-pub struct UsageUpdate {
-    pub seconds_used: i64,
-    pub seconds_remaining: i64,
-    pub is_free_tier: bool,
-}
 
 #[tauri::command]
 pub async fn start_transcription(
@@ -514,7 +508,7 @@ pub fn get_previous_app() -> &'static Mutex<Option<String>> {
 #[tauri::command]
 pub async fn capture_focused_app() -> Result<Option<String>, String> {
     let app_name = paste::get_frontmost_app();
-    *previous_app().lock().expect("state mutex poisoned") = app_name.clone();
+    *previous_app().lock().unwrap_or_else(|e| e.into_inner()) = app_name.clone();
     Ok(app_name)
 }
 
@@ -535,7 +529,7 @@ pub async fn paste_transcription(text: String, app: AppHandle) -> Result<(), Str
     // Paste into previously focused app if auto_paste is on
     if settings.auto_paste {
         let app_name = {
-            let guard = previous_app().lock().expect("state mutex poisoned");
+            let guard = previous_app().lock().unwrap_or_else(|e| e.into_inner());
             guard.clone()
         };
         tracing::info!("paste_transcription: previous_app={:?}", app_name);
