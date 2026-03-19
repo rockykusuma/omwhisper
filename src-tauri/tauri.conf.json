@@ -50,7 +50,7 @@
     "targets": ["dmg", "app", "nsis"],
     "resources": {
       "resources/sounds/*": "sounds/",
-      "../models/ggml-tiny.en.bin": "models/"
+      "../models/ggml-tiny.en.bin": "models/ggml-tiny.en.bin"
     },
     "icon": [
       "icons/32x32.png",
