@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
-  Sliders, Mic, FileText, Info, ShieldCheck, ShieldAlert, Keyboard, Brain, Activity, Zap, Sparkles, Cpu
+  Sliders, Mic, FileText, Info, ShieldCheck, ShieldAlert, Keyboard, Brain, Activity, Zap, Sparkles, Cpu, ExternalLink
 } from "lucide-react";
 import { logger } from "../utils/logger";
 import { useTheme, THEMES } from "../hooks/useTheme";
@@ -398,7 +398,6 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                   </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  {/* Status badge */}
                   <span
                     className="text-[10px] font-mono px-2 py-0.5 rounded-full"
                     style={{
@@ -409,41 +408,20 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                   >
                     {accessibilityGranted === null ? "checking…" : accessibilityGranted ? "Granted" : "Not granted"}
                   </span>
-
-                  {/* Open settings button — only shown when not granted */}
-                  {accessibilityGranted === false && (
-                    <button
-                      onClick={() => {
-                        invoke("open_accessibility_settings").catch(() => {});
-                        // Re-check after a short delay in case user grants it
-                        setTimeout(() => {
-                          invoke<boolean>("check_accessibility_permission")
-                            .then(setAccessibilityGranted)
-                            .catch(() => {});
-                        }, 3000);
-                      }}
-                      className="btn-ghost text-xs"
-                    >
-                      Open Settings →
-                    </button>
-                  )}
-
-                  {/* Re-check button — always visible when granted to allow refresh */}
-                  {accessibilityGranted === true && (
-                    <button
-                      onClick={() =>
+                  <button
+                    onClick={() => {
+                      invoke("open_accessibility_settings").catch(() => {});
+                      setTimeout(() => {
                         invoke<boolean>("check_accessibility_permission")
                           .then(setAccessibilityGranted)
-                          .catch(() => {})
-                      }
-                      className="text-[10px] cursor-pointer transition-colors"
-                      style={{ color: "var(--t4)" }}
-                      onMouseEnter={(e) => (e.currentTarget.style.color = "var(--t2)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.color = "var(--t4)")}
-                    >
-                      ↻ Refresh
-                    </button>
-                  )}
+                          .catch(() => {});
+                      }, 3000);
+                    }}
+                    className="btn-ghost p-1.5"
+                    title="Open System Settings → Accessibility"
+                  >
+                    <ExternalLink size={13} />
+                  </button>
                 </div>
               </div>
             </div>

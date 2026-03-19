@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { listen, emit } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { Sparkles } from "lucide-react";
 import Sidebar, { type View } from "./components/Sidebar";
@@ -20,6 +20,7 @@ initTheme();
 function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [isSmartDictation, setIsSmartDictation] = useState(false);
+  const [isPolishing, setIsPolishing] = useState(false);
   const [activeView, setActiveView] = useState<View>("home");
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab | undefined>(undefined);
   const [activeModel, setActiveModel] = useState("tiny.en");
@@ -28,6 +29,7 @@ function App() {
   const [micError, setMicError] = useState<string | null>(null);
   const [runningFromDmg, setRunningFromDmg] = useState(false);
   const [showLlmNudge, setShowLlmNudge] = useState(false);
+  const [noModelBanner, setNoModelBanner] = useState(false);
   const [appVersion, setAppVersion] = useState("0.1.0");
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     return localStorage.getItem("omwhisper-sidebar") !== "closed";
@@ -95,7 +97,10 @@ function App() {
     } finally {
       setIsRecording(false);
       setIsSmartDictation(false);
-      setTimeout(() => invoke("hide_overlay").catch((e) => logger.debug("hide_overlay:", e)), 1500);
+      // For smart dictation, the polish handler owns the overlay — skip the auto-hide.
+      if (!pendingIsSmartDictation.current) {
+        setTimeout(() => invoke("hide_overlay").catch((e) => logger.debug("hide_overlay:", e)), 1500);
+      }
     }
   }, []);
 
@@ -105,6 +110,9 @@ function App() {
     invoke<string>("get_app_version").then(setAppVersion).catch(() => {});
     invoke<{ active_model: string }>("get_settings")
       .then((s) => { if (s.active_model) setActiveModel(s.active_model); })
+      .catch(() => {});
+    invoke<{ is_downloaded: boolean }[]>("get_models")
+      .then(models => { if (!models.some(m => m.is_downloaded)) setNoModelBanner(true); })
       .catch(() => {});
   }, []);
 
@@ -130,7 +138,10 @@ function App() {
       if (!event.payload) {
         pendingIsSmartDictation.current = isSmartDictationRef.current;
         isPendingPaste.current = true;
-        setTimeout(() => invoke("hide_overlay").catch((e) => logger.debug("hide_overlay:", e)), 1500);
+        // For smart dictation, the polish handler owns the overlay — skip the auto-hide.
+        if (!isSmartDictationRef.current) {
+          setTimeout(() => invoke("hide_overlay").catch((e) => logger.debug("hide_overlay:", e)), 1500);
+        }
         setIsRecording(false);
         setIsSmartDictation(false);
       }
@@ -194,23 +205,29 @@ function App() {
 
       if (smartDictation) {
         (async () => {
+          setIsPolishing(true);
+          try { await invoke("show_overlay"); } catch {}
+          emit("polish-state", true).catch(() => {});
           try {
             const settings = await invoke<{ active_polish_style: string }>("get_settings");
             const style = settings.active_polish_style ?? "professional";
             const polished = await invoke<string>("polish_text_cmd", { text: rawText, style, forceBuiltin: null });
             await invoke("paste_transcription", { text: polished });
-            showToast("✓ AI-polished & copied");
             invoke("save_transcription", { text: polished, durationSeconds, modelUsed, source: "smart_dictation", rawText, polishStyle: style })
               .catch((e) => logger.error("save_transcription failed:", e));
           } catch (e) {
             if (String(e) === "llm_not_ready") {
               showToast("AI model not ready — check AI Models settings.");
-              return;
+            } else {
+              showToast("⚠ AI polish failed — pasting raw text");
+              invoke("paste_transcription", { text: rawText }).catch(() => {});
+              invoke("save_transcription", { text: rawText, durationSeconds, modelUsed }).catch(() => {});
+              logger.error("Smart dictation polish failed:", e);
             }
-            showToast("⚠ AI polish failed — pasting raw text");
-            invoke("paste_transcription", { text: rawText }).catch(() => {});
-            invoke("save_transcription", { text: rawText, durationSeconds, modelUsed }).catch(() => {});
-            logger.error("Smart dictation polish failed:", e);
+          } finally {
+            setIsPolishing(false);
+            emit("polish-state", false).catch(() => {});
+            invoke("hide_overlay").catch(() => {});
           }
         })();
       } else {
@@ -221,7 +238,6 @@ function App() {
               try {
                 const polished = await invoke<string>("polish_text_cmd", { text: rawText, style: "cleanup", forceBuiltin: true });
                 await invoke("paste_transcription", { text: polished });
-                showToast("✓ AI-polished & copied");
                 invoke("save_transcription", { text: polished, durationSeconds, modelUsed, source: "regular_polished", rawText, polishStyle: "cleanup" })
                   .catch((e) => logger.error("save_transcription failed:", e));
               } catch {
@@ -232,7 +248,6 @@ function App() {
               }
             } else {
               await invoke<void>("paste_transcription", { text: rawText });
-              showToast("✓ Copied to clipboard");
               invoke("save_transcription", { text: rawText, durationSeconds, modelUsed })
                 .catch((e) => logger.error("save_transcription failed:", e));
             }
@@ -306,6 +321,30 @@ function App() {
             </div>
           )}
 
+          {noModelBanner && (
+            <div className="flex items-center justify-between px-5 py-2.5 shrink-0" style={{ background: "color-mix(in srgb, var(--accent) 7%, var(--bg))", borderBottom: "1px solid color-mix(in srgb, var(--accent) 18%, transparent)" }}>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span style={{ color: "var(--accent)" }} className="shrink-0">✦</span>
+                <span className="text-xs leading-snug" style={{ color: "var(--t2)" }}>
+                  <span className="font-semibold" style={{ color: "var(--t1)" }}>tiny.en is ready.</span>
+                  {" "}Explore AI Models to choose a more accurate model that suits your needs.
+                </span>
+              </div>
+              <div className="flex items-center gap-3 shrink-0 ml-4">
+                <button
+                  onClick={() => { setActiveView("models"); setNoModelBanner(false); }}
+                  className="text-xs font-semibold cursor-pointer transition-colors"
+                  style={{ color: "var(--accent)" }}
+                >
+                  Explore Models →
+                </button>
+                <button onClick={() => setNoModelBanner(false)} className="text-white/40 hover:text-white/60 text-xs cursor-pointer" aria-label="Dismiss">
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+
           {showLlmNudge && (
             <div
               className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs"
@@ -361,6 +400,7 @@ function App() {
                 onNavigate={navigate}
                 isRecording={isRecording}
                 isSmartDictation={isSmartDictation}
+                isPolishing={isPolishing}
                 onStartRecording={() => startRecording(false)}
                 onStopRecording={stopRecording}
               />

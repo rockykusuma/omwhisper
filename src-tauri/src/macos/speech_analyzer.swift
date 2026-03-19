@@ -48,6 +48,13 @@ private func ensureAuthorized() -> Bool {
 
 // MARK: - Microphone permission
 
+/// Checks microphone permission status WITHOUT requesting it.
+/// Returns true only if already authorized; false for denied, restricted, or not determined.
+@_cdecl("check_microphone_permission")
+public func checkMicrophonePermission() -> Bool {
+    return AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+}
+
 /// Requests microphone access via AVCaptureDevice (the proper macOS TCC path).
 /// Blocks the calling thread until the user responds.
 /// Returns true if granted, false if denied or restricted.

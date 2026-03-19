@@ -228,3 +228,12 @@ html[data-theme="dark-glass"] body {
   background: rgba(255, 255, 255, 0.04);
   box-shadow: none;
 }
+
+@keyframes fade-out {
+  0%   { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+.animate-fade-out {
+  animation: fade-out 6s ease-in-out forwards;
+}

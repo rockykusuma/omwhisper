@@ -2,6 +2,7 @@ mod ffi {
     use std::os::raw::c_char;
     extern "C" {
         pub fn apple_speech_available() -> bool;
+        pub fn check_microphone_permission() -> bool;
         pub fn request_microphone_permission() -> bool;
         pub fn apple_transcribe_buffer(
             samples: *const f32,
@@ -17,6 +18,12 @@ mod ffi {
 pub struct SpeechAnalyzerEngine;
 
 unsafe impl Send for SpeechAnalyzerEngine {}
+
+/// Check microphone permission status without requesting it.
+/// Returns true only if already authorized.
+pub fn check_microphone_permission() -> bool {
+    unsafe { ffi::check_microphone_permission() }
+}
 
 /// Request microphone permission via AVCaptureDevice (proper macOS TCC path).
 /// Blocks until the user responds to the system dialog.

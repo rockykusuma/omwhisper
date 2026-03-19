@@ -78,6 +78,50 @@ if [ -n "$APP_PATH" ]; then
     echo ".app path: $APP_PATH"
 fi
 echo ""
+
+# Fix: .VolumeIcon.icns must be invisible so it doesn't show as a file in the DMG window.
+# Tauri creates it but doesn't always set the macOS invisible bit — we do it here.
+echo "Fixing DMG volume icon visibility..."
+WRITABLE_DMG="${DMG_PATH%.dmg}-rw.dmg"
+hdiutil convert "$DMG_PATH" -format UDRW -o "$WRITABLE_DMG" -quiet
+TMP_MOUNT=$(mktemp -d)
+hdiutil attach -readwrite -noverify -mountpoint "$TMP_MOUNT" "$WRITABLE_DMG" -quiet
+if [ -f "$TMP_MOUNT/.VolumeIcon.icns" ]; then
+    rm -f "$TMP_MOUNT/.VolumeIcon.icns"
+    echo "  ✓ .VolumeIcon.icns removed"
+fi
+sync
+hdiutil detach "$TMP_MOUNT" -quiet
+rm -f "$DMG_PATH"
+hdiutil convert "$WRITABLE_DMG" -format UDZO -o "$DMG_PATH" -quiet
+rm -f "$WRITABLE_DMG"
+echo ""
+
+# Notarization — runs if APPLE_ID, APPLE_ID_PASSWORD, and APPLE_TEAM_ID are set.
+if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_ID_PASSWORD:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ]; then
+    echo "Notarizing DMG (this takes 1–5 minutes)..."
+    xcrun notarytool submit "$DMG_PATH" \
+        --apple-id "$APPLE_ID" \
+        --password "$APPLE_ID_PASSWORD" \
+        --team-id "$APPLE_TEAM_ID" \
+        --wait
+
+    echo ""
+    echo "Stapling notarization ticket to DMG..."
+    xcrun stapler staple "$DMG_PATH"
+
+    echo ""
+    echo "Verifying Gatekeeper acceptance..."
+    spctl --assess --type open --context context:primary-signature --verbose "$DMG_PATH" && echo "✓ Gatekeeper: accepted" || echo "✗ Gatekeeper check failed"
+
+    DMG_SHA256=$(shasum -a 256 "$DMG_PATH" | awk '{print $1}')
+    echo ""
+    echo "Notarized SHA-256: $DMG_SHA256"
+else
+    echo "Skipping notarization (APPLE_ID / APPLE_ID_PASSWORD / APPLE_TEAM_ID not set)."
+fi
+
+echo ""
 echo "Upload the .dmg to your distribution host, then update:"
 echo "  landing/public/api/version.json  →  latest: \"$VERSION\""
 echo ""

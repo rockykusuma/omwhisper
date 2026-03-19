@@ -27,7 +27,7 @@ use commands::{
     delete_model, download_model, get_app_version, get_audio_devices, get_available_models,
     get_debug_info, get_history, get_license_info, get_license_status, get_models,
     get_models_disk_usage, get_settings, get_usage_today, hide_overlay, is_first_launch,
-    is_running_from_dmg, open_accessibility_settings, paste_transcription, request_microphone_permission,
+    is_running_from_dmg, open_accessibility_settings, paste_transcription, check_microphone_permission, request_microphone_permission,
     save_transcription, search_history, show_main_window, show_overlay, start_transcription, stop_transcription,
     transcribe_file, update_settings, validate_license_bg,
     get_vocabulary, add_vocabulary_word, remove_vocabulary_word, add_word_replacement, remove_word_replacement,
@@ -193,36 +193,70 @@ pub fn run() {
                 }));
             }
 
+            // Seed the bundled tiny.en model to app data on first run so the
+            // user can dictate immediately without downloading anything.
+            {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    use tauri::Manager;
+                    let dest = crate::whisper::models::model_path("tiny.en");
+                    if dest.exists() { return; }
+                    let resource_dir = match app_handle.path().resource_dir() {
+                        Ok(d) => d,
+                        Err(e) => { tracing::warn!("resource_dir error: {}", e); return; }
+                    };
+                    let src = resource_dir.join("models").join("ggml-tiny.en.bin");
+                    if !src.exists() {
+                        tracing::warn!("Bundled tiny.en not found at {:?}", src);
+                        return;
+                    }
+                    if let Some(parent) = dest.parent() {
+                        let _ = tokio::fs::create_dir_all(parent).await;
+                    }
+                    match tokio::fs::copy(&src, &dest).await {
+                        Ok(_) => tracing::info!("Seeded bundled tiny.en to {:?}", dest),
+                        Err(e) => tracing::warn!("Failed to seed tiny.en: {}", e),
+                    }
+                });
+            }
+
             // --- System Tray ---
             let current_settings = crate::settings::load_settings_sync();
             let selected_device = current_settings.audio_input_device.clone().unwrap_or_default();
             let device_names = crate::settings::list_audio_devices();
 
-            let toggle_item   = MenuItem::with_id(app, "toggle",   "Start Recording", true, None::<&str>)?;
-            let sep1          = PredefinedMenuItem::separator(app)?;
             let show_item     = MenuItem::with_id(app, "show",     "Show Window",     true, None::<&str>)?;
             let settings_item = MenuItem::with_id(app, "settings", "Settings…",       true, None::<&str>)?;
             let sep2          = PredefinedMenuItem::separator(app)?;
 
-            // Microphone submenu — check-mark on the currently selected device
+            // Microphone submenu — "Default" entry + all devices, check-mark on the active one
+            let using_default = current_settings.audio_input_device.is_none();
+            let default_label = if using_default { "✓  Default Microphone".to_string() } else { "Default Microphone".to_string() };
+            let default_item = MenuItem::with_id(app, "mic:default", default_label, true, None::<&str>)?;
+
             let mic_items: Vec<MenuItem<_>> = if device_names.is_empty() {
-                vec![MenuItem::with_id(app, "mic_none", "No devices found", false, None::<&str>)?]
+                vec![]
             } else {
                 device_names.iter().map(|d| {
-                    let label = if *d == selected_device { format!("✓  {}", d) } else { d.clone() };
+                    let label = if !using_default && *d == selected_device { format!("✓  {}", d) } else { d.clone() };
                     MenuItem::with_id(app, format!("mic:{}", d), label, true, None::<&str>)
                 }).collect::<std::result::Result<Vec<_>, _>>()?
             };
-            let mic_refs: Vec<&dyn tauri::menu::IsMenuItem<_>> =
-                mic_items.iter().map(|i| i as &dyn tauri::menu::IsMenuItem<_>).collect();
+
+            let sep_mic = PredefinedMenuItem::separator(app)?;
+            let mut mic_refs: Vec<&dyn tauri::menu::IsMenuItem<_>> = vec![&default_item];
+            if !mic_items.is_empty() {
+                mic_refs.push(&sep_mic);
+                for item in &mic_items {
+                    mic_refs.push(item as &dyn tauri::menu::IsMenuItem<_>);
+                }
+            }
             let mic_submenu = Submenu::with_items(app, "Microphone", true, &mic_refs)?;
 
             let sep3      = PredefinedMenuItem::separator(app)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit OmWhisper", true, None::<&str>)?;
 
             let menu = Menu::with_items(app, &[
-                &toggle_item,
-                &sep1,
                 &show_item,
                 &settings_item,
                 &sep2,
@@ -250,7 +284,6 @@ pub fn run() {
                 .icon(tray_icon)
                 .icon_as_template(true)
                 .on_menu_event({
-                    let state = shared_state.clone();
                     move |app, event| match event.id.as_ref() {
                         "show" => {
                             if let Some(win) = app.get_webview_window("main") {
@@ -271,21 +304,6 @@ pub fn run() {
                             }
                             let _ = app.emit("tray-navigate", "settings");
                         }
-                        "toggle" => {
-                            let is_recording = state.lock().expect("state mutex poisoned").capture.is_some();
-                            if is_recording {
-                                let mut s = state.lock().expect("state mutex poisoned");
-                                s.usage_running.store(false, std::sync::atomic::Ordering::SeqCst);
-                                if let Some(capture) = s.capture.take() {
-                                    capture.stop();
-                                }
-                                let _ = app.emit("recording-state", false);
-                                let _ = toggle_item.set_text("Start Recording");
-                            } else {
-                                let _ = app.emit("hotkey-toggle-recording", ());
-                                let _ = toggle_item.set_text("Stop Recording");
-                            }
-                        }
                         "quit" => {
                             app.exit(0);
                         }
@@ -294,7 +312,8 @@ pub fn run() {
                             let app_handle = app.clone();
                             tauri::async_runtime::spawn(async move {
                                 let mut s = crate::settings::load_settings().await;
-                                s.audio_input_device = Some(device_name);
+                                // "default" means use system default — store None
+                                s.audio_input_device = if device_name == "default" { None } else { Some(device_name) };
                                 if let Err(e) = crate::settings::save_settings(&s).await {
                                     tracing::error!("Failed to save mic selection: {}", e);
                                 }
@@ -697,6 +716,7 @@ pub fn run() {
             get_audio_devices,
             is_first_launch,
             complete_onboarding,
+            check_microphone_permission,
             request_microphone_permission,
             show_overlay,
             hide_overlay,
