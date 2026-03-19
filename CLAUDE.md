@@ -232,13 +232,6 @@ Energy-based VAD (Prompt 5) will fix this by only sending audio above RMS thresh
 - **Production** (properly signed `.app`): Accessibility survives reinstalls automatically — no manual re-signing needed
 - User must grant Accessibility **after** the binary is signed with the stable identifier, **before** testing paste
 
-### Git Identity
-- Name: Rakesh Kusuma
-- Email: rockykusuma@gmail.com
-- SSH: uses `~/.ssh/id_rsa_personal` via `github.com-personal` host alias
-
----
-
 ## Useful Commands
 
 ```bash

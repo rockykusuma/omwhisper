@@ -2,9 +2,11 @@
 
 > Your voice, transcribed instantly. Private by design.
 
-**🚧 Beta — v0.1.0-beta.1**
+A fast, privacy-first voice transcription app for **macOS** and **Windows**. Powered by OpenAI Whisper running entirely on your device — no internet required, no audio ever leaves your machine.
 
-A fast, privacy-first voice transcription app for **macOS** (Windows coming soon). Powered by OpenAI Whisper, running entirely on your device — no internet required, no audio ever leaves your machine.
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-blue)](#platform-support)
+[![Release](https://img.shields.io/github/v/release/rockykusuma/omwhisper)](https://github.com/rockykusuma/omwhisper/releases)
 
 ---
 
@@ -15,11 +17,11 @@ A fast, privacy-first voice transcription app for **macOS** (Windows coming soon
 - **Offline** — No internet required after model download
 - **Menu bar** — Lives quietly in your menu bar, out of the way
 - **Auto-paste** — Transcription is pasted directly into the focused app
-- **Smart Dictation** — Voice → Whisper → LLM polish → Paste (AI-powered cleanup)
+- **Smart Dictation** — Voice → Whisper → LLM polish → Paste
 - **Push-to-Talk** — Hold a key to record, release to stop (macOS)
 - **Custom Vocabulary** — Bias Whisper toward domain-specific words
 - **History** — Searchable SQLite log of all transcriptions
-- **Metal GPU** — Apple Silicon accelerated on macOS (CPU on Windows)
+- **Metal GPU** — Apple Silicon accelerated on macOS
 
 ---
 
@@ -29,10 +31,102 @@ A fast, privacy-first voice transcription app for **macOS** (Windows coming soon
 |---------|-------|---------|
 | Real-time transcription | ✅ Metal GPU | ✅ CPU |
 | Auto-paste | ✅ Accessibility API | ✅ SendInput |
-| Push-to-Talk | ✅ (CGEventTap) | ❌ Toggle only |
+| Push-to-Talk | ✅ CGEventTap | ❌ Toggle only |
 | Smart Dictation (AI) | ✅ Ollama + Cloud + Built-in LLM | ✅ Ollama + Cloud |
 | Built-in on-device LLM | ✅ llama.cpp Metal | ❌ |
 | Installer | `.dmg` / `.app` | `.exe` (NSIS) |
+
+---
+
+## Download
+
+Grab the latest release from the [Releases](https://github.com/rockykusuma/omwhisper/releases) page.
+
+- **macOS** — Download the `.dmg`, drag OmWhisper to Applications, and launch
+- **Windows** — Download the `.exe` installer (built by CI)
+
+---
+
+## Getting Started (Development)
+
+### Prerequisites
+
+- [Rust](https://rustup.rs/) (stable)
+- [Node.js](https://nodejs.org/) 20+
+- [Tauri CLI prerequisites](https://tauri.app/start/prerequisites/)
+  - macOS: Xcode Command Line Tools (`xcode-select --install`)
+  - Windows: Visual Studio Build Tools + WebView2
+
+### Run in Development
+
+```bash
+# Install frontend dependencies
+npm install
+
+# Download a Whisper model (tiny is fastest for dev)
+mkdir -p models
+curl -L -o models/ggml-tiny.en.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin
+
+# Start dev server
+cargo tauri dev
+```
+
+> First build compiles `whisper.cpp` with Metal — expect ~5–10 minutes.
+
+### macOS: Auto-Paste Setup
+
+After each `cargo build`, re-sign the binary so macOS Accessibility permission persists:
+
+```bash
+codesign --force --sign - --identifier "com.omwhisper.app" src-tauri/target/debug/omwhisper
+```
+
+Then grant **Accessibility** in System Settings → Privacy & Security → Accessibility.
+
+### Build for Release
+
+**macOS** (requires Apple Developer certificate):
+```bash
+bash scripts/build-release.sh
+```
+
+**Windows** — Built automatically by GitHub Actions on every `v*` tag push:
+```bash
+git tag v0.x.x && git push origin v0.x.x
+```
+
+---
+
+## Whisper Models
+
+Downloaded through the in-app Model Manager:
+
+| Model | Size | Speed | Quality |
+|-------|------|-------|---------|
+| tiny.en | 75 MB | Fastest | Good |
+| base.en | 142 MB | Fast | Better |
+| small / small.en | 466 MB | Moderate | Great |
+| large-v3-turbo | 1.5 GB | Slower | Best |
+
+Models are stored at:
+- macOS: `~/Library/Application Support/com.omwhisper.app/models/`
+- Windows: `%APPDATA%\com.omwhisper.app\models\`
+
+---
+
+## Smart Dictation
+
+**Shortcut:** `Cmd+Shift+B` (macOS) · `Ctrl+Shift+B` (Windows)
+
+Voice → Whisper → LLM polish → auto-paste into the focused app.
+
+Supported backends:
+- **On-device (macOS):** Built-in llama.cpp Metal — no internet needed
+- **Ollama:** Any locally running model
+- **Cloud:** OpenAI, Groq, or any OpenAI-compatible API
+
+Six built-in polish styles: Professional, Casual, Concise, Translate, Email, Meeting Notes. Custom styles supported.
 
 ---
 
@@ -49,95 +143,17 @@ A fast, privacy-first voice transcription app for **macOS** (Windows coming soon
 | Audio capture | cpal 0.15 |
 | AI polish | Ollama / OpenAI / Groq / llama-cpp-2 |
 | History | SQLite (rusqlite) |
-| Crash reporting | Sentry |
-| Feedback | Resend |
 
 ---
 
-## Download (Beta)
+## Contributing
 
-macOS `.dmg` is available via the [Releases](https://github.com/rockykusuma/omwhisper/releases) page.
-
-> First time opening? Right-click → **Open** to bypass the Gatekeeper warning (app is unsigned for beta).
-> See [BETA_INSTALL.md](./BETA_INSTALL.md) for full setup instructions.
-
-Found a bug or have feedback? Use **Settings → About → Send Feedback** in the app.
-
----
-
-## Getting Started (Development)
-
-### Prerequisites
-
-- [Rust](https://rustup.rs/) (stable)
-- [Node.js](https://nodejs.org/) 20+
-- [Tauri CLI prerequisites](https://tauri.app/start/prerequisites/)
-
-### Run in Development
-
-```bash
-# Install frontend dependencies
-npm install
-
-# Download a Whisper model (tiny is fastest, good for testing)
-mkdir -p models
-curl -L -o models/ggml-tiny.en.bin \
-  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin
-
-# Start dev server
-cargo tauri dev
-```
-
-> **macOS — auto-paste setup**: After each `cargo build`, re-sign the binary so macOS Accessibility permission sticks:
-> ```bash
-> codesign --force --sign - --identifier "com.omwhisper.app" src-tauri/target/debug/omwhisper
-> ```
-
-### Build for Release
-
-**macOS:**
-```bash
-cargo tauri build
-# or
-bash scripts/build-release.sh
-```
-
-**Windows:** Built automatically by GitHub Actions on every `v*` tag push. Download the `.exe` from the [Actions artifacts](https://github.com/rockykusuma/omwhisper/actions).
-
-> **Note:** Windows beta is not yet released. macOS only for now.
-
----
-
-## Whisper Models
-
-Models are downloaded through the in-app Model Manager. Available models:
-
-| Model | Size | Speed | Accuracy |
-|-------|------|-------|----------|
-| tiny.en | 75 MB | Fastest | Good |
-| base.en | 142 MB | Fast | Better |
-| small / small.en | 466 MB | Moderate | Great |
-| large-v3-turbo | 1.5 GB | Slower | Best |
-
-Models are stored in `~/Library/Application Support/com.omwhisper.app/models/` (macOS) or `%APPDATA%\com.omwhisper.app\models\` (Windows).
-
----
-
-## Smart Dictation
-
-**Shortcut:** `Cmd+Shift+B` (macOS) / `Ctrl+Shift+B` (Windows)
-
-Voice → Whisper transcription → LLM polish → auto-paste. Supports:
-
-- **On-device (macOS):** Built-in llama.cpp Metal backend — no internet needed
-- **Ollama:** Any locally running Ollama model
-- **Cloud:** OpenAI, Groq, or any OpenAI-compatible API
-
-Six built-in polish styles: Professional, Casual, Concise, Translate, Email, Meeting Notes. Custom styles supported.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup instructions and guidelines.
 
 ---
 
 ## License
 
-Proprietary — All rights reserved.
+MIT — see [LICENSE](./LICENSE).
+
 [whisper.cpp](https://github.com/ggerganov/whisper.cpp) is used under the MIT License.

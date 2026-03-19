@@ -45,6 +45,12 @@ coverage/
 .superpowers/
 skills-lock.json
 
+# Internal / private docs (not for public repo)
+SETUP.md
+docs/PRO_REVERT_GUIDE.md
+docs/superpowers/
+docs/prompts/
+
 # Misc
 *.dmg
 *.app

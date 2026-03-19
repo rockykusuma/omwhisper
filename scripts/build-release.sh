@@ -20,6 +20,14 @@ echo "Version:  $VERSION"
 echo "Arch:     $(uname -m)"
 echo ""
 
+# Code signing identity (set via environment or default to your Apple Developer ID)
+# Override: export APPLE_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+if [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then
+  export APPLE_SIGNING_IDENTITY="Developer ID Application: Arunbharath Reddy Keshapalli (Y87BZN47C5)"
+fi
+echo "Signing: $APPLE_SIGNING_IDENTITY"
+echo ""
+
 # Build
 echo "Building release binary..."
 npm run build
