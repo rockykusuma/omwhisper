@@ -84,12 +84,20 @@ fn center_on_primary_monitor(win: &tauri::WebviewWindow) {
     if let Ok(Some(monitor)) = win.primary_monitor() {
         let screen = monitor.size();
         let origin = monitor.position();
+        // outer_size() returns (0,0) before the window has ever been rendered.
+        // Only use manual centering once the window has real dimensions; otherwise
+        // fall through to win.center() which handles the unrendered case correctly.
         if let Ok(win_size) = win.outer_size() {
-            let x = origin.x + ((screen.width as i32 - win_size.width as i32) / 2);
-            let y = origin.y + ((screen.height as i32 - win_size.height as i32) / 2);
-            let _ = win.set_position(tauri::PhysicalPosition { x, y });
+            if win_size.width > 0 && win_size.height > 0 {
+                let x = origin.x + ((screen.width as i32 - win_size.width as i32) / 2);
+                let y = origin.y + ((screen.height as i32 - win_size.height as i32) / 2);
+                let _ = win.set_position(tauri::PhysicalPosition { x, y });
+                return;
+            }
         }
     }
+    // Fallback: Tauri's built-in center works even before the window has been rendered.
+    let _ = win.center();
 }
 
 /// Ensure only one instance runs. Returns false if another instance is already running.
