@@ -5,6 +5,7 @@ import {
   Sliders, Mic, FileText, Info, ShieldCheck, ShieldAlert, Keyboard, Brain, Activity, Zap, Sparkles, Cpu, ExternalLink
 } from "lucide-react";
 import { logger } from "../utils/logger";
+import { STORAGE_KEYS } from "../utils/storageKeys";
 import type { AppSettings, StorageInfo } from "../types";
 
 type Settings = AppSettings;
@@ -990,7 +991,7 @@ function AboutSection({ settings, update }: { settings: Settings; update: (patch
                 value={settings.crash_reporting_enabled}
                 onChange={(v) => {
                   update({ crash_reporting_enabled: v });
-                  localStorage.setItem("crash_reporting_enabled", String(v));
+                  localStorage.setItem(STORAGE_KEYS.CRASH_REPORTING, String(v));
                 }}
                 label="Crash reporting"
               />

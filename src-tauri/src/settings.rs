@@ -201,10 +201,12 @@ pub async fn load_settings() -> Settings {
         Ok(content) => match serde_json::from_str::<Settings>(&content) {
             Ok(s) => s,
             Err(e) => {
-                tracing::error!("settings.json parse error: {e} — reverting to defaults");
+                tracing::error!("settings.json parse error: {e} — reverting to defaults, backup saved");
                 // Back up the corrupt file so the user can recover it manually
                 let backup = path.with_extension("json.bak");
                 let _ = fs::copy(&path, &backup).await;
+                // Store a flag so the next tauri command can surface a toast to the user
+                let _ = fs::write(path.with_extension("json.corrupted"), "1").await;
                 Settings::default()
             }
         },

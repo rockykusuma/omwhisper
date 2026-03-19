@@ -170,8 +170,12 @@ function App() {
       invoke("open_accessibility_settings").catch(() => {});
     });
 
+    const unlistenSettingsCorrupted = listen("settings-corrupted", () => {
+      showToast("⚠ Settings were corrupted and reset to defaults. A backup was saved as settings.json.bak.");
+    });
+
     return () => {
-      Promise.all([unlistenHotkey, unlistenHotkeyStop, unlistenSmartDictation, unlistenState, unlistenUpdate, unlistenMic, unlistenTrayNav, unlistenLlmNudge, unlistenAccessibility])
+      Promise.all([unlistenHotkey, unlistenHotkeyStop, unlistenSmartDictation, unlistenState, unlistenUpdate, unlistenMic, unlistenTrayNav, unlistenLlmNudge, unlistenAccessibility, unlistenSettingsCorrupted])
         .then((fns) => fns.forEach((f) => f()));
     };
   }, [startRecording, stopRecording]);

@@ -32,6 +32,14 @@ pub fn has_accessibility_permission() -> bool {
     false
 }
 
+/// Returns true if an app name is safe to use (printable ASCII, no shell metacharacters).
+#[cfg(target_os = "macos")]
+fn is_safe_app_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 255
+        && name.chars().all(|c| c.is_ascii() && !matches!(c, '"' | '\'' | '\\' | '`' | '$' | '\n' | '\r' | '\0'))
+}
+
 /// Capture the name of the currently frontmost application (macOS only).
 #[cfg(target_os = "macos")]
 pub fn get_frontmost_app() -> Option<String> {
@@ -40,7 +48,8 @@ pub fn get_frontmost_app() -> Option<String> {
         .output()
         .ok()?;
     if output.status.success() {
-        Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        let name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if is_safe_app_name(&name) { Some(name) } else { None }
     } else {
         None
     }
