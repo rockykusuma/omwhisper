@@ -8,6 +8,8 @@ A fast, privacy-first voice transcription app for **macOS** and **Windows**. Pow
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-blue)](#platform-support)
 [![Release](https://img.shields.io/github/v/release/rockykusuma/omwhisper)](https://github.com/rockykusuma/omwhisper/releases)
 
+**[🌐 Website](https://www.omwhisper.in) · [⬇️ Download](https://www.omwhisper.in) · [📋 Releases](https://github.com/rockykusuma/omwhisper/releases)**
+
 ---
 
 ## Features
@@ -17,11 +19,21 @@ A fast, privacy-first voice transcription app for **macOS** and **Windows**. Pow
 - **Offline** — No internet required after model download
 - **Menu bar** — Lives quietly in your menu bar, out of the way
 - **Auto-paste** — Transcription is pasted directly into the focused app
-- **Smart Dictation** — Voice → Whisper → LLM polish → Paste
+- **Smart Dictation** — Voice → Whisper → LLM polish → Paste (`Cmd+Shift+B`)
+- **Apple Speech** — Use macOS built-in speech engine as an alternative to Whisper
 - **Push-to-Talk** — Hold a key to record, release to stop (macOS)
 - **Custom Vocabulary** — Bias Whisper toward domain-specific words
 - **History** — Searchable SQLite log of all transcriptions
 - **Metal GPU** — Apple Silicon accelerated on macOS
+
+---
+
+## Download
+
+**[→ Download from omwhisper.in](https://www.omwhisper.in)**
+
+- **macOS** — Download the `.dmg`, drag OmWhisper to Applications, and launch. The app ships with the `tiny.en` model — no initial download needed.
+- **Windows** — Coming soon
 
 ---
 
@@ -31,19 +43,11 @@ A fast, privacy-first voice transcription app for **macOS** and **Windows**. Pow
 |---------|-------|---------|
 | Real-time transcription | ✅ Metal GPU | ✅ CPU |
 | Auto-paste | ✅ Accessibility API | ✅ SendInput |
+| Apple Speech engine | ✅ | ❌ |
 | Push-to-Talk | ✅ CGEventTap | ❌ Toggle only |
 | Smart Dictation (AI) | ✅ Ollama + Cloud + Built-in LLM | ✅ Ollama + Cloud |
 | Built-in on-device LLM | ✅ llama.cpp Metal | ❌ |
 | Installer | `.dmg` / `.app` | `.exe` (NSIS) |
-
----
-
-## Download
-
-Grab the latest release from the [Releases](https://github.com/rockykusuma/omwhisper/releases) page.
-
-- **macOS** — Download the `.dmg`, drag OmWhisper to Applications, and launch
-- **Windows** — Download the `.exe` installer (built by CI)
 
 ---
 
@@ -74,7 +78,7 @@ cargo tauri dev
 
 > First build compiles `whisper.cpp` with Metal — expect ~5–10 minutes.
 
-### macOS: Auto-Paste Setup
+### macOS: Auto-Paste Setup (Dev)
 
 After each `cargo build`, re-sign the binary so macOS Accessibility permission persists:
 
@@ -91,16 +95,13 @@ Then grant **Accessibility** in System Settings → Privacy & Security → Acces
 bash scripts/build-release.sh
 ```
 
-**Windows** — Built automatically by GitHub Actions on every `v*` tag push:
-```bash
-git tag v0.x.x && git push origin v0.x.x
-```
+**Windows** — Trigger manually via GitHub Actions → Build Windows → Run workflow.
 
 ---
 
 ## Whisper Models
 
-Downloaded through the in-app Model Manager:
+The app ships with `tiny.en` bundled. Additional models can be downloaded in-app via **AI Models**:
 
 | Model | Size | Speed | Quality |
 |-------|------|-------|---------|
