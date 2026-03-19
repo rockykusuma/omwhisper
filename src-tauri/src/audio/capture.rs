@@ -28,7 +28,10 @@ impl AudioCapture {
     /// Returns a tuple of:
     ///   - `Receiver<Vec<f32>>` — speech utterances ready for Whisper
     ///   - `Receiver<f32>`     — RMS audio level for the frontend meter (sent every chunk)
-    pub fn start(&self) -> Result<(std::sync::mpsc::Receiver<Vec<f32>>, std::sync::mpsc::Receiver<f32>)> {
+    ///
+    /// `preferred_device` — name of a specific input device to use (from settings).
+    /// Falls back to the system default if the named device is not found.
+    pub fn start(&self, preferred_device: Option<String>) -> Result<(std::sync::mpsc::Receiver<Vec<f32>>, std::sync::mpsc::Receiver<f32>)> {
         let running = self.running.clone();
         running.store(true, Ordering::SeqCst);
 
@@ -52,11 +55,32 @@ impl AudioCapture {
         std::thread::spawn(move || {
             // ---- Build stream ----
             let host = cpal::default_host();
-            let device = match host.default_input_device() {
-                Some(d) => d,
-                None => {
-                    let _ = err_tx.send(anyhow::anyhow!("no input device available"));
-                    return;
+
+            // Resolve the input device: try the user-selected device first, fall back to default.
+            let device = if let Some(ref name) = preferred_device {
+                let found = host.input_devices()
+                    .ok()
+                    .and_then(|mut devs| devs.find(|d| d.name().ok().as_deref() == Some(name.as_str())));
+                match found {
+                    Some(d) => d,
+                    None => {
+                        tracing::warn!("preferred audio device {:?} not found, falling back to system default", name);
+                        match host.default_input_device() {
+                            Some(d) => d,
+                            None => {
+                                let _ = err_tx.send(anyhow::anyhow!("no input device available"));
+                                return;
+                            }
+                        }
+                    }
+                }
+            } else {
+                match host.default_input_device() {
+                    Some(d) => d,
+                    None => {
+                        let _ = err_tx.send(anyhow::anyhow!("no input device available"));
+                        return;
+                    }
                 }
             };
 

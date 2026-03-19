@@ -142,7 +142,7 @@ pub async fn start_transcription(
     // Build capture object and start the audio pipeline.
     // AudioCapture::new signature is (vad_sensitivity, vad_engine) — sensitivity first, engine second.
     let capture = AudioCapture::new(settings.vad_sensitivity, &settings.vad_engine);
-    let (speech_rx, level_rx) = capture.start().map_err(|e| e.to_string())?;
+    let (speech_rx, level_rx) = capture.start(settings.audio_input_device.clone()).map_err(|e| e.to_string())?;
 
     // Store the capture handle so stop_transcription can reach it.
     {
