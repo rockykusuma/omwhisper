@@ -770,6 +770,8 @@ pub fn run() {
             get_platform,
             get_transcription_engine,
             commands::is_apple_speech_available,
+            commands::get_apple_speech_auth_status,
+            commands::request_speech_recognition_permission,
             commands::open_feedback_url,
             commands::send_feedback,
         ])

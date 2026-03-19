@@ -180,11 +180,13 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
   const [accessibilityGranted, setAccessibilityGranted] = useState<boolean | null>(null);
   const [platform, setPlatform] = useState<string>("macos");
   const [appleAvailable, setAppleAvailable] = useState<boolean>(true);
+  const [appleSpeechAuthStatus, setAppleSpeechAuthStatus] = useState<"authorized" | "not_determined" | "denied">("denied");
   const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     invoke<string>("get_platform").then(setPlatform).catch(() => {});
     invoke<boolean>("is_apple_speech_available").then(setAppleAvailable).catch(() => {});
+    invoke<string>("get_apple_speech_auth_status").then((s) => setAppleSpeechAuthStatus(s as typeof appleSpeechAuthStatus)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -560,12 +562,32 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                         { id: "apple",   Icon: Sparkles,  label: "Apple Speech",  sub: "On-device · fast" },
                         { id: "whisper", Icon: Cpu,       label: "Whisper",       sub: "Local model · all languages" },
                       ] as const).map(({ id, Icon, label, sub }) => {
-                        const disabled = id === "apple" && !appleAvailable;
+                        const isApple = id === "apple";
+                        const disabled = isApple && !appleAvailable && appleSpeechAuthStatus !== "not_determined";
                         const active = settings.transcription_engine === id && !disabled;
+                        const canEnable = isApple && appleSpeechAuthStatus === "not_determined";
+                        const subText = isApple
+                          ? appleSpeechAuthStatus === "authorized" ? sub
+                          : appleSpeechAuthStatus === "not_determined" ? "Tap to grant permission"
+                          : "Permission denied — open System Settings"
+                          : sub;
                         return (
                           <button
                             key={id}
-                            onClick={() => !disabled && update({ transcription_engine: id })}
+                            onClick={async () => {
+                              if (canEnable) {
+                                const granted = await invoke<boolean>("request_speech_recognition_permission");
+                                if (granted) {
+                                  setAppleAvailable(true);
+                                  setAppleSpeechAuthStatus("authorized");
+                                  update({ transcription_engine: "apple" });
+                                } else {
+                                  setAppleSpeechAuthStatus("denied");
+                                }
+                              } else if (!disabled) {
+                                update({ transcription_engine: id });
+                              }
+                            }}
                             aria-pressed={active}
                             aria-disabled={disabled}
                             className={`flex-1 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all duration-150 ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
@@ -574,22 +596,24 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                               boxShadow: active ? "var(--nm-pressed-sm)" : "var(--nm-raised-sm)",
                               border: active
                                 ? "1px solid color-mix(in srgb, var(--accent) 45%, transparent)"
+                                : canEnable
+                                ? "1px solid color-mix(in srgb, var(--accent) 20%, transparent)"
                                 : "1px solid transparent",
-                              opacity: disabled ? 0.45 : 1,
+                              opacity: disabled ? 0.4 : 1,
                             }}
                           >
                             <div
                               className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                               style={{ background: active ? "var(--accent-bg)" : "color-mix(in srgb, var(--t1) 6%, transparent)" }}
                             >
-                              <Icon size={14} style={{ color: active ? "var(--accent)" : "var(--t3)" }} />
+                              <Icon size={14} style={{ color: active ? "var(--accent)" : canEnable ? "var(--accent)" : "var(--t3)" }} />
                             </div>
                             <div>
-                              <p className="text-xs font-medium leading-tight" style={{ color: active ? "var(--accent)" : "var(--t1)" }}>
+                              <p className="text-xs font-medium leading-tight" style={{ color: active ? "var(--accent)" : canEnable ? "var(--accent)" : "var(--t1)" }}>
                                 {label}
                               </p>
                               <p className="text-[10px] leading-tight mt-0.5" style={{ color: "var(--t4)" }}>
-                                {disabled ? "Not available on this device" : sub}
+                                {subText}
                               </p>
                             </div>
                           </button>

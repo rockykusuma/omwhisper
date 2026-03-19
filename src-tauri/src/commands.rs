@@ -1310,6 +1310,32 @@ pub fn is_apple_speech_available() -> bool {
     false
 }
 
+/// Returns the Speech Recognition authorization status: "authorized" | "not_determined" | "denied".
+/// On non-macOS always returns "denied".
+#[tauri::command]
+pub fn get_apple_speech_auth_status() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        return crate::macos::speech_analyzer::apple_speech_auth_status();
+    }
+    #[cfg(not(target_os = "macos"))]
+    "denied"
+}
+
+/// Shows the system Speech Recognition permission dialog (if not yet determined).
+/// Blocks until the user responds. Returns true if granted.
+#[tauri::command]
+pub async fn request_speech_recognition_permission() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        return tauri::async_runtime::spawn_blocking(
+            crate::macos::speech_analyzer::request_speech_recognition_permission
+        ).await.unwrap_or(false);
+    }
+    #[cfg(not(target_os = "macos"))]
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::TranscriptionState;

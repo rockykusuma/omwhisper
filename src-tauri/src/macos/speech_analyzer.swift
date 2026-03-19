@@ -82,6 +82,37 @@ public func requestMicrophonePermission() -> Bool {
 
 // MARK: - C-compatible exports
 
+/// Returns the current Speech Recognition authorization status as an integer.
+/// 0 = authorized, 1 = notDetermined (can request), 2 = denied/restricted
+@_cdecl("apple_speech_auth_status")
+public func appleSpeechAuthStatus() -> Int32 {
+    switch SFSpeechRecognizer.authorizationStatus() {
+    case .authorized:    return 0
+    case .notDetermined: return 1
+    case .denied, .restricted: return 2
+    @unknown default:    return 2
+    }
+}
+
+/// Requests Speech Recognition permission by showing the system dialog.
+/// Blocks the calling thread until the user responds.
+/// Returns true if granted.
+@_cdecl("request_speech_recognition_permission")
+public func requestSpeechRecognitionPermission() -> Bool {
+    guard hasSpeechUsageDescription() else { return false }
+    let status = SFSpeechRecognizer.authorizationStatus()
+    if status == .authorized { return true }
+    if status != .notDetermined { return false }
+    let sema = DispatchSemaphore(value: 0)
+    var granted = false
+    SFSpeechRecognizer.requestAuthorization { newStatus in
+        granted = newStatus == .authorized
+        sema.signal()
+    }
+    sema.wait()
+    return granted
+}
+
 /// Returns true when Apple on-device speech recognition is available.
 /// Does NOT request authorization — only checks the current status.
 /// Authorization is requested lazily on the first call to apple_transcribe_buffer.
