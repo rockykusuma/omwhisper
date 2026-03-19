@@ -698,6 +698,28 @@ pub async fn show_main_window(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn get_microphone_auth_status() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        return crate::macos::speech_analyzer::get_microphone_auth_status();
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "authorized"
+    }
+}
+
+#[tauri::command]
+pub fn open_microphone_settings() {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
+            .spawn();
+    }
+}
+
+#[tauri::command]
 pub async fn check_microphone_permission() -> Result<bool, String> {
     #[cfg(target_os = "macos")]
     {

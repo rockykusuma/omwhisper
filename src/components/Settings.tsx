@@ -178,6 +178,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
   }, [initialTab]);
   const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
   const [accessibilityGranted, setAccessibilityGranted] = useState<boolean | null>(null);
+  const [micAuthStatus, setMicAuthStatus] = useState<"authorized" | "not_determined" | "denied" | null>(null);
   const [platform, setPlatform] = useState<string>("macos");
   const [appleAvailable, setAppleAvailable] = useState<boolean>(true);
   const [appleSpeechAuthStatus, setAppleSpeechAuthStatus] = useState<"authorized" | "not_determined" | "denied">("denied");
@@ -197,6 +198,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
     invoke<string[]>("get_audio_devices").then(setDevices).catch(() => {});
     invoke<StorageInfo>("get_storage_info").then(setStorageInfo).catch(() => {});
     invoke<boolean>("check_accessibility_permission").then(setAccessibilityGranted).catch(() => {});
+    invoke<string>("get_microphone_auth_status").then((s) => setMicAuthStatus(s as typeof micAuthStatus)).catch(() => {});
 
     // Re-sync when settings are changed from another view (e.g. model selection in Models tab)
     const unlisten = listen("settings-changed", () => {
@@ -433,12 +435,75 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
         {activeTab === "audio" && (
           <div>
             <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Audio</h3>
+
+            {/* Microphone permission row */}
+            {platform === "macos" && micAuthStatus !== "authorized" && (
+              <div className="card px-5 mb-4">
+                <div className="flex items-center justify-between gap-4 py-3.5">
+                  <div className="flex items-center gap-2.5">
+                    {micAuthStatus === "denied"
+                      ? <ShieldAlert size={15} className="text-red-400 shrink-0" />
+                      : <ShieldAlert size={15} style={{ color: "#fb923c", flexShrink: 0 }} />
+                    }
+                    <div>
+                      <p className="text-sm" style={{ color: "var(--t1)" }}>Microphone</p>
+                      <p className="text-xs mt-0.5" style={{ color: "var(--t3)" }}>
+                        {micAuthStatus === "denied"
+                          ? "Permission denied — open System Settings to allow"
+                          : "Permission required to record your voice"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span
+                      className="text-[10px] font-mono px-2 py-0.5 rounded-full"
+                      style={{
+                        color: micAuthStatus === "denied" ? "#f87171" : "#fb923c",
+                        background: micAuthStatus === "denied" ? "rgba(248,113,113,0.12)" : "rgba(251,146,60,0.12)",
+                        boxShadow: "var(--nm-pressed-sm)",
+                      }}
+                    >
+                      {micAuthStatus === null ? "checking…" : micAuthStatus === "denied" ? "Denied" : "Not granted"}
+                    </span>
+                    {micAuthStatus === "not_determined" ? (
+                      <button
+                        onClick={() => {
+                          invoke<boolean>("request_microphone_permission").then((granted) => {
+                            setMicAuthStatus(granted ? "authorized" : "denied");
+                          }).catch(() => {});
+                        }}
+                        className="btn-primary text-xs px-3 py-1.5"
+                      >
+                        Allow
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          invoke("open_microphone_settings").catch(() => {});
+                          setTimeout(() => {
+                            invoke<string>("get_microphone_auth_status")
+                              .then((s) => setMicAuthStatus(s as typeof micAuthStatus))
+                              .catch(() => {});
+                          }, 3000);
+                        }}
+                        className="btn-ghost p-1.5"
+                        title="Open System Settings → Microphone"
+                      >
+                        <ExternalLink size={13} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="card px-5">
               <SettingRow label="Microphone" description="Input device for recording">
                 <select
                   value={settings.audio_input_device ?? ""}
                   onChange={(e) => update({ audio_input_device: e.target.value || null })}
-                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none max-w-[160px]" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                  disabled={micAuthStatus === "denied"}
+                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none max-w-[160px]" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)", opacity: micAuthStatus === "denied" ? 0.4 : 1 }}
                   aria-label="Microphone device"
                 >
                   <option value="">Default</option>
