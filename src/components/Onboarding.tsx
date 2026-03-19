@@ -206,7 +206,7 @@ export default function Onboarding({ onComplete }: Props) {
           icon="🎙"
           label="Microphone"
           granted={micGranted}
-          onOpen={() => invoke("request_microphone_permission").catch(() => {})}
+          onOpen={() => invoke<boolean>("request_microphone_permission").then(setMicGranted).catch(() => {})}
         />
         <PermissionRow
           icon="♿"

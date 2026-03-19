@@ -717,7 +717,11 @@ pub async fn request_microphone_permission() -> Result<bool, String> {
     {
         // Use AVCaptureDevice.requestAccess — the proper macOS TCC path that shows
         // the system permission dialog and waits for the user's response.
-        return Ok(crate::macos::speech_analyzer::request_microphone_permission());
+        // spawn_blocking because the Swift shim uses DispatchSemaphore.wait() which
+        // would block the Tokio executor thread if called directly from async context.
+        return tauri::async_runtime::spawn_blocking(
+            crate::macos::speech_analyzer::request_microphone_permission
+        ).await.map_err(|e| e.to_string());
     }
     #[cfg(not(target_os = "macos"))]
     {
