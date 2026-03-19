@@ -27,6 +27,8 @@ models/
 .LSOverride
 Icon?
 ._*
+# Allow Tauri icons directory (Icon? above accidentally matches it on case-insensitive macOS)
+!src-tauri/icons/
 
 # Tauri
 src-tauri/WixTools/
