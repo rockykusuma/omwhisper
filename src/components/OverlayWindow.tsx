@@ -234,14 +234,7 @@ export default function OverlayWindow() {
     return () => { unlistenSettings.then((f) => f()); };
   }, []);
 
-  // Overlay is only shown when recording — start timer immediately on mount.
-  useEffect(() => {
-    startTimer();
-    return () => stopTimer();
-  }, []);
-
-  // Re-read style when recording starts (e.g. second session without hide/show)
-  // and stop timer on forced stop (usage limit, etc.)
+  // Timer lifecycle is driven entirely by recording-state events.
   useEffect(() => {
     const unlistenState = listen<boolean>("recording-state", (e) => {
       if (e.payload) {

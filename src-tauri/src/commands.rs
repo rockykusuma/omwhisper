@@ -672,6 +672,7 @@ pub async fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
             };
             let _ = win.set_position(tauri::PhysicalPosition { x, y });
         }
+        let _ = app.emit("recording-state", true);
         win.show().map_err(|e| e.to_string())?;
     }
     Ok(())
