@@ -22,6 +22,7 @@ getWindowLabel().then(label => {
   if (label === "overlay") {
     document.documentElement.style.cssText = "background: transparent !important; margin: 0; padding: 0;";
     document.body.style.cssText = "background: transparent !important; margin: 0; padding: 0; height: 100vh; overflow: hidden; display: flex; align-items: center; justify-content: center;";
+    root.style.cssText = "background: transparent !important; display: flex; align-items: center; justify-content: center;";
     ReactDOM.createRoot(root).render(<OverlayWindow />);
     return;
   }

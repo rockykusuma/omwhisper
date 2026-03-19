@@ -33,6 +33,7 @@
         "height": 100,
         "visible": false,
         "decorations": false,
+        "shadow": false,
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "resizable": false,
