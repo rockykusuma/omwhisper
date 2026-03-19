@@ -734,7 +734,6 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
               {[
                 { action: "Dictate in any app",    keys: ["⌘", "⇧", "V"], note: "Toggle recording" },
                 { action: "Smart Dictation",        keys: ["⌘", "⇧", "B"], note: "Record + AI polish" },
-                { action: "Open / close app",       keys: ["⌘", "⇧", "V"], note: "From menu bar" },
               ].map(({ action, keys, note }) => (
                 <div key={action} className="flex items-center justify-between py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
                   <div>
