@@ -9,6 +9,14 @@ TAURI_DIR="$PROJECT_ROOT/src-tauri"
 
 cd "$PROJECT_ROOT"
 
+# Load .env if present (picks up APPLE_SIGNING_IDENTITY and other build vars)
+if [ -f "$PROJECT_ROOT/.env" ]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$PROJECT_ROOT/.env"
+  set +a
+fi
+
 echo "╔════════════════════════════════════╗"
 echo "║     OmWhisper Release Builder      ║"
 echo "╚════════════════════════════════════╝"
