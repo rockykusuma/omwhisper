@@ -470,7 +470,7 @@ pub async fn capture_focused_app() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-pub async fn paste_transcription(text: String) -> Result<(), String> {
+pub async fn paste_transcription(text: String, app: AppHandle) -> Result<(), String> {
     let settings = crate::settings::load_settings().await;
 
     // Save previous clipboard before overwriting it
@@ -499,7 +499,11 @@ pub async fn paste_transcription(text: String) -> Result<(), String> {
                 .map_err(|e| e.to_string())?;
                 if let Err(e) = result {
                     tracing::error!("paste_to_app failed: {}", e);
-                    // Don't propagate — clipboard is already set, user can paste manually
+                    // If Accessibility permission is missing, notify the frontend
+                    #[cfg(target_os = "macos")]
+                    if !paste::has_accessibility_permission() {
+                        let _ = app.emit("accessibility-permission-missing", ());
+                    }
                 }
             } else {
                 tracing::info!("paste_transcription: skipping paste — app is OmWhisper");
