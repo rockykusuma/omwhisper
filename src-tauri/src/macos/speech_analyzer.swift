@@ -54,10 +54,13 @@ private func ensureAuthorized() -> Bool {
 @_cdecl("apple_speech_available")
 public func appleSpeechAvailable() -> Bool {
     guard hasSpeechUsageDescription() else { return false }
-    // Only report available if already authorized or not-yet-determined.
-    // Never trigger a TCC prompt here — that happens in apple_transcribe_buffer.
-    let status = SFSpeechRecognizer.authorizationStatus()
-    guard status != .denied && status != .restricted else { return false }
+    // Only report available when the user has already explicitly granted permission.
+    // Returning true for .notDetermined would cause "auto" engine selection to pick
+    // Apple Speech on first launch, then trigger the TCC dialog from a background
+    // thread during the first transcription — before the user has a chance to see
+    // or understand the prompt. New users fall through to Whisper instead, and can
+    // enable Apple Speech in Settings after granting the permission there.
+    guard SFSpeechRecognizer.authorizationStatus() == .authorized else { return false }
     guard let recognizer = SFSpeechRecognizer() else { return false }
     return recognizer.isAvailable
 }
