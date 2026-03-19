@@ -550,6 +550,19 @@ pub fn run() {
                 }
             })?;
 
+            // --- Global Shortcut: Cmd+Shift+O (Show Window) ---
+            let show_window_sc = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyO);
+            app.global_shortcut().on_shortcut(show_window_sc, move |app, _shortcut, event| {
+                if event.state != ShortcutState::Pressed { return; }
+                if let Some(win) = app.get_webview_window("main") {
+                    #[cfg(target_os = "macos")]
+                    activate_app_macos();
+                    center_on_primary_monitor(&win);
+                    let _ = win.show();
+                    let _ = win.set_focus();
+                }
+            })?;
+
             // Intercept the close button — hide instead of destroying the window
             // so "Show Window" from the tray always works.
             if let Some(win) = app.get_webview_window("main") {
@@ -740,6 +753,20 @@ pub fn run() {
             commands::open_feedback_url,
             commands::send_feedback,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // On macOS, clicking the Dock icon when no windows are visible should show the main window.
+            if let tauri::RunEvent::Reopen { has_visible_windows, .. } = event {
+                if !has_visible_windows {
+                    if let Some(win) = app.get_webview_window("main") {
+                        #[cfg(target_os = "macos")]
+                        activate_app_macos();
+                        center_on_primary_monitor(&win);
+                        let _ = win.show();
+                        let _ = win.set_focus();
+                    }
+                }
+            }
+        });
 }
