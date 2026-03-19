@@ -74,9 +74,11 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          # Enable i8mm and full M1 instruction set for whisper.cpp / whisper-rs
-          CFLAGS: "-mcpu=apple-m1"
-          CXXFLAGS: "-mcpu=apple-m1"
+          # Disable ggml native CPU detection — GitHub Actions M1 runners fail the
+          # cmake CheckCXXSourceRuns i8mm test even though hardware supports it.
+          # Without this, ggml enables MATMUL_INT8 but adds +noi8mm to compile flags,
+          # causing a conflict with always_inline vmmlaq_s32 intrinsics.
+          GGML_NATIVE: "OFF"
         run: npx @tauri-apps/cli build
 
       - name: Upload DMG artifact
