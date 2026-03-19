@@ -5,30 +5,18 @@ interface Props {
   onComplete: () => void;
 }
 
-function OmLogo({ size = 64 }: { size?: number }) {
-  return (
-    <svg viewBox="0 0 120 120" width={size} height={size}>
-      <defs>
-        <linearGradient id="onbGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#6ee7b7" />
-          <stop offset="50%" stopColor="#34d399" />
-          <stop offset="100%" stopColor="#2dd4bf" />
-        </linearGradient>
-      </defs>
-      <circle cx="60" cy="60" r="56" fill="none" stroke="url(#onbGrad)" strokeWidth="1.5" opacity="0.3" />
-      <text x="60" y="60" textAnchor="middle" dominantBaseline="central"
-        fill="url(#onbGrad)" style={{ fontSize: "72px", fontFamily: "serif" }}>ॐ</text>
-    </svg>
-  );
-}
-
 function StepDots({ current, total }: { current: number; total: number }) {
   return (
-    <div className="flex gap-1.5 justify-center mt-8">
+    <div className="flex gap-1.5 justify-center" style={{ position: "absolute", bottom: 22 }}>
       {Array.from({ length: total }).map((_, i) => (
-        <div key={i} className={`rounded-full transition-all duration-300 ${
-          i === current ? "w-4 h-1.5 bg-emerald-400" : "w-1.5 h-1.5 bg-white/20"
-        }`} />
+        <div key={i} style={{
+          height: 5,
+          borderRadius: 99,
+          transition: "all 0.3s",
+          width: i === current ? 20 : 5,
+          background: i === current ? "#34d399" : "rgba(255,255,255,0.15)",
+          boxShadow: i === current ? "0 0 8px rgba(52,211,153,0.5)" : "none",
+        }} />
       ))}
     </div>
   );
@@ -43,14 +31,25 @@ function PermissionRow({
   onOpen: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 w-full px-4 py-3 rounded-xl"
-      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
-      <div className="flex items-center gap-3">
-        <span className="text-xl">{icon}</span>
-        <div className="text-left">
-          <p className="text-sm text-white/80" style={{ fontFamily: "'DM Sans', sans-serif" }}>{label}</p>
-          <p className="text-[11px] mt-0.5" style={{
-            fontFamily: "'DM Mono', monospace",
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      padding: "13px 16px", borderRadius: 14, width: "100%",
+      background: "#090e0c",
+      boxShadow: "inset -3px -3px 7px rgba(255,255,255,0.03), inset 3px 3px 7px rgba(0,0,0,0.5)",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{
+          width: 36, height: 36, borderRadius: 10,
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
+          background: "#0c1410",
+          boxShadow: "-3px -3px 6px rgba(255,255,255,0.04), 3px 3px 6px rgba(0,0,0,0.5)",
+        }}>{icon}</div>
+        <div>
+          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", fontWeight: 500, fontFamily: "'DM Sans', sans-serif" }}>
+            {label}
+          </p>
+          <p style={{
+            fontSize: 11, marginTop: 2, fontFamily: "'DM Mono', monospace",
             color: granted === null ? "rgba(255,255,255,0.3)" : granted ? "#34d399" : "#f87171",
           }}>
             {granted === null ? "Checking…" : granted ? "✓ Granted" : "✗ Not granted"}
@@ -58,19 +57,31 @@ function PermissionRow({
         </div>
       </div>
       {granted === false && (
-        <button
-          onClick={onOpen}
-          className="text-xs px-3 py-1.5 rounded-lg cursor-pointer transition-all"
-          style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.6)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.13)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
-        >
-          Fix →
-        </button>
+        <button onClick={onOpen} style={{
+          fontSize: 12, padding: "6px 14px", borderRadius: 8,
+          border: "none", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontWeight: 500,
+          color: "rgba(255,255,255,0.55)", background: "#0c1410",
+          boxShadow: "-2px -2px 5px rgba(255,255,255,0.04), 2px 2px 5px rgba(0,0,0,0.5)",
+        }}>Fix →</button>
       )}
     </div>
   );
 }
+
+const neuBtn: React.CSSProperties = {
+  background: "linear-gradient(135deg, #2ecc8f 0%, #34d399 60%, #2dd4bf 100%)",
+  color: "#020706",
+  fontWeight: 700,
+  fontSize: 14,
+  border: "none",
+  borderRadius: 14,
+  padding: "14px 40px",
+  cursor: "pointer",
+  fontFamily: "'DM Sans', sans-serif",
+  letterSpacing: "0.01em",
+  boxShadow: "-3px -3px 8px rgba(255,255,255,0.06), 3px 3px 8px rgba(0,0,0,0.55), 0 0 24px rgba(52,211,153,0.25)",
+  transition: "all 0.2s ease",
+};
 
 export default function Onboarding({ onComplete }: Props) {
   const [step, setStep] = useState(0);
@@ -84,14 +95,12 @@ export default function Onboarding({ onComplete }: Props) {
     invoke<string>("get_platform").then(setPlatform).catch(() => {});
   }, []);
 
-  // Check both permissions when step 1 is active
   useEffect(() => {
     if (step !== 1) return;
     invoke<boolean>("check_microphone_permission").then(setMicGranted).catch(() => {});
     invoke<boolean>("check_accessibility_permission").then(setAccessibilityGranted).catch(() => {});
   }, [step]);
 
-  // Auto-advance when both are granted
   useEffect(() => {
     if (micGranted === true && accessibilityGranted === true) {
       setTimeout(() => setStep(2), 800);
@@ -103,134 +112,101 @@ export default function Onboarding({ onComplete }: Props) {
     onComplete();
   }
 
-  const cardClass = "flex flex-col items-center text-center max-w-md mx-auto px-8 py-12";
+  const screenStyle: React.CSSProperties = {
+    width: "100%", maxWidth: 440,
+    display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center",
+    padding: "48px 48px 60px",
+    position: "relative",
+  };
 
-  // Step 0 — Welcome
+  // ── Step 0 — Welcome ──────────────────────────────────────────────────────
   const step0 = (
-    <div className="flex flex-col items-center text-center max-w-md mx-auto px-8 py-12">
+    <div style={screenStyle}>
       <style>{`
-        @keyframes onb-breathe {
-          0%, 100% { transform: scale(1);    opacity: 1;   }
-          50%       { transform: scale(1.07); opacity: 0.85; }
-        }
-        @keyframes onb-ring1 {
-          0%   { transform: scale(1);    opacity: 0.15; }
-          50%  { transform: scale(1.18); opacity: 0;    }
-          100% { transform: scale(1);    opacity: 0.15; }
-        }
-        @keyframes onb-ring2 {
-          0%   { transform: scale(1);    opacity: 0.08; }
-          50%  { transform: scale(1.32); opacity: 0;    }
-          100% { transform: scale(1);    opacity: 0.08; }
-        }
-        @keyframes onb-spin {
-          from { transform: rotate(0deg);   }
-          to   { transform: rotate(360deg); }
+        @keyframes onb-breathe-glow {
+          0%,100% { box-shadow: -8px -8px 20px rgba(255,255,255,0.04), 8px 8px 20px rgba(0,0,0,0.65), 0 0 30px rgba(52,211,153,0.06); }
+          50%      { box-shadow: -8px -8px 20px rgba(255,255,255,0.04), 8px 8px 20px rgba(0,0,0,0.65), 0 0 52px rgba(52,211,153,0.18); }
         }
         @keyframes onb-fade-up {
-          from { opacity: 0; transform: translateY(16px); }
-          to   { opacity: 1; transform: translateY(0);    }
-        }
-        @keyframes onb-glow {
-          0%, 100% { opacity: 0.4; }
-          50%      { opacity: 0.9; }
+          from { opacity: 0; transform: translateY(14px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
 
-      {/* Logo with ambient rings */}
-      <div className="relative flex items-center justify-center mb-8" style={{ width: 160, height: 160 }}>
-        {/* Outer ripple rings */}
-        <div className="absolute inset-0 rounded-full"
-          style={{ background: "radial-gradient(circle, rgba(52,211,153,0.15) 0%, transparent 70%)", animation: "onb-ring1 3s ease-in-out infinite" }} />
-        <div className="absolute inset-0 rounded-full"
-          style={{ background: "radial-gradient(circle, rgba(52,211,153,0.08) 0%, transparent 70%)", animation: "onb-ring2 3s ease-in-out 0.8s infinite" }} />
-
-        {/* Spinning dashed orbit */}
-        <svg className="absolute inset-0" width="160" height="160" viewBox="0 0 160 160"
-          style={{ animation: "onb-spin 18s linear infinite" }}>
-          <circle cx="80" cy="80" r="72" fill="none"
-            stroke="url(#orbitGrad)" strokeWidth="0.75"
-            strokeDasharray="6 10" opacity="0.35" />
-          <defs>
-            <linearGradient id="orbitGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#6ee7b7" />
-              <stop offset="100%" stopColor="#2dd4bf" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-        </svg>
-
-        {/* Glowing backdrop circle */}
-        <div className="absolute rounded-full"
-          style={{ width: 100, height: 100, background: "radial-gradient(circle, rgba(52,211,153,0.12) 0%, transparent 70%)", animation: "onb-glow 2.5s ease-in-out infinite" }} />
-
-        {/* Om symbol */}
-        <div style={{ animation: "onb-breathe 3.5s ease-in-out infinite" }}>
-          <svg viewBox="0 0 120 120" width={96} height={96}>
-            <defs>
-              <linearGradient id="onbGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#6ee7b7" />
-                <stop offset="50%" stopColor="#34d399" />
-                <stop offset="100%" stopColor="#2dd4bf" />
-              </linearGradient>
-              <filter id="omGlow">
-                <feGaussianBlur stdDeviation="3" result="blur" />
-                <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-              </filter>
-            </defs>
-            <text x="60" y="62" textAnchor="middle" dominantBaseline="central"
-              fill="url(#onbGrad2)" filter="url(#omGlow)"
-              style={{ fontSize: "78px", fontFamily: "serif" }}>ॐ</text>
-          </svg>
-        </div>
+      {/* App icon in neumorphic orb */}
+      <div style={{
+        width: 148, height: 148, borderRadius: "50%",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        marginBottom: 32,
+        background: "#0c1410",
+        animation: "onb-breathe-glow 3.5s ease-in-out infinite",
+      }}>
+        <img
+          src="/app-icon.png"
+          alt="OmWhisper"
+          style={{ width: 92, height: 92, borderRadius: 22, filter: "drop-shadow(0 0 14px rgba(52,211,153,0.28))" }}
+        />
       </div>
 
-      {/* Title */}
-      <h1
-        className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 to-teal-400 mb-3"
-        style={{ fontFamily: "'DM Sans', sans-serif", animation: "onb-fade-up 0.7s ease-out 0.1s both" }}
-      >
-        OmWhisper
-      </h1>
+      <h1 style={{
+        fontSize: 30, fontWeight: 700, letterSpacing: "-0.02em",
+        background: "linear-gradient(135deg, #6ee7b7 0%, #34d399 50%, #2dd4bf 100%)",
+        WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+        backgroundClip: "text",
+        marginBottom: 10,
+        fontFamily: "'DM Sans', sans-serif",
+        animation: "onb-fade-up 0.6s ease-out 0.1s both",
+      }}>OmWhisper</h1>
 
-      {/* Tagline */}
-      <p className="text-white/45 text-base leading-relaxed mb-2"
-        style={{ fontFamily: "'DM Sans', sans-serif", animation: "onb-fade-up 0.7s ease-out 0.25s both" }}>
-        Real-time, on-device speech transcription.
-      </p>
-      <p className="text-white/25 text-sm mb-10"
-        style={{ fontFamily: "'DM Sans', sans-serif", animation: "onb-fade-up 0.7s ease-out 0.35s both" }}>
-        Your voice. Your device. Your privacy.
-      </p>
+      <p style={{
+        fontSize: 14, color: "rgba(255,255,255,0.42)", lineHeight: 1.6,
+        marginBottom: 5, fontFamily: "'DM Sans', sans-serif",
+        animation: "onb-fade-up 0.6s ease-out 0.22s both",
+      }}>Real-time, on-device speech transcription.</p>
 
-      {/* CTA */}
-      <div style={{ animation: "onb-fade-up 0.7s ease-out 0.5s both" }}>
-        <button onClick={() => setStep(1)}
-          className="px-10 py-3.5 rounded-xl bg-emerald-500 text-black font-semibold hover:bg-emerald-400 transition-all duration-300 hover:-translate-y-0.5 cursor-pointer"
-          style={{ fontFamily: "'DM Sans', sans-serif", boxShadow: "0 0 24px rgba(52,211,153,0.25)" }}>
-          Get Started
-        </button>
+      <p style={{
+        fontSize: 12, color: "rgba(255,255,255,0.22)", marginBottom: 36,
+        fontFamily: "'DM Sans', sans-serif",
+        animation: "onb-fade-up 0.6s ease-out 0.34s both",
+      }}>Your voice. Your device. Your privacy.</p>
+
+      <div style={{ animation: "onb-fade-up 0.6s ease-out 0.46s both" }}>
+        <button
+          style={neuBtn}
+          onMouseEnter={e => (e.currentTarget.style.boxShadow = "-3px -3px 8px rgba(255,255,255,0.06), 3px 3px 8px rgba(0,0,0,0.55), 0 0 40px rgba(52,211,153,0.42)")}
+          onMouseLeave={e => (e.currentTarget.style.boxShadow = "-3px -3px 8px rgba(255,255,255,0.06), 3px 3px 8px rgba(0,0,0,0.55), 0 0 24px rgba(52,211,153,0.25)")}
+          onClick={() => setStep(1)}
+        >Get Started</button>
       </div>
     </div>
   );
 
-  // Step 1 — Permissions
+  // ── Step 1 — Permissions ──────────────────────────────────────────────────
   const bothGranted = micGranted === true && accessibilityGranted === true;
   const step1 = (
-    <div className={cardClass}>
-      <div className="text-5xl mb-6">🔐</div>
-      <h2 className="text-2xl font-bold text-white mb-3" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+    <div style={screenStyle}>
+      {/* Header icon */}
+      <div style={{
+        width: 68, height: 68, borderRadius: "50%",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 26, marginBottom: 18,
+        background: "#0c1410",
+        boxShadow: "-5px -5px 12px rgba(255,255,255,0.04), 5px 5px 12px rgba(0,0,0,0.55)",
+      }}>🔐</div>
+
+      <h2 style={{ fontSize: 21, fontWeight: 700, color: "rgba(255,255,255,0.88)", marginBottom: 7, fontFamily: "'DM Sans', sans-serif" }}>
         Permissions
       </h2>
-      <p className="text-white/50 text-sm leading-relaxed mb-8" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+      <p style={{ fontSize: 13, color: "rgba(255,255,255,0.38)", lineHeight: 1.5, marginBottom: 26, fontFamily: "'DM Sans', sans-serif" }}>
         OmWhisper needs two permissions to work properly.
       </p>
 
-      <div className="w-full space-y-3 mb-8">
+      <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
         <PermissionRow
           icon="🎙"
           label="Microphone"
           granted={micGranted}
-          onOpen={() => invoke("open_accessibility_settings").catch(() => {})}
+          onOpen={() => invoke("request_microphone_permission").catch(() => {})}
         />
         <PermissionRow
           icon="♿"
@@ -244,61 +220,96 @@ export default function Onboarding({ onComplete }: Props) {
       </div>
 
       {bothGranted && (
-        <div className="flex items-center gap-2 text-emerald-400 text-sm mb-4" style={{ fontFamily: "'DM Mono', monospace" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#34d399", fontSize: 13, fontFamily: "'DM Mono', monospace" }}>
           <span>✓</span><span>All permissions granted</span>
         </div>
       )}
 
       {!bothGranted && (micGranted !== null || accessibilityGranted !== null) && (
-        <button onClick={() => setStep(2)}
-          className="text-white/30 text-xs hover:text-white/50 transition-colors cursor-pointer"
-          style={{ fontFamily: "'DM Sans', sans-serif" }}>
-          Continue anyway →
-        </button>
+        <button onClick={() => setStep(2)} style={{
+          background: "none", border: "none", cursor: "pointer",
+          fontSize: 12, color: "rgba(255,255,255,0.22)", fontFamily: "'DM Sans', sans-serif",
+          marginTop: bothGranted ? 8 : 0,
+        }}>Continue anyway →</button>
       )}
     </div>
   );
 
-  // Step 2 — All Set
+  // ── Step 2 — All Set ──────────────────────────────────────────────────────
   const step2 = (
-    <div className={cardClass}>
-      <OmLogo size={64} />
-      <h2 className="text-2xl font-bold text-white mt-6 mb-3" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-        You're All Set!
-      </h2>
-      <p className="text-white/50 text-sm leading-relaxed mb-6" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-        {platform === "windows" ? "OmWhisper lives in your system tray." : "OmWhisper lives in your menu bar."} Use the global hotkey to start transcribing from anywhere.
-      </p>
-
-      <div className="w-full rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4 mb-4">
-        <div className="flex items-center justify-between">
-          <span className="text-white/60 text-sm" style={{ fontFamily: "'DM Sans', sans-serif" }}>Global Hotkey</span>
-          <kbd className="px-3 py-1 rounded-lg bg-white/[0.08] text-white text-sm" style={{ fontFamily: "'DM Mono', monospace" }}>
-            {platform === "windows" ? "Ctrl Shift V" : "⌘ Shift V"}
-          </kbd>
-        </div>
+    <div style={screenStyle}>
+      <div style={{
+        width: 104, height: 104, borderRadius: "50%",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        marginBottom: 22,
+        background: "#0c1410",
+        boxShadow: "-6px -6px 15px rgba(255,255,255,0.04), 6px 6px 15px rgba(0,0,0,0.6), 0 0 28px rgba(52,211,153,0.09)",
+      }}>
+        <img
+          src="/app-icon.png"
+          alt="OmWhisper"
+          style={{ width: 64, height: 64, borderRadius: 16, filter: "drop-shadow(0 0 8px rgba(52,211,153,0.2))" }}
+        />
       </div>
 
-      <p className="text-white/35 text-xs mb-8" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-        Pick a transcription model in AI Models after launch.
+      <h2 style={{ fontSize: 21, fontWeight: 700, color: "rgba(255,255,255,0.88)", marginBottom: 7, fontFamily: "'DM Sans', sans-serif" }}>
+        You're All Set!
+      </h2>
+      <p style={{ fontSize: 13, color: "rgba(255,255,255,0.38)", lineHeight: 1.5, marginBottom: 22, fontFamily: "'DM Sans', sans-serif" }}>
+        {platform === "windows" ? "OmWhisper lives in your system tray." : "OmWhisper lives in your menu bar."}{" "}
+        Use the global hotkey to transcribe from anywhere.
       </p>
 
-      <button onClick={handleFinish}
-        className="px-10 py-3.5 rounded-xl bg-emerald-500 text-black font-bold hover:bg-emerald-400 transition-all duration-300 hover:-translate-y-0.5 cursor-pointer"
-        style={{ fontFamily: "'DM Sans', sans-serif" }}>
-        Start Using OmWhisper
-      </button>
+      {/* Hotkey row — inset neumorphic */}
+      <div style={{
+        width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "14px 18px", borderRadius: 14, marginBottom: 16,
+        background: "#090e0c",
+        boxShadow: "inset -3px -3px 7px rgba(255,255,255,0.03), inset 3px 3px 7px rgba(0,0,0,0.5)",
+      }}>
+        <span style={{ fontSize: 13, color: "rgba(255,255,255,0.48)", fontFamily: "'DM Sans', sans-serif" }}>Global Hotkey</span>
+        <span style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 13, color: "rgba(255,255,255,0.72)",
+          padding: "5px 12px", borderRadius: 8,
+          background: "#0c1410",
+          boxShadow: "-2px -2px 5px rgba(255,255,255,0.04), 2px 2px 5px rgba(0,0,0,0.5)",
+        }}>
+          {platform === "windows" ? "Ctrl Shift V" : "⌘ Shift V"}
+        </span>
+      </div>
+
+      <p style={{ fontSize: 12, color: "rgba(255,255,255,0.24)", marginBottom: 6, fontFamily: "'DM Sans', sans-serif" }}>
+        tiny.en is ready · Explore AI Models to upgrade anytime
+      </p>
+      <p style={{ fontSize: 11, color: "rgba(255,255,255,0.16)", marginBottom: 26, fontFamily: "'DM Sans', sans-serif" }}>
+        If the hotkey conflicts with another app, change it in Settings → Shortcuts.
+      </p>
+
+      <button
+        style={neuBtn}
+        onMouseEnter={e => (e.currentTarget.style.boxShadow = "-3px -3px 8px rgba(255,255,255,0.06), 3px 3px 8px rgba(0,0,0,0.55), 0 0 40px rgba(52,211,153,0.42)")}
+        onMouseLeave={e => (e.currentTarget.style.boxShadow = "-3px -3px 8px rgba(255,255,255,0.06), 3px 3px 8px rgba(0,0,0,0.55), 0 0 24px rgba(52,211,153,0.25)")}
+        onClick={handleFinish}
+      >Start Using OmWhisper</button>
     </div>
   );
 
   const steps = [step0, step1, step2];
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center"
-      style={{ background: "linear-gradient(165deg, #0a0f0d 0%, #0d1a14 40%, #0a0f0d 100%)" }}>
-      <div className="fixed inset-0 pointer-events-none"
-        style={{ background: "radial-gradient(ellipse 600px 400px at 50% 20%, rgba(52,211,153,0.06) 0%, transparent 70%)" }} />
-      <div className="relative z-10 w-full">
+    <div style={{
+      minHeight: "100vh", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      background: "linear-gradient(165deg, #0a0f0d 0%, #0d1a14 40%, #0a0f0d 100%)",
+      position: "relative",
+    }}>
+      {/* Top ambient glow */}
+      <div style={{
+        position: "fixed", inset: 0, pointerEvents: "none",
+        background: "radial-gradient(ellipse 500px 300px at 50% 15%, rgba(52,211,153,0.055) 0%, transparent 70%)",
+      }} />
+
+      <div style={{ position: "relative", zIndex: 10, width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
         {steps[step]}
         <StepDots current={step} total={TOTAL_STEPS} />
       </div>
