@@ -1,8 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { Sparkles } from "lucide-react";
 import type { AppSettings } from "../types";
+
+function formatElapsed(secs: number): string {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return m > 0 ? `${m}:${String(s).padStart(2, "0")}` : `0:${String(s).padStart(2, "0")}`;
+}
 
 // ─── Micro pill (bars only, compact) ─────────────────────────────────────────
 // 5 bars, no text, 28px tall pill
@@ -14,7 +20,7 @@ const MICRO_BARS = [
   { anim: "tb3", dur: 0.85, delay: 0.30 },
 ];
 
-function MicroPill() {
+function MicroPill({ elapsed }: { elapsed: number }) {
   return (
     <>
       <style>{`
@@ -42,6 +48,14 @@ function MicroPill() {
             animation: `${b.anim} ${b.dur}s ease-in-out ${b.delay}s infinite`,
           }} />
         ))}
+        <span style={{
+          color: "rgba(29,158,117,0.85)",
+          fontSize: 10,
+          fontWeight: 600,
+          fontVariantNumeric: "tabular-nums",
+          marginLeft: 5,
+          letterSpacing: "0.3px",
+        }}>{formatElapsed(elapsed)}</span>
       </div>
     </>
   );
@@ -59,7 +73,7 @@ const WAVEFORM_BARS = [
   { anim: "wf1", dur: 1.15, delay: 0.35 },
 ];
 
-function WaveformPill() {
+function WaveformPill({ elapsed }: { elapsed: number }) {
   return (
     <>
       <style>{`
@@ -93,16 +107,25 @@ function WaveformPill() {
           ))}
         </div>
 
-        {/* Label */}
-        <span style={{
-          color: "rgba(255,255,255,0.7)",
-          fontSize: 13,
-          fontWeight: 500,
-          letterSpacing: "0.5px",
-          whiteSpace: "nowrap",
-        }}>
-          Listening
-        </span>
+        {/* Label + timer */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
+          <span style={{
+            color: "rgba(255,255,255,0.7)",
+            fontSize: 13,
+            fontWeight: 500,
+            letterSpacing: "0.5px",
+            whiteSpace: "nowrap",
+          }}>
+            Listening
+          </span>
+          <span style={{
+            color: "rgba(29,158,117,0.8)",
+            fontSize: 11,
+            fontWeight: 600,
+            fontVariantNumeric: "tabular-nums",
+            letterSpacing: "0.3px",
+          }}>{formatElapsed(elapsed)}</span>
+        </div>
 
         {/* Red dot */}
         <div style={{
@@ -183,6 +206,18 @@ export default function OverlayWindow() {
   const [overlayStyle, setOverlayStyle] = useState<string>("micro");
   const [applyPolishRegular, setApplyPolishRegular] = useState(false);
   const [isPolishing, setIsPolishing] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startTimer = () => {
+    setElapsed(0);
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+  };
+
+  const stopTimer = () => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  };
 
   // Load current setting on mount, re-sync when settings change
   useEffect(() => {
@@ -199,17 +234,27 @@ export default function OverlayWindow() {
     return () => { unlistenSettings.then((f) => f()); };
   }, []);
 
-  // Re-read style when recording starts
+  // Overlay is only shown when recording — start timer immediately on mount.
+  useEffect(() => {
+    startTimer();
+    return () => stopTimer();
+  }, []);
+
+  // Re-read style when recording starts (e.g. second session without hide/show)
+  // and stop timer on forced stop (usage limit, etc.)
   useEffect(() => {
     const unlistenState = listen<boolean>("recording-state", (e) => {
       if (e.payload) {
         setIsPolishing(false);
+        startTimer();
         invoke<AppSettings>("get_settings")
           .then((s) => {
             setOverlayStyle(s.overlay_style ?? "micro");
             setApplyPolishRegular(s.apply_polish_to_regular ?? false);
           })
           .catch(() => {});
+      } else {
+        stopTimer();
       }
     });
     return () => { unlistenState.then((f) => f()); };
@@ -229,7 +274,7 @@ export default function OverlayWindow() {
         <PolishingPill large={overlayStyle === "waveform"} />
       ) : (
         <>
-          {overlayStyle === "waveform" ? <WaveformPill /> : <MicroPill />}
+          {overlayStyle === "waveform" ? <WaveformPill elapsed={elapsed} /> : <MicroPill elapsed={elapsed} />}
           {applyPolishRegular && (
             <div style={{
               display: "flex",
