@@ -574,11 +574,17 @@ pub fn run() {
             app.global_shortcut().on_shortcut(show_window_sc, move |app, _shortcut, event| {
                 if event.state != ShortcutState::Pressed { return; }
                 if let Some(win) = app.get_webview_window("main") {
-                    #[cfg(target_os = "macos")]
-                    activate_app_macos();
-                    center_on_primary_monitor(&win);
-                    let _ = win.show();
-                    let _ = win.set_focus();
+                    let visible = win.is_visible().unwrap_or(false);
+                    let focused = win.is_focused().unwrap_or(false);
+                    if visible && focused {
+                        let _ = win.hide();
+                    } else {
+                        #[cfg(target_os = "macos")]
+                        activate_app_macos();
+                        center_on_primary_monitor(&win);
+                        let _ = win.show();
+                        let _ = win.set_focus();
+                    }
                 }
             })?;
 
