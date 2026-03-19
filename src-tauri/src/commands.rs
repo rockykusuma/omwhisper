@@ -642,18 +642,21 @@ pub async fn hide_overlay(app: tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn request_microphone_permission() -> Result<bool, String> {
-    // On macOS, mic permission is requested when cpal tries to open input device.
-    // We do a quick test open to trigger the permission dialog.
-    use cpal::traits::{DeviceTrait, HostTrait};
-    let host = cpal::default_host();
-    match host.default_input_device() {
-        Some(device) => {
-            match device.default_input_config() {
-                Ok(_) => Ok(true),
-                Err(_) => Ok(false),
-            }
+    #[cfg(target_os = "macos")]
+    {
+        // Use AVCaptureDevice.requestAccess — the proper macOS TCC path that shows
+        // the system permission dialog and waits for the user's response.
+        return Ok(crate::macos::speech_analyzer::request_microphone_permission());
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        // On Windows, cpal opens the mic without a permission dialog.
+        use cpal::traits::{DeviceTrait, HostTrait};
+        let host = cpal::default_host();
+        match host.default_input_device() {
+            Some(device) => Ok(device.default_input_config().is_ok()),
+            None => Ok(false),
         }
-        None => Ok(false),
     }
 }
 

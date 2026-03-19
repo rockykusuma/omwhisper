@@ -46,6 +46,33 @@ private func ensureAuthorized() -> Bool {
     }
 }
 
+// MARK: - Microphone permission
+
+/// Requests microphone access via AVCaptureDevice (the proper macOS TCC path).
+/// Blocks the calling thread until the user responds.
+/// Returns true if granted, false if denied or restricted.
+@_cdecl("request_microphone_permission")
+public func requestMicrophonePermission() -> Bool {
+    let status = AVCaptureDevice.authorizationStatus(for: .audio)
+    switch status {
+    case .authorized:
+        return true
+    case .notDetermined:
+        let sema = DispatchSemaphore(value: 0)
+        var granted = false
+        AVCaptureDevice.requestAccess(for: .audio) { result in
+            granted = result
+            sema.signal()
+        }
+        sema.wait()
+        return granted
+    case .denied, .restricted:
+        return false
+    @unknown default:
+        return false
+    }
+}
+
 // MARK: - C-compatible exports
 
 /// Returns true when Apple on-device speech recognition is available.
