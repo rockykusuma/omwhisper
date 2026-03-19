@@ -283,13 +283,19 @@ export default function Onboarding({ onComplete }: Props) {
         </div>
       )}
 
-      {liveSegments.length > 0 && (
+      {liveSegments.length > 0 && !isRecording && (
         <button onClick={() => setStep(4)}
           className="mt-6 px-8 py-3 rounded-xl bg-emerald-500 text-black font-semibold hover:bg-emerald-400 transition-all duration-300 cursor-pointer"
           style={{ fontFamily: "'DM Sans', sans-serif" }}>
           Looks Good! →
         </button>
       )}
+
+      <button onClick={() => setStep(4)}
+        className="mt-4 text-white/30 text-xs hover:text-white/50 transition-colors cursor-pointer"
+        style={{ fontFamily: "'DM Sans', sans-serif" }}>
+        Skip for now
+      </button>
     </div>
   );
 
