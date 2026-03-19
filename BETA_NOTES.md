@@ -6,13 +6,10 @@ Thanks for testing OmWhisper! This document covers what to expect, known issues,
 
 ## Setup (2 minutes)
 
-1. **Download** `OmWhisper_0.1.0-beta.1_x64.dmg` from the link you received
+1. **Download** `OmWhisper_0.1.0-beta.1_aarch64.dmg` from the link you received
 2. Open the DMG and drag OmWhisper to your **Applications** folder
-3. Launch from **Applications** (not from the DMG)
-4. First launch: right-click → **Open** to bypass the Gatekeeper warning (app is unsigned for beta)
-5. Complete the onboarding — grant microphone access and download the `tiny.en` model (~77 MB)
-
-> See `BETA_INSTALL.md` for detailed installation steps with screenshots.
+3. Launch OmWhisper from **Applications**
+4. Complete the onboarding — grant microphone access and download the `tiny.en` model (~77 MB)
 
 ---
 
@@ -41,7 +38,6 @@ All features are fully unlocked for beta testers:
 
 ## Known Issues
 
-- **App is unsigned** — you must right-click → Open on first launch (Gatekeeper warning)
 - **ॐ icon may appear as a square** on some macOS versions — working on it
 - **Whisper may hallucinate** on silence (e.g., "Thank you for watching.") — VAD filtering is in place but not perfect
 - **Long pauses mid-sentence** may cause the segment to be committed early
@@ -93,7 +89,6 @@ Try each of these and note any issues:
 
 ## Roadmap (what's coming)
 
-- Code signing (no more Gatekeeper warning)
 - Windows support
 - Speaker detection for meetings
 - Improved VAD to eliminate silence hallucinations

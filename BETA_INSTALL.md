@@ -12,17 +12,9 @@ Double-click the `OmWhisper_0.1.0-beta.1_x64.dmg` file you downloaded.
 
 In the window that opens, drag **OmWhisper** into the **Applications** folder.
 
-## Step 3 — Open with Right-Click (Important)
+## Step 3 — Open OmWhisper
 
-macOS will block the app if you double-click it the first time. Instead:
-
-1. Open **Finder** → **Applications**
-2. Find **OmWhisper**
-3. **Right-click** (or Control-click) on it
-4. Select **Open** from the menu
-5. Click **Open** on the warning dialog
-
-> You only need to do this once. After the first launch, double-clicking works normally.
+Double-click **OmWhisper** in your Applications folder to launch it.
 
 ---
 
