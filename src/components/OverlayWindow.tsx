@@ -34,11 +34,14 @@ function MicroPill({ elapsed }: { elapsed: number }) {
         display: "flex",
         alignItems: "center",
         gap: 3,
-        background: "rgba(29,158,117,0.12)",
-        border: "0.5px solid rgba(29,158,117,0.3)",
+        background: "rgba(10, 16, 13, 0.88)",
+        backdropFilter: "blur(14px) saturate(180%)",
+        WebkitBackdropFilter: "blur(14px) saturate(180%)",
+        border: "0.5px solid rgba(29,158,117,0.45)",
         borderRadius: 14,
         padding: "6px 10px",
         height: 28,
+        boxShadow: "0 2px 12px rgba(0,0,0,0.35)",
       }}>
         {MICRO_BARS.map((b, i) => (
           <div key={i} style={{
@@ -87,13 +90,16 @@ function WaveformPill({ elapsed }: { elapsed: number }) {
         }
       `}</style>
       <div style={{
-        background: "rgba(29,158,117,0.1)",
-        border: "1px solid rgba(29,158,117,0.25)",
+        background: "rgba(10, 16, 13, 0.88)",
+        backdropFilter: "blur(14px) saturate(180%)",
+        WebkitBackdropFilter: "blur(14px) saturate(180%)",
+        border: "1px solid rgba(29,158,117,0.4)",
         borderRadius: 28,
         padding: "16px 28px",
         display: "flex",
         alignItems: "center",
         gap: 14,
+        boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
       }}>
         {/* Equaliser bars */}
         <div style={{ display: "flex", alignItems: "center", gap: 4, height: 48 }}>
@@ -151,13 +157,16 @@ function PolishingPill({ large }: { large?: boolean }) {
           @keyframes sparkle-spin { 0% { opacity: 0.5; transform: scale(0.85) rotate(0deg); } 50% { opacity: 1; transform: scale(1.1) rotate(180deg); } 100% { opacity: 0.5; transform: scale(0.85) rotate(360deg); } }
         `}</style>
         <div style={{
-          background: "rgba(139,92,246,0.1)",
-          border: "1px solid rgba(139,92,246,0.25)",
+          background: "rgba(10, 8, 18, 0.88)",
+          backdropFilter: "blur(14px) saturate(180%)",
+          WebkitBackdropFilter: "blur(14px) saturate(180%)",
+          border: "1px solid rgba(139,92,246,0.4)",
           borderRadius: 28,
           padding: "16px 28px",
           display: "flex",
           alignItems: "center",
           gap: 14,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
         }}>
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.85)" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
             style={{ animation: "sparkle-spin 1.8s ease-in-out infinite", flexShrink: 0 }}>
@@ -186,9 +195,12 @@ function PolishingPill({ large }: { large?: boolean }) {
       `}</style>
       <div style={{
         display: "flex", alignItems: "center", gap: 6,
-        background: "rgba(139,92,246,0.12)",
-        border: "0.5px solid rgba(139,92,246,0.3)",
+        background: "rgba(10, 8, 18, 0.88)",
+        backdropFilter: "blur(14px) saturate(180%)",
+        WebkitBackdropFilter: "blur(14px) saturate(180%)",
+        border: "0.5px solid rgba(139,92,246,0.45)",
         borderRadius: 14, padding: "6px 10px", height: 28,
+        boxShadow: "0 2px 12px rgba(0,0,0,0.35)",
       }}>
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
           style={{ animation: "sparkle-pulse 1.2s ease-in-out infinite", flexShrink: 0 }}>
