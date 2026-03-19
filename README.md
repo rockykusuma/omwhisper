@@ -30,7 +30,10 @@ A fast, privacy-first voice transcription app for **macOS** and **Windows**. Pow
 
 ## Download
 
-**[→ Download from omwhisper.in](https://www.omwhisper.in)**
+| | Link |
+|--|------|
+| 🌐 Website | [omwhisper.in](https://www.omwhisper.in) |
+| 📦 GitHub Releases | [github.com/rockykusuma/omwhisper/releases](https://github.com/rockykusuma/omwhisper/releases) |
 
 - **macOS** — Download the `.dmg`, drag OmWhisper to Applications, and launch. The app ships with the `tiny.en` model — no initial download needed.
 - **Windows** — Coming soon
