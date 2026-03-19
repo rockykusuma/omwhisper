@@ -80,24 +80,27 @@ fn activate_app_macos() {
 
 /// Center the main window on the primary monitor before showing it.
 /// This ensures the app always appears on the main screen even when an extended monitor is connected.
+///
+/// NOTE: outer_size() returns (0,0) before the window has ever been rendered, so we
+/// never rely on it. Instead we use the configured logical dimensions from tauri.conf.json
+/// (780×560) and scale them to physical pixels using the monitor's DPI scale factor.
 fn center_on_primary_monitor(win: &tauri::WebviewWindow) {
+    // Logical window dimensions — must match tauri.conf.json main window config.
+    const WIN_W_LOGICAL: f64 = 780.0;
+    const WIN_H_LOGICAL: f64 = 560.0;
+
     if let Ok(Some(monitor)) = win.primary_monitor() {
-        let screen = monitor.size();
-        let origin = monitor.position();
-        // outer_size() returns (0,0) before the window has ever been rendered.
-        // Only use manual centering once the window has real dimensions; otherwise
-        // fall through to win.center() which handles the unrendered case correctly.
-        if let Ok(win_size) = win.outer_size() {
-            if win_size.width > 0 && win_size.height > 0 {
-                let x = origin.x + ((screen.width as i32 - win_size.width as i32) / 2);
-                let y = origin.y + ((screen.height as i32 - win_size.height as i32) / 2);
-                let _ = win.set_position(tauri::PhysicalPosition { x, y });
-                return;
-            }
-        }
+        let scale  = monitor.scale_factor();
+        let screen = monitor.size();    // physical pixels
+        let origin = monitor.position(); // physical top-left of this monitor
+
+        let win_w = (WIN_W_LOGICAL * scale) as i32;
+        let win_h = (WIN_H_LOGICAL * scale) as i32;
+
+        let x = origin.x + ((screen.width  as i32 - win_w) / 2);
+        let y = origin.y + ((screen.height as i32 - win_h) / 2);
+        let _ = win.set_position(tauri::PhysicalPosition { x, y });
     }
-    // Fallback: Tauri's built-in center works even before the window has been rendered.
-    let _ = win.center();
 }
 
 /// Ensure only one instance runs. Returns false if another instance is already running.
