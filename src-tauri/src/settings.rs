@@ -103,7 +103,7 @@ pub struct Settings {
     #[serde(default = "default_vad_engine")]
     pub vad_engine: String,
     /// Transcription engine preference: "auto" | "apple" | "whisper".
-    /// "auto" selects Apple Speech on macOS if available, else Whisper.
+    /// Defaults to "whisper" for reliability; "auto" selects Apple Speech on macOS if available.
     #[serde(default = "default_transcription_engine")]
     pub transcription_engine: String,
     /// Allow anonymous usage analytics via Aptabase. Default: true.
@@ -134,7 +134,7 @@ fn default_true() -> bool { true }
 fn default_sound_volume() -> f32 { 0.2 }
 fn default_llm_model_name() -> String { "qwen2.5-0.5b-instruct-q4_k_m.gguf".to_string() }
 fn default_vad_engine() -> String { "rms".to_string() }
-fn default_transcription_engine() -> String { "auto".to_string() }
+fn default_transcription_engine() -> String { "whisper".to_string() }
 
 fn default_log_level() -> String {
     "normal".to_string()

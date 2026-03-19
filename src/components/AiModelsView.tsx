@@ -108,10 +108,17 @@ function WhisperTab({ activeModel, onModelChange }: { activeModel: string; onMod
   }
 
   async function handleDelete(name: string) {
+    const downloadedCount = models.filter(m => m.is_downloaded).length;
+    if (downloadedCount <= 1) return; // always keep at least one model
     await invoke("delete_model", { name });
-    if (activeModel === name) onModelChange("tiny.en");
+    if (activeModel === name) {
+      const fallback = models.find(m => m.is_downloaded && m.name !== name);
+      if (fallback) onModelChange(fallback.name);
+    }
     loadModels();
   }
+
+  const downloadedCount = models.filter(m => m.is_downloaded).length;
 
   const recModel = recommendation?.recommended_model;
 
@@ -237,7 +244,13 @@ function WhisperTab({ activeModel, onModelChange }: { activeModel: string; onMod
                               <button onClick={() => onModelChange(model.name)} className="btn-primary text-xs px-3 py-1.5">Set Active</button>
                             )}
                             {!isActive && (
-                              <button onClick={() => handleDelete(model.name)} className="btn-ghost text-xs px-3 py-1.5" style={{ fontSize: 11 }}>Delete</button>
+                              <button
+                                onClick={() => handleDelete(model.name)}
+                                disabled={downloadedCount <= 1}
+                                className="btn-ghost text-xs px-3 py-1.5"
+                                style={{ fontSize: 11, opacity: downloadedCount <= 1 ? 0.35 : 1, cursor: downloadedCount <= 1 ? "not-allowed" : "pointer" }}
+                                title={downloadedCount <= 1 ? "At least one model must remain downloaded" : "Delete model"}
+                              >Delete</button>
                             )}
                           </>
                         ) : isDownloading ? (

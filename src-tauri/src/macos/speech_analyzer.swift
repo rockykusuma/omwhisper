@@ -46,7 +46,72 @@ private func ensureAuthorized() -> Bool {
     }
 }
 
+// MARK: - Microphone permission
+
+/// Checks microphone permission status WITHOUT requesting it.
+/// Returns true only if already authorized; false for denied, restricted, or not determined.
+@_cdecl("check_microphone_permission")
+public func checkMicrophonePermission() -> Bool {
+    return AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+}
+
+/// Requests microphone access via AVCaptureDevice (the proper macOS TCC path).
+/// Blocks the calling thread until the user responds.
+/// Returns true if granted, false if denied or restricted.
+@_cdecl("request_microphone_permission")
+public func requestMicrophonePermission() -> Bool {
+    let status = AVCaptureDevice.authorizationStatus(for: .audio)
+    switch status {
+    case .authorized:
+        return true
+    case .notDetermined:
+        let sema = DispatchSemaphore(value: 0)
+        var granted = false
+        AVCaptureDevice.requestAccess(for: .audio) { result in
+            granted = result
+            sema.signal()
+        }
+        sema.wait()
+        return granted
+    case .denied, .restricted:
+        return false
+    @unknown default:
+        return false
+    }
+}
+
 // MARK: - C-compatible exports
+
+/// Returns the current Speech Recognition authorization status as an integer.
+/// 0 = authorized, 1 = notDetermined (can request), 2 = denied/restricted
+@_cdecl("apple_speech_auth_status")
+public func appleSpeechAuthStatus() -> Int32 {
+    switch SFSpeechRecognizer.authorizationStatus() {
+    case .authorized:    return 0
+    case .notDetermined: return 1
+    case .denied, .restricted: return 2
+    @unknown default:    return 2
+    }
+}
+
+/// Requests Speech Recognition permission by showing the system dialog.
+/// Blocks the calling thread until the user responds.
+/// Returns true if granted.
+@_cdecl("request_speech_recognition_permission")
+public func requestSpeechRecognitionPermission() -> Bool {
+    guard hasSpeechUsageDescription() else { return false }
+    let status = SFSpeechRecognizer.authorizationStatus()
+    if status == .authorized { return true }
+    if status != .notDetermined { return false }
+    let sema = DispatchSemaphore(value: 0)
+    var granted = false
+    SFSpeechRecognizer.requestAuthorization { newStatus in
+        granted = newStatus == .authorized
+        sema.signal()
+    }
+    sema.wait()
+    return granted
+}
 
 /// Returns true when Apple on-device speech recognition is available.
 /// Does NOT request authorization — only checks the current status.

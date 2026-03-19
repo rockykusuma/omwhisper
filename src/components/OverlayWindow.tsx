@@ -118,11 +118,71 @@ function WaveformPill() {
   );
 }
 
+// ─── Polishing pill ───────────────────────────────────────────────────────────
+
+function PolishingPill({ large }: { large?: boolean }) {
+  if (large) {
+    return (
+      <>
+        <style>{`
+          @keyframes sparkle-spin { 0% { opacity: 0.5; transform: scale(0.85) rotate(0deg); } 50% { opacity: 1; transform: scale(1.1) rotate(180deg); } 100% { opacity: 0.5; transform: scale(0.85) rotate(360deg); } }
+        `}</style>
+        <div style={{
+          background: "rgba(139,92,246,0.1)",
+          border: "1px solid rgba(139,92,246,0.25)",
+          borderRadius: 28,
+          padding: "16px 28px",
+          display: "flex",
+          alignItems: "center",
+          gap: 14,
+        }}>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.85)" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
+            style={{ animation: "sparkle-spin 1.8s ease-in-out infinite", flexShrink: 0 }}>
+            <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/>
+          </svg>
+          <span style={{ color: "rgba(255,255,255,0.75)", fontSize: 13, fontWeight: 500, letterSpacing: "0.5px", whiteSpace: "nowrap" }}>
+            AI Polishing
+          </span>
+          <div style={{ display: "flex", gap: 3 }}>
+            {[0, 0.2, 0.4].map((delay, i) => (
+              <div key={i} style={{
+                width: 4, height: 4, borderRadius: "50%",
+                background: "rgba(167,139,250,0.7)",
+                animation: `breathe 1.2s ease-in-out ${delay}s infinite`,
+              }} />
+            ))}
+          </div>
+        </div>
+      </>
+    );
+  }
+  return (
+    <>
+      <style>{`
+        @keyframes sparkle-pulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
+      `}</style>
+      <div style={{
+        display: "flex", alignItems: "center", gap: 6,
+        background: "rgba(139,92,246,0.12)",
+        border: "0.5px solid rgba(139,92,246,0.3)",
+        borderRadius: 14, padding: "6px 10px", height: 28,
+      }}>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          style={{ animation: "sparkle-pulse 1.2s ease-in-out infinite", flexShrink: 0 }}>
+          <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/>
+        </svg>
+        <span style={{ color: "rgba(167,139,250,0.9)", fontSize: 11, fontWeight: 500, letterSpacing: "0.3px", whiteSpace: "nowrap" }}>AI Polishing…</span>
+      </div>
+    </>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function OverlayWindow() {
   const [overlayStyle, setOverlayStyle] = useState<string>("micro");
   const [applyPolishRegular, setApplyPolishRegular] = useState(false);
+  const [isPolishing, setIsPolishing] = useState(false);
 
   // Load current setting on mount, re-sync when settings change
   useEffect(() => {
@@ -139,12 +199,11 @@ export default function OverlayWindow() {
     return () => { unlistenSettings.then((f) => f()); };
   }, []);
 
-  // Hide overlay when recording stops; re-read style when recording starts
+  // Re-read style when recording starts
   useEffect(() => {
     const unlistenState = listen<boolean>("recording-state", (e) => {
-      if (!e.payload) {
-        invoke("hide_overlay").catch(() => {});
-      } else {
+      if (e.payload) {
+        setIsPolishing(false);
         invoke<AppSettings>("get_settings")
           .then((s) => {
             setOverlayStyle(s.overlay_style ?? "micro");
@@ -156,22 +215,36 @@ export default function OverlayWindow() {
     return () => { unlistenState.then((f) => f()); };
   }, []);
 
+  // Show polishing state when AI is processing
+  useEffect(() => {
+    const unlisten = listen<boolean>("polish-state", (e) => {
+      setIsPolishing(e.payload);
+    });
+    return () => { unlisten.then((f) => f()); };
+  }, []);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-      {overlayStyle === "waveform" ? <WaveformPill /> : <MicroPill />}
-      {applyPolishRegular && (
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 4,
-          background: "rgba(29,158,117,0.10)",
-          border: "0.5px solid rgba(29,158,117,0.25)",
-          borderRadius: 10,
-          padding: "3px 8px",
-        }}>
-          <Sparkles size={9} style={{ color: "#34d399" }} />
-          <span style={{ color: "#34d399", fontSize: 9, fontWeight: 500, letterSpacing: "0.4px" }}>AI Polish</span>
-        </div>
+      {isPolishing ? (
+        <PolishingPill large={overlayStyle === "waveform"} />
+      ) : (
+        <>
+          {overlayStyle === "waveform" ? <WaveformPill /> : <MicroPill />}
+          {applyPolishRegular && (
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              background: "rgba(29,158,117,0.10)",
+              border: "0.5px solid rgba(29,158,117,0.25)",
+              borderRadius: 10,
+              padding: "3px 8px",
+            }}>
+              <Sparkles size={9} style={{ color: "#34d399" }} />
+              <span style={{ color: "#34d399", fontSize: 9, fontWeight: 500, letterSpacing: "0.4px" }}>AI Polish</span>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

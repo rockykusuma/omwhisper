@@ -2,6 +2,10 @@ mod ffi {
     use std::os::raw::c_char;
     extern "C" {
         pub fn apple_speech_available() -> bool;
+        pub fn apple_speech_auth_status() -> i32;
+        pub fn request_speech_recognition_permission() -> bool;
+        pub fn check_microphone_permission() -> bool;
+        pub fn request_microphone_permission() -> bool;
         pub fn apple_transcribe_buffer(
             samples: *const f32,
             count: i32,
@@ -17,9 +21,36 @@ pub struct SpeechAnalyzerEngine;
 
 unsafe impl Send for SpeechAnalyzerEngine {}
 
+/// Check microphone permission status without requesting it.
+/// Returns true only if already authorized.
+pub fn check_microphone_permission() -> bool {
+    unsafe { ffi::check_microphone_permission() }
+}
+
+/// Request microphone permission via AVCaptureDevice (proper macOS TCC path).
+/// Blocks until the user responds to the system dialog.
+pub fn request_microphone_permission() -> bool {
+    unsafe { ffi::request_microphone_permission() }
+}
+
+/// Returns the current Speech Recognition auth status:
+/// "authorized" | "not_determined" | "denied"
+pub fn apple_speech_auth_status() -> &'static str {
+    match unsafe { ffi::apple_speech_auth_status() } {
+        0 => "authorized",
+        1 => "not_determined",
+        _ => "denied",
+    }
+}
+
+/// Request the Speech Recognition system permission dialog.
+/// Blocks until the user responds. Returns true if granted.
+pub fn request_speech_recognition_permission() -> bool {
+    unsafe { ffi::request_speech_recognition_permission() }
+}
+
 impl SpeechAnalyzerEngine {
-    /// Returns true only on macOS 26+ when the Apple speech API is usable.
-    /// On older macOS versions the Swift shim returns false immediately via #available.
+    /// Returns true when Apple Speech permission is authorized and a recognizer is available.
     pub fn is_available() -> bool {
         unsafe { ffi::apple_speech_available() }
     }

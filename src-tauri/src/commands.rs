@@ -470,7 +470,7 @@ pub async fn capture_focused_app() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-pub async fn paste_transcription(text: String) -> Result<(), String> {
+pub async fn paste_transcription(text: String, app: AppHandle) -> Result<(), String> {
     let settings = crate::settings::load_settings().await;
 
     // Save previous clipboard before overwriting it
@@ -499,7 +499,11 @@ pub async fn paste_transcription(text: String) -> Result<(), String> {
                 .map_err(|e| e.to_string())?;
                 if let Err(e) = result {
                     tracing::error!("paste_to_app failed: {}", e);
-                    // Don't propagate — clipboard is already set, user can paste manually
+                    // If Accessibility permission is missing, notify the frontend
+                    #[cfg(target_os = "macos")]
+                    if !paste::has_accessibility_permission() {
+                        let _ = app.emit("accessibility-permission-missing", ());
+                    }
                 }
             } else {
                 tracing::info!("paste_transcription: skipping paste — app is OmWhisper");
@@ -579,29 +583,71 @@ pub async fn complete_onboarding() -> Result<(), String> {
     Ok(())
 }
 
+/// On macOS, return the monitor that currently contains the mouse cursor.
+/// CoreGraphics is already linked via paste.rs so no new dependency is needed.
+/// The CG logical coordinate space matches Tauri's (physical / scale_factor)
+/// so the bounding-box test is straightforward.
+#[cfg(target_os = "macos")]
+fn monitor_for_cursor(app: &tauri::AppHandle) -> Option<tauri::Monitor> {
+    use std::os::raw::c_void;
+
+    #[repr(C)]
+    #[derive(Copy, Clone)]
+    struct CGPoint { x: f64, y: f64 }
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGEventCreate(source: *mut c_void) -> *mut c_void;
+        fn CGEventGetLocation(event: *mut c_void) -> CGPoint;
+    }
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFRelease(cf: *mut c_void);
+    }
+
+    let cursor = unsafe {
+        let event = CGEventCreate(std::ptr::null_mut());
+        if event.is_null() { return None; }
+        let pos = CGEventGetLocation(event);
+        CFRelease(event);
+        pos
+    };
+
+    // On macOS: CG logical coords == Tauri (physical / scale_factor)
+    // because winit derives physical positions from NSScreen.frame * backing_scale.
+    let monitors = app.available_monitors().ok()?;
+    monitors.into_iter().find(|m| {
+        let scale = m.scale_factor();
+        let lx = m.position().x as f64 / scale;
+        let ly = m.position().y as f64 / scale;
+        let lw = m.size().width  as f64 / scale;
+        let lh = m.size().height as f64 / scale;
+        cursor.x >= lx && cursor.x < lx + lw && cursor.y >= ly && cursor.y < ly + lh
+    }).or_else(|| app.primary_monitor().ok().flatten())
+}
+
 #[tauri::command]
 pub async fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
     use tauri::Manager;
     let settings = crate::settings::load_settings().await;
     if let Some(win) = app.get_webview_window("overlay") {
-        // The overlay window is hidden, so current_monitor() may return None.
-        // Fall back to the main window's monitor so positioning always works.
-        let monitor_opt = win.current_monitor().ok().flatten().or_else(|| {
-            app.get_webview_window("main")
-                .and_then(|m| m.current_monitor().ok().flatten())
-        });
+        // Use the monitor containing the mouse cursor — that is the screen
+        // the user is actively working on. Falls back to primary monitor.
+        #[cfg(target_os = "macos")]
+        let monitor_opt = monitor_for_cursor(&app);
+        #[cfg(not(target_os = "macos"))]
+        let monitor_opt = app.primary_monitor().ok().flatten();
 
         if let Some(monitor) = monitor_opt {
             let scale  = monitor.scale_factor();
             let screen = monitor.size();    // physical pixels
             let origin = monitor.position(); // physical top-left of this monitor
 
-            // Window logical dimensions → physical
-            let (win_w, win_h) = if settings.overlay_style == "waveform" {
-                ((280.0 * scale) as i32, (100.0 * scale) as i32)
-            } else {
-                ((110.0 * scale) as i32, (44.0 * scale) as i32)
-            };
+            // Use the actual window size for positioning so centering is always accurate.
+            // The window dimensions are fixed at 280×100 in tauri.conf.json.
+            let actual = win.outer_size().ok().unwrap_or(tauri::PhysicalSize { width: 280, height: 100 });
+            let win_w = actual.width as i32;
+            let win_h = actual.height as i32;
 
             // Logical-pixel margins → physical
             // top: just below the macOS menu bar (~24 logical px)
@@ -641,19 +687,51 @@ pub async fn hide_overlay(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub async fn show_main_window(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(win) = app.get_webview_window("main") {
+        win.show().map_err(|e| e.to_string())?;
+        win.set_focus().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn check_microphone_permission() -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    {
+        return Ok(crate::macos::speech_analyzer::check_microphone_permission());
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        // On Windows, assume granted if a default input device exists
+        use cpal::traits::{DeviceTrait, HostTrait};
+        let host = cpal::default_host();
+        Ok(host.default_input_device().map_or(false, |d| d.default_input_config().is_ok()))
+    }
+}
+
+#[tauri::command]
 pub async fn request_microphone_permission() -> Result<bool, String> {
-    // On macOS, mic permission is requested when cpal tries to open input device.
-    // We do a quick test open to trigger the permission dialog.
-    use cpal::traits::{DeviceTrait, HostTrait};
-    let host = cpal::default_host();
-    match host.default_input_device() {
-        Some(device) => {
-            match device.default_input_config() {
-                Ok(_) => Ok(true),
-                Err(_) => Ok(false),
-            }
+    #[cfg(target_os = "macos")]
+    {
+        // Use AVCaptureDevice.requestAccess — the proper macOS TCC path that shows
+        // the system permission dialog and waits for the user's response.
+        // spawn_blocking because the Swift shim uses DispatchSemaphore.wait() which
+        // would block the Tokio executor thread if called directly from async context.
+        return tauri::async_runtime::spawn_blocking(
+            crate::macos::speech_analyzer::request_microphone_permission
+        ).await.map_err(|e| e.to_string());
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        // On Windows, cpal opens the mic without a permission dialog.
+        use cpal::traits::{DeviceTrait, HostTrait};
+        let host = cpal::default_host();
+        match host.default_input_device() {
+            Some(device) => Ok(device.default_input_config().is_ok()),
+            None => Ok(false),
         }
-        None => Ok(false),
     }
 }
 
@@ -1231,6 +1309,32 @@ pub fn is_apple_speech_available() -> bool {
     #[cfg(target_os = "macos")]
     {
         return crate::macos::speech_analyzer::SpeechAnalyzerEngine::is_available();
+    }
+    #[cfg(not(target_os = "macos"))]
+    false
+}
+
+/// Returns the Speech Recognition authorization status: "authorized" | "not_determined" | "denied".
+/// On non-macOS always returns "denied".
+#[tauri::command]
+pub fn get_apple_speech_auth_status() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        return crate::macos::speech_analyzer::apple_speech_auth_status();
+    }
+    #[cfg(not(target_os = "macos"))]
+    "denied"
+}
+
+/// Shows the system Speech Recognition permission dialog (if not yet determined).
+/// Blocks until the user responds. Returns true if granted.
+#[tauri::command]
+pub async fn request_speech_recognition_permission() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        return tauri::async_runtime::spawn_blocking(
+            crate::macos::speech_analyzer::request_speech_recognition_permission
+        ).await.unwrap_or(false);
     }
     #[cfg(not(target_os = "macos"))]
     false

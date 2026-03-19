@@ -31,17 +31,12 @@ function formatElapsed(secs: number): string {
   return `${m}:${String(secs % 60).padStart(2, "0")}`;
 }
 
-function formatSegTime(ms: number): string {
-  const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
-  return `${m}:${String(s % 60).padStart(2, "0")}`;
-}
-
 // ── Props ────────────────────────────────────────────────────────────────────
 
 interface HomeViewProps {
   isRecording: boolean;
   isSmartDictation: boolean;
+  isPolishing: boolean;
   onStartRecording: () => void;
   onStopRecording: () => void;
   activeModel: string;
@@ -53,19 +48,30 @@ interface HomeViewProps {
 export default function HomeView({
   isRecording,
   isSmartDictation,
+  isPolishing,
   onStartRecording,
   onStopRecording,
   activeModel,
   onNavigate,
 }: HomeViewProps) {
   // ── Recording state ──
-  const [segments, setSegments] = useState<TranscriptionSegment[]>([]);
+  const [, setSegments] = useState<TranscriptionSegment[]>([]);
+  const [resultText, setResultText] = useState<string>("");
   const [audioLevel, setAudioLevel] = useState(0);
   const [recordingDuration, setRecordingDuration] = useState(0);
-  const [transcriptionComplete, setTranscriptionComplete] = useState(false);
-  const [showLiveTranscript, setShowLiveTranscript] = useState(false);
   const recordingStartRef = useRef<number>(0);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const segmentsRef = useRef<TranscriptionSegment[]>([]);
+
+  // ── Permissions ──
+  const [accessibilityGranted, setAccessibilityGranted] = useState<boolean | null>(null);
+  const [micGranted, setMicGranted] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    invoke<boolean>("check_accessibility_permission").then(setAccessibilityGranted).catch(() => {});
+    invoke<boolean>("check_microphone_permission").then(setMicGranted).catch(() => {});
+    const unlisten = listen("accessibility-permission-missing", () => setAccessibilityGranted(false));
+    return () => { unlisten.then((f) => f()); };
+  }, []);
 
   // ── Home state ──
   const [micName, setMicName] = useState("Default Microphone");
@@ -149,24 +155,34 @@ export default function HomeView({
 
   // ── Recording lifecycle ──
 
-  // On start: clear segments, show transcript panel; hide on stop
+  // On start: clear result
   useEffect(() => {
     if (isRecording) {
       recordingStartRef.current = Date.now();
       setSegments([]);
-      setTranscriptionComplete(false);
-      setShowLiveTranscript(true);
-    } else {
-      setShowLiveTranscript(false);
+      segmentsRef.current = [];
+      setResultText("");
     }
   }, [isRecording]);
 
-  // Collect live segments
+  // Accumulate segments into ref (not displayed yet)
   useEffect(() => {
     const unlisten = listen<{ segments: TranscriptionSegment[] }>("transcription-update", (event) => {
-      setSegments((prev) => [...prev, ...event.payload.segments]);
+      segmentsRef.current = [...segmentsRef.current, ...event.payload.segments];
+      setSegments([...segmentsRef.current]);
     });
     return () => { unlisten.then((f) => f()); };
+  }, []);
+
+  // Freeze final text when done, then fade it out after 6 seconds
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const unlisten = listen("transcription-complete", () => {
+      const text = segmentsRef.current.map((s) => s.text.trim()).filter(Boolean).join(" ");
+      setResultText(text);
+      timer = setTimeout(() => setResultText(""), 6000);
+    });
+    return () => { unlisten.then((f) => f()); clearTimeout(timer); };
   }, []);
 
   // Audio level for waveform
@@ -184,26 +200,34 @@ export default function HomeView({
     return () => clearInterval(t);
   }, [isRecording]);
 
-  // Auto-scroll transcript
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [segments]);
 
-  // transcription-complete: stop pulsing dot + update status text
-  useEffect(() => {
-    const unlisten = listen("transcription-complete", () => setTranscriptionComplete(true));
-    return () => { unlisten.then((f) => f()); };
-  }, []);
-
-  // ── Derived ──
-  const accentColor = isSmartDictation ? "violet" : "red";
 
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="relative flex flex-col h-full px-8 py-6 gap-4 overflow-y-auto">
 
-      {/* ── Mic selector (top-right) ─────────────────────────────────────── */}
+      {/* ── Accessibility badge (top-left) ──────────────────────────────── */}
+      {accessibilityGranted !== null && (
+        <button
+          onClick={() => onNavigate("settings:general")}
+          className="absolute top-2 left-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition-all duration-150 cursor-pointer"
+          style={{ background: "var(--surface)", boxShadow: "var(--surface-shadow)", border: "1px solid var(--surface-border)", backdropFilter: "var(--surface-blur)", WebkitBackdropFilter: "var(--surface-blur)" }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "color-mix(in srgb, var(--t1) 6%, var(--surface))"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "var(--surface)"; }}
+          title="Go to Settings → Accessibility"
+        >
+          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: accessibilityGranted ? "rgb(52,211,153)" : "rgb(248,113,113)" }} />
+          <div className="flex flex-col items-start leading-none">
+            <span className="text-[11px]" style={{ color: "var(--t3)" }}>Accessibility</span>
+            <span className="text-[10px] mt-0.5" style={{ color: accessibilityGranted ? "var(--accent)" : "rgba(248,113,113,0.85)" }}>
+              {accessibilityGranted ? "Granted" : "Not Granted"}
+            </span>
+          </div>
+        </button>
+      )}
+
+      {/* ── Mic badge (top-right) ────────────────────────────────────────── */}
       <button
         onClick={() => onNavigate("settings:audio")}
         className="absolute top-2 right-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition-all duration-150 cursor-pointer"
@@ -212,8 +236,13 @@ export default function HomeView({
         onMouseLeave={(e) => (e.currentTarget.style.background = "var(--surface)")}
         title="Change Microphone"
       >
-        <Mic size={11} style={{ color: "var(--accent)", flexShrink: 0 }} strokeWidth={2} />
-        <span className="text-[11px] truncate max-w-[140px]" style={{ color: "var(--t3)" }}>{micName}</span>
+        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: micGranted === false ? "rgb(248,113,113)" : "rgb(52,211,153)" }} />
+        <div className="flex flex-col items-start leading-none">
+          <span className="text-[11px] truncate max-w-[120px]" style={{ color: "var(--t3)" }}>{micName}</span>
+          <span className="text-[10px] mt-0.5" style={{ color: micGranted === false ? "rgba(248,113,113,0.85)" : "var(--accent)" }}>
+            {micGranted === null ? "…" : micGranted ? "Granted" : "Not Granted"}
+          </span>
+        </div>
       </button>
 
       {/* ── Engine badge ─────────────────────────────────────────────── */}
@@ -277,11 +306,7 @@ export default function HomeView({
             <>
               <WaveformMeter level={audioLevel} />
               <div className="flex items-center gap-3">
-                <p
-                  className={`text-[11px] font-mono ${
-                    isSmartDictation ? "text-violet-400/55" : "text-emerald-400/55"
-                  }`}
-                >
+                <p className={`text-[11px] font-mono ${isSmartDictation ? "text-violet-400/55" : "text-emerald-400/55"}`}>
                   {isSmartDictation ? "Smart Dictation…" : "Listening…"}
                 </p>
                 <p className="text-white/25 text-[11px] font-mono tabular-nums">
@@ -289,6 +314,15 @@ export default function HomeView({
                 </p>
               </div>
             </>
+          ) : isPolishing ? (
+            <div className="flex items-center gap-2">
+              <Sparkles size={13} style={{ color: "rgb(167,139,250)" }} className="animate-pulse" />
+              <p className="text-[11px] font-mono text-violet-400/70">AI Polishing…</p>
+            </div>
+          ) : resultText ? (
+            <p className="text-sm leading-relaxed text-center select-text max-w-[420px] animate-fade-out" style={{ color: "var(--t2)" }}>
+              {resultText}
+            </p>
           ) : (
             <div className="flex items-start justify-center gap-6">
               <div className="flex flex-col items-center gap-1.5">
@@ -303,7 +337,6 @@ export default function HomeView({
                 </div>
                 <span className="text-[10px] font-medium" style={{ color: "var(--t3)" }}>Dictate</span>
               </div>
-
               <div className="flex flex-col items-center gap-1.5">
                 <div className="flex items-center gap-0.5 px-3 py-2 rounded-xl"
                   style={{ background: "color-mix(in srgb, var(--t1) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--t1) 12%, transparent)" }}>
@@ -377,50 +410,8 @@ export default function HomeView({
         </div>
       </button>
 
-      {/* ── Live transcript panel (visible during recording + persists until next start) ── */}
-      {showLiveTranscript && (
-        <div className="card-inset overflow-hidden flex-shrink-0">
-          <div
-            className="flex items-center gap-2 px-5 py-3"
-            style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}
-          >
-            <div
-              className={`w-2 h-2 rounded-full ${
-                !transcriptionComplete && isRecording
-                  ? accentColor === "violet"
-                    ? "bg-violet-400 animate-pulse"
-                    : "bg-red-400 animate-pulse"
-                  : "bg-emerald-400"
-              }`}
-              style={
-                transcriptionComplete || !isRecording
-                  ? { boxShadow: "0 0 5px var(--accent-glow)" }
-                  : undefined
-              }
-            />
-            <span className="text-xs font-mono" style={{ color: "var(--t4)" }}>
-              {segments.length} segment{segments.length !== 1 ? "s" : ""}
-            </span>
-          </div>
-          <div ref={scrollRef} className="p-5 space-y-3 overflow-y-auto max-h-48 select-text">
-            {segments.map((seg, idx) => (
-              <div key={`${idx}-${seg.start_ms}-${seg.end_ms}`} className="flex gap-4">
-                <span className="text-emerald-500/35 text-xs shrink-0 mt-0.5 font-mono">
-                  {formatSegTime(seg.start_ms)}
-                </span>
-                <p className="text-sm leading-relaxed" style={{ color: "var(--t2)" }}>
-                  {seg.text}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-
-
       {/* ── Smart Dictation setup nudge ──────────────────────────────────── */}
-      {smartDictationNudge && !sdNudgeDismissed && !isRecording && !showLiveTranscript && (
+      {smartDictationNudge && !sdNudgeDismissed && !isRecording && (
         <div
           className="rounded-2xl flex-shrink-0 overflow-hidden"
           style={{ background: "var(--surface)", boxShadow: "var(--surface-shadow)", border: "1px solid color-mix(in srgb, var(--accent) 20%, transparent)", backdropFilter: "var(--surface-blur)", WebkitBackdropFilter: "var(--surface-blur)" }}
@@ -457,7 +448,7 @@ export default function HomeView({
       )}
 
       {/* ── Model nudge ──────────────────────────────────────────────────── */}
-      {!modelNudgeDismissed && !isRecording && !showLiveTranscript && (
+      {!modelNudgeDismissed && !isRecording && (
         <div
           className="rounded-2xl flex-shrink-0 overflow-hidden"
           style={{ background: "var(--surface)", boxShadow: "var(--surface-shadow)", border: "1px solid var(--surface-border)", backdropFilter: "var(--surface-blur)", WebkitBackdropFilter: "var(--surface-blur)" }}
@@ -514,9 +505,10 @@ export default function HomeView({
       )}
 
       {/* ── Tips ────────────────────────────────────────────────────── */}
-      {!isRecording && !showLiveTranscript && (
+      {!isRecording && (
         <TipsSection onNavigate={onNavigate} />
       )}
+
     </div>
   );
 }
