@@ -686,11 +686,11 @@ pub async fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
             let screen = monitor.size();    // physical pixels
             let origin = monitor.position(); // physical top-left of this monitor
 
-            // Use the actual window size for positioning so centering is always accurate.
-            // The window dimensions are fixed at 280×100 in tauri.conf.json.
-            let actual = win.outer_size().ok().unwrap_or(tauri::PhysicalSize { width: 280, height: 100 });
-            let win_w = actual.width as i32;
-            let win_h = actual.height as i32;
+            // Use the fixed logical dimensions from tauri.conf.json scaled to physical pixels.
+            // Do NOT use win.outer_size() — it returns (0, 0) on first show before the
+            // window has been rendered, which breaks center/right placement on first use.
+            let win_w = (280.0 * scale) as i32;
+            let win_h = (100.0 * scale) as i32;
 
             // Logical-pixel margins → physical
             // top: just below the macOS menu bar (~24 logical px)
