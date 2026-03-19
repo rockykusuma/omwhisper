@@ -556,17 +556,38 @@ function SmartDictationTab() {
             </div>
             <button onClick={refreshOllamaStatus} className="btn-ghost text-xs py-1 px-3">Refresh</button>
           </div>
-          <SettingRow label="Model" description="Ollama model for text polishing">
-            <select
-              value={settings.ai_ollama_model}
-              onChange={(e) => update({ ai_ollama_model: e.target.value })}
-              className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none max-w-[160px]"
+          <SettingRow label="Server URL" description="Ollama server address">
+            <input
+              type="text"
+              value={settings.ai_ollama_url}
+              onChange={(e) => update({ ai_ollama_url: e.target.value })}
+              placeholder="http://localhost:11434"
+              className="text-white/60 text-xs rounded-lg px-3 py-1.5 outline-none max-w-[200px]"
               style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-            >
-              {(ollamaStatus?.models.length ? ollamaStatus.models : [settings.ai_ollama_model]).map((m) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
+            />
+          </SettingRow>
+          <SettingRow label="Model" description="Ollama model for text polishing">
+            {ollamaStatus?.running && ollamaStatus.models.length > 0 ? (
+              <select
+                value={settings.ai_ollama_model}
+                onChange={(e) => update({ ai_ollama_model: e.target.value })}
+                className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none max-w-[160px]"
+                style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+              >
+                {ollamaStatus.models.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={settings.ai_ollama_model}
+                onChange={(e) => update({ ai_ollama_model: e.target.value })}
+                placeholder="e.g. llama3.2"
+                className="text-white/60 text-xs rounded-lg px-3 py-1.5 outline-none max-w-[160px]"
+                style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+              />
+            )}
           </SettingRow>
           <div className="py-3 flex items-center gap-3">
             <button onClick={() => handleTestConnection("ollama")} disabled={testLoading} className="btn-ghost text-xs py-1 px-3">
