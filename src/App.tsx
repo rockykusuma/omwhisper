@@ -153,8 +153,9 @@ function App() {
     });
 
     const unlistenAccessibility = listen("accessibility-permission-missing", () => {
-      setMicError("Auto-paste needs Accessibility access. Go to System Settings → Privacy → Accessibility → enable OmWhisper. Your text was copied to clipboard.");
-      setTimeout(() => setMicError(null), 8000);
+      invoke("show_main_window").catch(() => {});
+      setMicError("Auto-paste needs Accessibility. Go to System Settings → Privacy → Accessibility → enable OmWhisper. Your text was copied to clipboard.");
+      setTimeout(() => setMicError(null), 10000);
       invoke("open_accessibility_settings").catch(() => {});
     });
 

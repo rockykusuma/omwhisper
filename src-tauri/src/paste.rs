@@ -15,11 +15,11 @@ pub fn copy_to_clipboard(text: &str) -> Result<()> {
 /// Check if Accessibility permission is granted (macOS only).
 #[cfg(target_os = "macos")]
 pub fn has_accessibility_permission() -> bool {
-    // Use AXIsProcessTrustedWithOptions to check without prompting
-    let output = std::process::Command::new("osascript")
-        .args(["-e", "tell application \"System Events\" to get name of first process whose frontmost is true"])
-        .output();
-    output.map(|o| o.status.success()).unwrap_or(false)
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXIsProcessTrusted() -> bool;
+    }
+    unsafe { AXIsProcessTrusted() }
 }
 
 #[cfg(target_os = "windows")]
