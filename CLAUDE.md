@@ -96,8 +96,7 @@ omwhisper/
 ├── models/                       # .gitignored — downloaded locally for dev
 │   └── ggml-tiny.en.bin
 ├── docs/
-│   └── prompts/
-│       └── CLAUDE_CODE_PROMPTS.md  # All phase prompts (Phases 1–5, consolidated)
+│   └── ARCHITECTURE.md           # System design overview
 └── CLAUDE.md                     # ← You are here
 ```
 
@@ -159,8 +158,6 @@ omwhisper/
 
 ### Phase 4 — Competitor-Inspired Enhancements ✅ COMPLETE
 
-> Detailed specs in `docs/prompts/CLAUDE_CODE_PROMPTS.md` (Phase 4 section)
-
 | Prompt | Feature | Status | Notes |
 |--------|---------|--------|-------|
 | 23 | Custom Vocabulary | ✅ Done | custom_vocabulary in settings; initial_prompt bias in WhisperEngine; word_replacements with regex whole-word replace; Vocabulary.tsx with add/remove chips + from→to replacement rows; BookMarked nav in Sidebar |
@@ -172,7 +169,6 @@ omwhisper/
 
 ### Phase 5 — Smart Dictation (AI-Powered Output) ✅ COMPLETE
 
-> Detailed specs in `docs/prompts/CLAUDE_CODE_PROMPTS.md` (Phase 5 section)
 > OmWhisper's flagship differentiator: Voice → Whisper → LLM polish → Paste.
 
 | Prompt | Feature | Status | Notes |
@@ -184,7 +180,6 @@ omwhisper/
 
 ### Phase 6 — Windows Support ✅ COMPLETE
 
-> Specs + plans in `docs/superpowers/specs/` and `docs/superpowers/plans/` (prefix: `2026-03-17-windows-support-sub*`)
 
 | Sub-project | Feature | Status | Notes |
 |-------------|---------|--------|-------|

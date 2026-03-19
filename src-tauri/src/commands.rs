@@ -1178,7 +1178,7 @@ pub async fn send_feedback(
         .filter(|e| !e.is_empty())
         .unwrap_or("anonymous");
 
-    let subject = format!("[Beta Feedback] {} — OmWhisper v{}", category, app_version);
+    let subject = format!("[Feedback] {} — OmWhisper v{}", category, app_version);
 
     let html = format!(
         r#"<h3>Category</h3><p>{category}</p>
@@ -1193,7 +1193,7 @@ pub async fn send_feedback(
 
     let body = serde_json::json!({
         "from": "OmWhisper Beta <feedback@omwhisper.in>",
-        "to": ["rockykusuma@gmail.com"],
+        "to": ["feedback@omwhisper.in"],
         "subject": subject,
         "html": html,
     });

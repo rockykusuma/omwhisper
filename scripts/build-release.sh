@@ -20,10 +20,14 @@ echo "Version:  $VERSION"
 echo "Arch:     $(uname -m)"
 echo ""
 
-# Code signing identity (set via environment or default to your Apple Developer ID)
-# Override: export APPLE_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+# Code signing identity — must be set before running this script.
+# export APPLE_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+# Find your identity: security find-identity -v -p codesigning | grep "Developer ID"
 if [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then
-  export APPLE_SIGNING_IDENTITY="Developer ID Application: Arunbharath Reddy Keshapalli (Y87BZN47C5)"
+  echo "ERROR: APPLE_SIGNING_IDENTITY is not set."
+  echo "  export APPLE_SIGNING_IDENTITY=\"Developer ID Application: Your Name (TEAMID)\""
+  echo "  Find yours: security find-identity -v -p codesigning | grep 'Developer ID'"
+  exit 1
 fi
 echo "Signing: $APPLE_SIGNING_IDENTITY"
 echo ""
