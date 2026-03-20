@@ -307,14 +307,21 @@ function SmartDictationTab() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [newStyleName, setNewStyleName] = useState("");
   const [newStylePrompt, setNewStylePrompt] = useState("");
-  const [testResult, setTestResult] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
+  const [cloudTestError, setCloudTestError] = useState<string | null>(null);
   const [ollamaChecking, setOllamaChecking] = useState(false);
   const [customModelInput, setCustomModelInput] = useState("");
 
   useEffect(() => {
     setCustomModelInput("");
   }, [settings?.ai_cloud_api_url]);
+
+  useEffect(() => {
+    if (settings && settings.ai_cloud_verified) {
+      update({ ai_cloud_verified: false });
+      setCloudTestError(null);
+    }
+  }, [settings?.ai_cloud_model, settings?.ai_cloud_api_url]);
 
   useEffect(() => {
     if (settings?.ai_backend !== "ollama") return;
@@ -350,21 +357,31 @@ function SmartDictationTab() {
     await invoke("save_cloud_api_key", { key: apiKeyInput.trim() });
     setApiKeySet(true);
     setApiKeyInput("");
+    setCloudTestError(null);
+    await update({ ai_cloud_verified: false });
   }
 
   async function handleDeleteApiKey() {
     await invoke("delete_cloud_api_key_cmd").catch(() => {});
     setApiKeySet(false);
+    setCloudTestError(null);
+    await update({ ai_cloud_verified: false });
   }
 
   async function handleTestConnection(backend: string) {
     setTestLoading(true);
-    setTestResult(null);
     try {
-      const result = await invoke<string>("test_ai_connection", { backend });
-      setTestResult("✓ " + result);
+      await invoke<string>("test_ai_connection", { backend });
+      if (backend === "cloud") {
+        setCloudTestError(null);
+        await update({ ai_cloud_verified: true });
+      }
     } catch (e) {
-      setTestResult("✗ " + String(e));
+      const msg = String(e);
+      if (backend === "cloud") {
+        setCloudTestError(msg);
+        await update({ ai_cloud_verified: false });
+      }
     } finally {
       setTestLoading(false);
     }
@@ -552,130 +569,206 @@ function SmartDictationTab() {
       )}
 
       {/* Cloud API section */}
-      {effectiveBackend === "cloud" && (
-        <div className="card px-5 mb-5">
-          <SettingRow label="Provider" description="OpenAI-compatible API">
-            <select
-              value={
-                settings.ai_cloud_api_url.includes("openai.com") ? "openai"
-                : settings.ai_cloud_api_url.includes("anthropic.com") ? "anthropic"
-                : settings.ai_cloud_api_url.includes("googleapis.com") || settings.ai_cloud_api_url.includes("generativelanguage") ? "google"
-                : settings.ai_cloud_api_url.includes("groq.com") ? "groq"
-                : settings.ai_cloud_api_url.includes("mistral.ai") ? "mistral"
-                : settings.ai_cloud_api_url.includes("openrouter.ai") ? "openrouter"
-                : "custom"
-              }
-              onChange={(e) => {
-                const presets: Record<string, { url: string; model: string }> = {
-                  openai:     { url: "https://api.openai.com/v1",                                    model: "gpt-4o-mini" },
-                  anthropic:  { url: "https://api.anthropic.com/v1",                                 model: "claude-haiku-4-5-20251001" },
-                  google:     { url: "https://generativelanguage.googleapis.com/v1beta/openai",       model: "gemini-2.0-flash" },
-                  groq:       { url: "https://api.groq.com/openai/v1",                               model: "llama3-8b-8192" },
-                  mistral:    { url: "https://api.mistral.ai/v1",                                    model: "mistral-small-latest" },
-                  openrouter: { url: "https://openrouter.ai/api/v1",                                 model: "openai/gpt-4o-mini" },
-                  custom:     { url: "", model: "" },
-                };
-                const p = presets[e.target.value];
-                update({ ai_cloud_api_url: p.url, ai_cloud_model: p.model });
-              }}
-              className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
-              style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-            >
-              <option value="openai">OpenAI</option>
-              <option value="anthropic">Anthropic</option>
-              <option value="google">Google Gemini</option>
-              <option value="groq">Groq</option>
-              <option value="mistral">Mistral</option>
-              <option value="openrouter">OpenRouter</option>
-              <option value="custom">Custom</option>
-            </select>
-          </SettingRow>
-          {(() => {
-            const isCustom = !["openai.com","anthropic.com","googleapis.com","generativelanguage","groq.com","mistral.ai","openrouter.ai"]
-              .some((s) => settings.ai_cloud_api_url.includes(s));
-            return isCustom ? (
-              <SettingRow label="API URL" description="Base URL of your OpenAI-compatible endpoint">
-                <input
-                  type="text"
-                  value={settings.ai_cloud_api_url}
-                  onChange={(e) => update({ ai_cloud_api_url: e.target.value })}
-                  placeholder="https://your-api.example.com/v1"
-                  className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-56 font-mono"
-                  style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                />
-              </SettingRow>
-            ) : null;
-          })()}
-          <SettingRow label="API Key" description={apiKeySet ? "Key stored in macOS Keychain" : "Paste your API key"}>
-            {apiKeySet ? (
-              <div className="flex items-center gap-2">
-                <span className="text-emerald-400 text-xs font-mono">●●●●●●●●</span>
-                <button onClick={handleDeleteApiKey} className="text-red-400/60 hover:text-red-400 text-xs cursor-pointer">Remove</button>
+      {effectiveBackend === "cloud" && (() => {
+        const activeProvider =
+          settings.ai_cloud_api_url.includes("openai.com")      ? "openai"
+          : settings.ai_cloud_api_url.includes("anthropic.com") ? "anthropic"
+          : settings.ai_cloud_api_url.includes("googleapis.com") || settings.ai_cloud_api_url.includes("generativelanguage") ? "google"
+          : settings.ai_cloud_api_url.includes("groq.com")      ? "groq"
+          : settings.ai_cloud_api_url.includes("mistral.ai")    ? "mistral"
+          : settings.ai_cloud_api_url.includes("openrouter.ai") ? "openrouter"
+          : "custom";
+
+        return (
+          <div className="card mb-5 overflow-hidden">
+            {/* Status banner */}
+            {settings.ai_cloud_verified ? (
+              <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(52,211,153,0.05)" }}>
+                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: "#34d399", boxShadow: "0 0 6px rgba(52,211,153,0.5)" }} />
+                <div className="flex-1 text-xs">
+                  <span className="font-semibold" style={{ color: "#34d399" }}>Connected</span>
+                  <span className="text-white/40 ml-2 font-mono capitalize">{activeProvider} · {settings.ai_cloud_model}</span>
+                </div>
+              </div>
+            ) : cloudTestError ? (
+              <div className="flex items-start gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(248,113,113,0.05)" }}>
+                <div className="w-2.5 h-2.5 rounded-full mt-0.5 flex-shrink-0" style={{ background: "#f87171", boxShadow: "0 0 6px rgba(248,113,113,0.5)" }} />
+                <div className="flex-1 text-xs">
+                  <span className="font-semibold text-red-400">Connection failed</span>
+                  <span className="text-white/40 ml-2">{cloudTestError}</span>
+                </div>
               </div>
             ) : (
-              <div className="flex items-center gap-2">
-                <input
-                  type={showApiKey ? "text" : "password"}
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder="API key…"
-                  className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-56 font-mono"
-                  style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                  onKeyDown={(e) => e.key === "Enter" && handleSaveApiKey()}
-                />
-                <button onClick={() => setShowApiKey((v) => !v)} className="text-white/50 hover:text-white/60 text-xs cursor-pointer">{showApiKey ? "Hide" : "Show"}</button>
-                <button onClick={handleSaveApiKey} disabled={!apiKeyInput.trim()} className="btn-ghost text-xs py-1 px-2">Save</button>
+              <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(251,191,36,0.05)" }}>
+                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: "#fbbf24", boxShadow: "0 0 6px rgba(251,191,36,0.5)" }} />
+                <span className="text-xs" style={{ color: "#fbbf24" }}>Not verified — enter your API key and test the connection</span>
               </div>
             )}
-          </SettingRow>
-          <SettingRow label="Model" description="Model name">
-            <div className="flex flex-col items-end gap-1.5">
-              {(() => {
-                const activeProvider = settings.ai_cloud_api_url.includes("openai.com") ? "openai"
-                  : settings.ai_cloud_api_url.includes("anthropic.com") ? "anthropic"
-                  : settings.ai_cloud_api_url.includes("googleapis.com") || settings.ai_cloud_api_url.includes("generativelanguage") ? "google"
-                  : settings.ai_cloud_api_url.includes("groq.com") ? "groq"
-                  : settings.ai_cloud_api_url.includes("mistral.ai") ? "mistral"
-                  : settings.ai_cloud_api_url.includes("openrouter.ai") ? "openrouter"
-                  : "custom";
-                const presets = MODEL_PRESETS[activeProvider] ?? [];
-                return presets.length > 0 ? (
-                  <select
-                    value={presets.includes(settings.ai_cloud_model) ? settings.ai_cloud_model : presets[0]}
-                    onChange={(e) => update({ ai_cloud_model: e.target.value })}
-                    className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none w-40 font-mono"
-                    style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                  >
-                    {presets.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
-                ) : (
+
+            <div className="px-5">
+              {/* Provider */}
+              <SettingRow label="Provider" description="OpenAI-compatible API">
+                <select
+                  value={activeProvider}
+                  onChange={(e) => {
+                    const presets: Record<string, { url: string; model: string }> = {
+                      openai:     { url: "https://api.openai.com/v1",                                  model: "gpt-4o-mini" },
+                      anthropic:  { url: "https://api.anthropic.com/v1",                               model: "claude-haiku-4-5-20251001" },
+                      google:     { url: "https://generativelanguage.googleapis.com/v1beta/openai",     model: "gemini-2.0-flash" },
+                      groq:       { url: "https://api.groq.com/openai/v1",                             model: "llama3-8b-8192" },
+                      mistral:    { url: "https://api.mistral.ai/v1",                                  model: "mistral-small-latest" },
+                      openrouter: { url: "https://openrouter.ai/api/v1",                               model: "openai/gpt-4o-mini" },
+                      custom:     { url: "", model: "" },
+                    };
+                    const p = presets[e.target.value];
+                    setCloudTestError(null);
+                    update({ ai_cloud_api_url: p.url, ai_cloud_model: p.model, ai_cloud_verified: false });
+                  }}
+                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
+                  style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                >
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic</option>
+                  <option value="google">Google Gemini</option>
+                  <option value="groq">Groq</option>
+                  <option value="mistral">Mistral</option>
+                  <option value="openrouter">OpenRouter</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </SettingRow>
+
+              {/* Custom API URL — only for custom provider */}
+              {activeProvider === "custom" && (
+                <SettingRow label="API URL" description="Base URL of your OpenAI-compatible endpoint">
                   <input
                     type="text"
-                    value={customModelInput || settings.ai_cloud_model}
-                    onChange={(e) => setCustomModelInput(e.target.value)}
-                    onBlur={() => { if (customModelInput.trim()) update({ ai_cloud_model: customModelInput.trim() }); }}
-                    onKeyDown={(e) => { if (e.key === "Enter" && customModelInput.trim()) update({ ai_cloud_model: customModelInput.trim() }); }}
-                    placeholder="model-name"
-                    className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-40 font-mono"
+                    value={settings.ai_cloud_api_url}
+                    onChange={(e) => { setCloudTestError(null); update({ ai_cloud_api_url: e.target.value, ai_cloud_verified: false }); }}
+                    placeholder="https://your-api.example.com/v1"
+                    className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-56 font-mono"
                     style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                   />
-                );
-              })()}
+                </SettingRow>
+              )}
+
+              {/* API Key */}
+              <SettingRow label="API Key" description={apiKeySet ? "Key stored in macOS Keychain" : "Paste your API key"}>
+                {apiKeySet ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400 text-xs font-mono">●●●●●●●●</span>
+                    <button onClick={handleDeleteApiKey} className="text-red-400/60 hover:text-red-400 text-xs cursor-pointer">Remove</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type={showApiKey ? "text" : "password"}
+                      value={apiKeyInput}
+                      onChange={(e) => setApiKeyInput(e.target.value)}
+                      placeholder="API key…"
+                      className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-56 font-mono"
+                      style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                      onKeyDown={(e) => e.key === "Enter" && handleSaveApiKey()}
+                    />
+                    <button onClick={() => setShowApiKey((v) => !v)} className="text-white/50 hover:text-white/60 text-xs cursor-pointer">{showApiKey ? "Hide" : "Show"}</button>
+                    <button onClick={handleSaveApiKey} disabled={!apiKeyInput.trim()} className="btn-ghost text-xs py-1 px-2">Save</button>
+                  </div>
+                )}
+              </SettingRow>
+
+              {/* Model */}
+              <SettingRow label="Model" description="Model name">
+                <div className="flex flex-col items-end gap-1.5">
+                  {(() => {
+                    const presets = MODEL_PRESETS[activeProvider] ?? [];
+                    const isOther = presets.length > 0 && !presets.includes(settings.ai_cloud_model);
+                    return presets.length > 0 ? (
+                      <>
+                        <select
+                          value={isOther ? "__other__" : settings.ai_cloud_model}
+                          onChange={(e) => {
+                            if (e.target.value === "__other__") {
+                              setCustomModelInput(settings.ai_cloud_model);
+                            } else {
+                              setCustomModelInput("");
+                              update({ ai_cloud_model: e.target.value, ai_cloud_verified: false });
+                              setCloudTestError(null);
+                            }
+                          }}
+                          className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none w-40 font-mono"
+                          style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                        >
+                          {presets.map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                          <option value="__other__">Other…</option>
+                        </select>
+                        {isOther && (
+                          <input
+                            type="text"
+                            value={customModelInput || settings.ai_cloud_model}
+                            onChange={(e) => setCustomModelInput(e.target.value)}
+                            onBlur={() => {
+                              if (customModelInput.trim()) {
+                                update({ ai_cloud_model: customModelInput.trim(), ai_cloud_verified: false });
+                                setCloudTestError(null);
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && customModelInput.trim()) {
+                                update({ ai_cloud_model: customModelInput.trim(), ai_cloud_verified: false });
+                                setCloudTestError(null);
+                              }
+                            }}
+                            placeholder="model-id"
+                            className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-40 font-mono"
+                            style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                          />
+                        )}
+                      </>
+                    ) : (
+                      <input
+                        type="text"
+                        value={customModelInput || settings.ai_cloud_model}
+                        onChange={(e) => setCustomModelInput(e.target.value)}
+                        onBlur={() => {
+                          if (customModelInput.trim()) {
+                            update({ ai_cloud_model: customModelInput.trim(), ai_cloud_verified: false });
+                            setCloudTestError(null);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && customModelInput.trim()) {
+                            update({ ai_cloud_model: customModelInput.trim(), ai_cloud_verified: false });
+                            setCloudTestError(null);
+                          }
+                        }}
+                        placeholder="model-name"
+                        className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-40 font-mono"
+                        style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                      />
+                    );
+                  })()}
+                </div>
+              </SettingRow>
+
+              {/* Test Connection */}
+              <div className="py-3 flex items-center gap-3">
+                <button
+                  onClick={() => handleTestConnection("cloud")}
+                  disabled={testLoading || !apiKeySet}
+                  className="btn-ghost text-xs py-1 px-3"
+                >
+                  {testLoading ? "Testing…" : "Test Connection"}
+                </button>
+              </div>
+
+              <p className="text-white/35 text-xs pb-3 leading-relaxed">
+                When using Cloud API, your transcription text is sent to the provider. Audio never leaves your device.
+              </p>
             </div>
-          </SettingRow>
-          <div className="py-3 flex items-center gap-3">
-            <button onClick={() => handleTestConnection("cloud")} disabled={testLoading || !apiKeySet} className="btn-ghost text-xs py-1 px-3">
-              {testLoading ? "Testing…" : "Test Connection"}
-            </button>
-            {testResult && <span className={`text-xs font-mono ${testResult.startsWith("✓") ? "text-emerald-400" : "text-red-400/70"}`}>{testResult}</span>}
           </div>
-          <p className="text-white/35 text-xs pb-3 leading-relaxed">
-            When using Cloud API, your transcription text is sent to the provider. Audio never leaves your device.
-          </p>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Smart Dictation config */}
       <h3 className="text-t3 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Smart Dictation</h3>
