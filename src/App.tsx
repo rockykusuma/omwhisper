@@ -316,9 +316,12 @@ function App() {
                 OmWhisper v{updateInfo.latest} is available — {updateInfo.release_notes}
               </span>
               <div className="flex items-center gap-3 shrink-0">
-                <a href={updateInfo.download_url} target="_blank" rel="noreferrer" className="text-emerald-400 text-xs underline hover:text-emerald-300">
+                <button
+                  onClick={() => invoke("plugin:opener|open_url", { url: updateInfo.download_url }).catch(() => {})}
+                  className="text-emerald-400 text-xs underline hover:text-emerald-300 cursor-pointer bg-transparent border-0 p-0"
+                >
                   Download
-                </a>
+                </button>
                 <button onClick={() => setUpdateInfo(null)} className="text-white/50 hover:text-white/60 text-xs cursor-pointer" aria-label="Dismiss update notification">
                   ✕
                 </button>
