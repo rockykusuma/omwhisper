@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Cpu, MemoryStick, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
@@ -311,13 +311,21 @@ function SmartDictationTab() {
   const [cloudTestError, setCloudTestError] = useState<string | null>(null);
   const [ollamaChecking, setOllamaChecking] = useState(false);
   const [customModelInput, setCustomModelInput] = useState("");
+  const [customModelMode, setCustomModelMode] = useState(false);
+  const cloudSettingsLoadedRef = useRef(false);
 
   useEffect(() => {
     setCustomModelInput("");
+    setCustomModelMode(false);
   }, [settings?.ai_cloud_api_url, settings?.ai_cloud_model]);
 
   useEffect(() => {
     if (!settings) return;
+    // Skip on initial settings load — only reset on user-initiated changes
+    if (!cloudSettingsLoadedRef.current) {
+      cloudSettingsLoadedRef.current = true;
+      return;
+    }
     setCloudTestError(null);
     if (settings.ai_cloud_verified) {
       update({ ai_cloud_verified: false });
@@ -681,15 +689,17 @@ function SmartDictationTab() {
                 <div className="flex flex-col items-end gap-1.5">
                   {(() => {
                     const presets = MODEL_PRESETS[activeProvider] ?? [];
-                    const isOther = presets.length > 0 && !presets.includes(settings.ai_cloud_model);
+                    const isOther = presets.length > 0 && (customModelMode || !presets.includes(settings.ai_cloud_model));
                     return presets.length > 0 ? (
                       <>
                         <select
                           value={isOther ? "__other__" : settings.ai_cloud_model}
                           onChange={(e) => {
                             if (e.target.value === "__other__") {
-                              setCustomModelInput(settings.ai_cloud_model);
+                              setCustomModelMode(true);
+                              setCustomModelInput("");
                             } else {
+                              setCustomModelMode(false);
                               setCustomModelInput("");
                               update({ ai_cloud_model: e.target.value, ai_cloud_verified: false });
                               setCloudTestError(null);
@@ -706,21 +716,27 @@ function SmartDictationTab() {
                         {isOther && (
                           <input
                             type="text"
-                            value={customModelInput || settings.ai_cloud_model}
+                            autoFocus
+                            value={customModelInput}
                             onChange={(e) => setCustomModelInput(e.target.value)}
                             onBlur={() => {
                               if (customModelInput.trim()) {
                                 update({ ai_cloud_model: customModelInput.trim(), ai_cloud_verified: false });
                                 setCloudTestError(null);
+                              } else {
+                                setCustomModelMode(false);
                               }
                             }}
                             onKeyDown={(e) => {
                               if (e.key === "Enter" && customModelInput.trim()) {
                                 update({ ai_cloud_model: customModelInput.trim(), ai_cloud_verified: false });
                                 setCloudTestError(null);
+                              } else if (e.key === "Escape") {
+                                setCustomModelMode(false);
+                                setCustomModelInput("");
                               }
                             }}
-                            placeholder="model-id"
+                            placeholder={settings.ai_cloud_model || "model-id"}
                             className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-40 font-mono"
                             style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                           />
