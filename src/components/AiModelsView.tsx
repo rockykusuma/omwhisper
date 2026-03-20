@@ -309,7 +309,7 @@ function SmartDictationTab() {
   const [newStylePrompt, setNewStylePrompt] = useState("");
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
-  const [ollamaChecking, setOllamaChecking] = useState(() => settings?.ai_backend === "ollama");
+  const [ollamaChecking, setOllamaChecking] = useState(false);
   const [customModelInput, setCustomModelInput] = useState("");
 
   useEffect(() => {
@@ -327,7 +327,7 @@ function SmartDictationTab() {
   }, [settings?.ai_backend]);
 
   useEffect(() => {
-    invoke<AppSettings>("get_settings").then(setSettings).catch(() => {});
+    invoke<AppSettings>("get_settings").then((loaded) => { setSettings(loaded); setOllamaChecking(loaded.ai_backend === "ollama"); }).catch(() => {});
     invoke<boolean>("get_cloud_api_key_status").then(setApiKeySet).catch(() => {});
     invoke<{ built_in: BuiltInStyle[]; custom: CustomStyle[] }>("get_polish_styles")
       .then((styles) => { setBuiltInStyles(styles.built_in); setCustomStyles(styles.custom); })
