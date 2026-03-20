@@ -1308,11 +1308,11 @@ pub async fn polish_selected_text(app: tauri::AppHandle) -> Result<String, Strin
 
     let _ = app.emit("polish-state", false);
 
-    // Hide the overlay after a brief pause so the user sees the state clear
+    // Hide the overlay quickly so the green recording pill never has time to flash
     if overlay_was_hidden {
         let app_clone = app.clone();
         tokio::spawn(async move {
-            tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             if let Some(w) = app_clone.get_webview_window("overlay") {
                 let _ = w.hide();
             }

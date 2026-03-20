@@ -218,7 +218,6 @@ export default function OverlayWindow() {
   const [overlayStyle, setOverlayStyle] = useState<string>("micro");
   const [applyPolishRegular, setApplyPolishRegular] = useState(false);
   const [isPolishing, setIsPolishing] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -251,7 +250,6 @@ export default function OverlayWindow() {
   useEffect(() => {
     const unlistenState = listen<boolean>("recording-state", (e) => {
       if (e.payload) {
-        setIsRecording(true);
         setIsPolishing(false);
         startTimer();
         invoke<AppSettings>("get_settings")
@@ -261,7 +259,6 @@ export default function OverlayWindow() {
           })
           .catch(() => {});
       } else {
-        setIsRecording(false);
         stopTimer();
       }
     });
@@ -280,7 +277,7 @@ export default function OverlayWindow() {
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
       {isPolishing ? (
         <PolishingPill large={overlayStyle === "waveform"} />
-      ) : isRecording ? (
+      ) : (
         <>
           {overlayStyle === "waveform" ? <WaveformPill elapsed={elapsed} /> : <MicroPill elapsed={elapsed} />}
           {applyPolishRegular && (
@@ -298,7 +295,7 @@ export default function OverlayWindow() {
             </div>
           )}
         </>
-      ) : null}
+      )}
     </div>
   );
 }
