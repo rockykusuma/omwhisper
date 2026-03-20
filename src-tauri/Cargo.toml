@@ -70,3 +70,5 @@ llama-cpp-2 = { version = "0.1.138", features = ["metal"] }
 # This entry adds the Metal GPU feature on macOS only. Cargo unions both.
 # Do NOT remove the base entry from [dependencies] — that would break Windows.
 whisper-rs = { version = "0.14", features = ["metal"] }
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSWindow"] }

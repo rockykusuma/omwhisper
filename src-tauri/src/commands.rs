@@ -737,24 +737,17 @@ pub async fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
 /// is insufficient when other apps are focused.
 #[cfg(target_os = "macos")]
 fn set_overlay_window_level(win: &tauri::WebviewWindow) {
-    use std::os::raw::{c_char, c_void};
-    
+    use objc2::msg_send;
+    use objc2::runtime::AnyObject;
 
     let ns_window = match win.ns_window() {
-        Ok(w) => w as *mut c_void,
+        Ok(w) => w as *mut AnyObject,
         Err(_) => return,
     };
 
-    #[allow(clashing_extern_declarations)]
-    extern "C" {
-        fn sel_registerName(str: *const c_char) -> *const c_void;
-        #[link_name = "objc_msgSend"]
-        fn msg_send_level(receiver: *mut c_void, sel: *const c_void, val: isize);
-    }
-
     unsafe {
-        let sel = sel_registerName(b"setLevel:\0".as_ptr() as *const c_char);
-        msg_send_level(ns_window, sel, 25); // NSStatusWindowLevel = 25
+        // NSStatusWindowLevel = 25 — above all normal app windows, below screensaver
+        let _: () = msg_send![ns_window, setLevel: 25isize];
     }
 }
 
