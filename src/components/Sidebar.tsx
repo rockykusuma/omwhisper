@@ -12,8 +12,8 @@ interface Props {
 
 const NAV_ITEMS: { id: View; icon: React.ElementType; label: string }[] = [
   { id: "home",       icon: House,      label: "Home"       },
-  { id: "history",    icon: Clock,      label: "History"    },
   { id: "models",     icon: Brain,      label: "AI Models"  },
+  { id: "history",    icon: Clock,      label: "History"    },
   { id: "vocabulary", icon: BookMarked, label: "Vocabulary" },
   { id: "settings",   icon: Settings,   label: "Settings"   },
 ];

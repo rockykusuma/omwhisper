@@ -57,6 +57,7 @@ export interface AppSettings {
   ai_ollama_url: string;
   ai_cloud_model: string;
   ai_cloud_api_url: string;
+  ai_cloud_verified: boolean;
   ai_timeout_seconds: number;
   active_polish_style: string;
   translate_target_language: string;

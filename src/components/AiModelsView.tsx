@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Cpu, MemoryStick, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
-import type { AppSettings, BuiltInStyle, CustomStyle, OllamaStatus, LlmModelInfo, LlmDownloadProgress } from "../types";
+import type { AppSettings, BuiltInStyle, CustomStyle, OllamaStatus } from "../types";
 
 // ── Whisper tab types ─────────────────────────────────────────────────────────
 interface ModelInfo {
@@ -299,7 +299,6 @@ function WhisperTab({ activeModel, onModelChange }: { activeModel: string; onMod
 // ── Smart Dictation sub-tab ───────────────────────────────────────────────────
 function SmartDictationTab() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [platform, setPlatform] = useState<string>("macos");
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
   const [builtInStyles, setBuiltInStyles] = useState<BuiltInStyle[]>([]);
   const [customStyles, setCustomStyles] = useState<CustomStyle[]>([]);
@@ -308,53 +307,58 @@ function SmartDictationTab() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [newStyleName, setNewStyleName] = useState("");
   const [newStylePrompt, setNewStylePrompt] = useState("");
-  const [testResult, setTestResult] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
+  const [cloudTestError, setCloudTestError] = useState<string | null>(null);
+  const [ollamaChecking, setOllamaChecking] = useState(false);
   const [customModelInput, setCustomModelInput] = useState("");
-  const [llmModels, setLlmModels] = useState<LlmModelInfo[]>([]);
-  const [llmDownloading, setLlmDownloading] = useState<Record<string, number>>({});
-  const [llmErrors, setLlmErrors] = useState<Record<string, string>>({});
+  const [customModelMode, setCustomModelMode] = useState(false);
+  const cloudSettingsLoadedRef = useRef(false);
 
   useEffect(() => {
     setCustomModelInput("");
-  }, [settings?.ai_cloud_api_url]);
+    setCustomModelMode(false);
+  }, [settings?.ai_cloud_api_url, settings?.ai_cloud_model]);
 
   useEffect(() => {
-    invoke<AppSettings>("get_settings").then(setSettings).catch(() => {});
-    invoke<string>("get_platform").then(setPlatform).catch(() => {});
+    if (!settings) return;
+    // Skip on initial settings load — only reset on user-initiated changes
+    if (!cloudSettingsLoadedRef.current) {
+      cloudSettingsLoadedRef.current = true;
+      return;
+    }
+    setCloudTestError(null);
+    if (settings.ai_cloud_verified) {
+      update({ ai_cloud_verified: false });
+    }
+  }, [settings?.ai_cloud_model, settings?.ai_cloud_api_url]);
+
+  useEffect(() => {
+    if (settings?.ai_backend !== "ollama") return;
+    let cancelled = false;
+    setOllamaChecking(true);
+    invoke<OllamaStatus>("check_ollama_status")
+      .then((status) => { if (!cancelled) { setOllamaStatus(status); setOllamaChecking(false); } })
+      .catch(() => { if (!cancelled) setOllamaChecking(false); });
+    return () => { cancelled = true; };
+  }, [settings?.ai_backend]);
+
+  useEffect(() => {
+    invoke<AppSettings>("get_settings").then((loaded) => { setSettings(loaded); setOllamaChecking(loaded.ai_backend === "ollama"); }).catch(() => {});
     invoke<boolean>("get_cloud_api_key_status").then(setApiKeySet).catch(() => {});
     invoke<{ built_in: BuiltInStyle[]; custom: CustomStyle[] }>("get_polish_styles")
       .then((styles) => { setBuiltInStyles(styles.built_in); setCustomStyles(styles.custom); })
       .catch(() => {});
 
-    // Load LLM model list
-    invoke<LlmModelInfo[]>("get_llm_models").then(setLlmModels).catch(() => {});
-
-    // Subscribe to LLM download progress
-    const unlistenLlmPromise = listen<LlmDownloadProgress>("llm-download-progress", (event) => {
-      const { name, progress, done, error } = event.payload;
-      if (done) {
-        setLlmDownloading((prev) => { const next = { ...prev }; delete next[name]; return next; });
-        if (error) {
-          setLlmErrors((prev) => ({ ...prev, [name]: error }));
-        } else {
-          invoke<LlmModelInfo[]>("get_llm_models").then(setLlmModels).catch(() => {});
-          if (platform === "macos") {
-            invoke("load_llm_engine", { name }).catch(() => {});
-          }
-        }
-      } else {
-        setLlmDownloading((prev) => ({ ...prev, [name]: progress }));
-        setLlmErrors((prev) => { const next = { ...prev }; delete next[name]; return next; });
-      }
-    });
-
-    return () => { unlistenLlmPromise.then((f) => f()); };
   }, []);
 
   async function refreshOllamaStatus() {
-    const status = await invoke<OllamaStatus>("check_ollama_status");
-    setOllamaStatus(status);
+    setOllamaChecking(true);
+    try {
+      const status = await invoke<OllamaStatus>("check_ollama_status");
+      setOllamaStatus(status);
+    } finally {
+      setOllamaChecking(false);
+    }
   }
 
   async function handleSaveApiKey() {
@@ -362,21 +366,31 @@ function SmartDictationTab() {
     await invoke("save_cloud_api_key", { key: apiKeyInput.trim() });
     setApiKeySet(true);
     setApiKeyInput("");
+    setCloudTestError(null);
+    await update({ ai_cloud_verified: false });
   }
 
   async function handleDeleteApiKey() {
     await invoke("delete_cloud_api_key_cmd").catch(() => {});
     setApiKeySet(false);
+    setCloudTestError(null);
+    await update({ ai_cloud_verified: false });
   }
 
   async function handleTestConnection(backend: string) {
     setTestLoading(true);
-    setTestResult(null);
     try {
-      const result = await invoke<string>("test_ai_connection", { backend });
-      setTestResult("✓ " + result);
+      await invoke<string>("test_ai_connection", { backend });
+      if (backend === "cloud") {
+        setCloudTestError(null);
+        await update({ ai_cloud_verified: true });
+      }
     } catch (e) {
-      setTestResult("✗ " + String(e));
+      const msg = String(e);
+      if (backend === "cloud") {
+        setCloudTestError(msg);
+        await update({ ai_cloud_verified: false });
+      }
     } finally {
       setTestLoading(false);
     }
@@ -407,197 +421,138 @@ function SmartDictationTab() {
     return <div className="flex items-center justify-center h-64 text-white/35 text-sm">Loading…</div>;
   }
 
-  // Effective backend: if user selected built_in on non-macOS, treat as disabled for display/state
-  const effectiveBackend = platform === "macos" ? settings.ai_backend : (settings.ai_backend === "built_in" ? "disabled" : settings.ai_backend);
+  // Effective backend: treat built_in as disabled (built_in is removed)
+  const effectiveBackend = settings.ai_backend === "built_in" ? "disabled" : settings.ai_backend;
 
   return (
     <div>
       <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">AI Processing</h3>
 
-      {/* Backend selector */}
-      <div className="card px-5 mb-5">
-        <SettingRow label="Backend" description="Where text is sent for polishing">
-          <div className="flex rounded-xl overflow-hidden" style={{ boxShadow: "var(--nm-pressed-sm)" }}>
-            {(["disabled", "built_in", "ollama", "cloud"] as const)
-              .filter((b) => platform === "macos" || b !== "built_in")
-              .map((b) => (
-              <button
-                key={b}
-                onClick={() => {
-                  update({ ai_backend: b, ...(b === "disabled" ? { apply_polish_to_regular: false } : {}) });
-                  setTestResult(null);
-                  if (b === "built_in") {
-                    invoke<LlmModelInfo[]>("get_llm_models").then((models) => {
-                      const active = models.find((m) => m.is_active && m.is_downloaded);
-                      if (active && platform === "macos") {
-                        invoke("load_llm_engine", { name: active.name }).catch(() => {});
-                      }
-                      setLlmModels(models);
-                    }).catch(() => {});
-                  }
-                }}
-                className="px-3 py-1.5 text-xs transition-all duration-150 cursor-pointer"
+      {/* Backend selector — radio cards */}
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        {(
+          [
+            { value: "disabled", icon: "🚫", name: "Disabled",           description: "No AI polishing" },
+            { value: "ollama",   icon: "🦙", name: "On-Device (Ollama)", description: "Local model, private" },
+            { value: "cloud",    icon: "☁️", name: "Cloud API",          description: "OpenAI, Groq, or custom" },
+          ] as const
+        ).map(({ value, icon, name, description }) => {
+          const isSelected = effectiveBackend === value;
+          const badge =
+            value === "ollama"
+              ? ollamaStatus === null
+                ? null
+                : ollamaStatus.running
+                ? "Running"
+                : "Setup needed"
+              : value === "cloud"
+              ? settings.ai_cloud_verified
+                ? "Connected"
+                : "Needs setup"
+              : null;
+          return (
+            <button
+              key={value}
+              onClick={() => update({ ai_backend: value, ...(value === "disabled" ? { apply_polish_to_regular: false } : {}) })}
+              className="relative flex flex-col items-start gap-1.5 rounded-xl p-3 text-left transition-all duration-150 cursor-pointer"
+              style={{
+                border: isSelected ? "1px solid rgba(139,92,246,0.5)" : "1px solid rgba(255,255,255,0.07)",
+                background: isSelected ? "rgba(139,92,246,0.07)" : "rgba(255,255,255,0.02)",
+              }}
+            >
+              {/* radio dot */}
+              <div
+                className="absolute top-3 right-3 w-3.5 h-3.5 rounded-full flex items-center justify-center"
                 style={{
-                  background: effectiveBackend === b ? "rgba(139,92,246,0.15)" : "transparent",
-                  color: effectiveBackend === b ? "rgb(167,139,250)" : "var(--t3)",
+                  border: isSelected ? "1.5px solid rgb(139,92,246)" : "1.5px solid rgba(255,255,255,0.2)",
+                  background: isSelected ? "rgb(139,92,246)" : "transparent",
                 }}
               >
-                {b === "ollama" ? "On-Device (Ollama)"
-                 : b === "cloud" ? "Cloud API"
-                 : b === "built_in" ? "Built-in"
-                 : "Disabled"}
-              </button>
-            ))}
-          </div>
-        </SettingRow>
-        {settings.ai_backend === "disabled" && (
-          <p className="text-white/40 text-xs pb-3">Smart Dictation shortcut (⌘⇧B) will paste raw transcription.</p>
-        )}
-        {platform !== "macos" && settings.ai_backend === "built_in" && (
-          <p className="text-orange-400/70 text-xs pb-3">⚠️ Built-in backend is only available on macOS. Please select another backend.</p>
-        )}
-      </div>
-
-      {/* Built-in LLM section */}
-      {effectiveBackend === "built_in" && (
-        <div className="card px-5 mb-5">
-          <p className="text-white/60 text-[10px] uppercase tracking-widest py-3 font-mono border-b border-white/[0.04]">
-            Local Model
-          </p>
-          {llmModels.map((model) => {
-            const isDownloading = model.name in llmDownloading;
-            const progress = llmDownloading[model.name] ?? 0;
-            const error = llmErrors[model.name];
-            return (
-              <div key={model.name} className="py-3 border-b border-white/[0.04] last:border-0">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-0.5">
-                      {model.is_downloaded && model.is_active && (
-                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "var(--accent)" }} />
-                      )}
-                      <span className="text-white/80 text-sm font-medium">{model.name}</span>
-                      {model.is_downloaded && model.is_active && (
-                        <span className="text-[10px] px-1.5 py-px rounded font-mono" style={{ color: "var(--accent)", border: "1px solid color-mix(in srgb, var(--accent) 35%, transparent)" }}>Active</span>
-                      )}
-                    </div>
-                    <p className="text-white/50 text-xs font-mono">{model.size_label}</p>
-                  </div>
-                  <div className="shrink-0">
-                    {model.is_downloaded ? (
-                      <span className="text-emerald-400 text-xs">✓ Downloaded</span>
-                    ) : isDownloading ? (
-                      <div className="text-right min-w-[64px]">
-                        <p className="text-[11px] font-mono mb-1" style={{ color: "var(--accent)" }}>{Math.round(progress * 100)}%</p>
-                        <div className="h-1 rounded-full overflow-hidden" style={{ width: 64, background: "color-mix(in srgb, var(--t1) 8%, transparent)" }}>
-                          <div className="h-full rounded-full transition-all duration-200" style={{ width: `${progress * 100}%`, background: "var(--accent)" }} />
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setLlmErrors((prev) => { const n = { ...prev }; delete n[model.name]; return n; });
-                          setLlmDownloading((prev) => ({ ...prev, [model.name]: 0 }));
-                          invoke("download_llm_model", { name: model.name }).catch((e: unknown) => {
-                            setLlmDownloading((prev) => { const n = { ...prev }; delete n[model.name]; return n; });
-                            setLlmErrors((prev) => ({ ...prev, [model.name]: String(e) }));
-                          });
-                        }}
-                        className="btn-primary text-xs px-3 py-1.5"
-                      >
-                        Download
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {error && <p className="text-red-400/70 text-xs mt-1.5">✗ {error}</p>}
+                {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
               </div>
-            );
-          })}
-          <div className="py-3">
-            <button
-              onClick={async () => {
-                const { open } = await import("@tauri-apps/plugin-dialog");
-                const selected = await open({
-                  filters: [{ name: "GGUF Model", extensions: ["gguf"] }],
-                  multiple: false,
-                }).catch(() => null);
-                if (selected && typeof selected === "string") {
-                  const filename = await invoke<string>("import_llm_model", { sourcePath: selected })
-                    .catch((e: unknown) => { setLlmErrors((prev) => ({ ...prev, import: String(e) })); return null; });
-                  if (filename) {
-                    invoke<LlmModelInfo[]>("get_llm_models").then(setLlmModels).catch(() => {});
-                  }
-                }
-              }}
-              className="btn-ghost text-xs px-3 py-1.5"
-            >
-              + Add custom model
+              <span className="text-base leading-none">{icon}</span>
+              <span className="text-xs font-semibold pr-5" style={{ color: isSelected ? "rgb(167,139,250)" : "rgba(255,255,255,0.8)" }}>
+                {name}
+              </span>
+              <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.35)" }}>{description}</span>
+              {badge && (
+                <span
+                  className="text-[9px] px-1.5 py-0.5 rounded font-medium"
+                  style={{
+                    background: badge === "Running" || badge === "Connected" ? "rgba(52,211,153,0.1)" : "rgba(251,191,36,0.1)",
+                    color:      badge === "Running" || badge === "Connected" ? "rgba(52,211,153,0.8)"  : "rgba(251,191,36,0.8)",
+                  }}
+                >
+                  {badge}
+                </span>
+              )}
             </button>
-            {llmErrors["import"] && (
-              <p className="text-red-400/70 text-xs mt-1.5">✗ {llmErrors["import"]}</p>
-            )}
-          </div>
-        </div>
-      )}
+          );
+        })}
+      </div>
 
       {/* Ollama section */}
       {effectiveBackend === "ollama" && (
-        <div className="card px-5 mb-5">
-          <div className="flex items-center justify-between py-3 border-b border-white/[0.04]">
-            <div>
-              <p className="text-white/80 text-sm">Ollama Status</p>
-              {ollamaStatus === null
-                ? <p className="text-white/50 text-xs mt-0.5">Not checked yet</p>
-                : <p className={`text-xs mt-0.5 ${ollamaStatus.running ? "text-emerald-400" : "text-red-400/70"}`}>
-                    {ollamaStatus.running ? `Running · ${ollamaStatus.models.length} model(s)` : "Not running"}
-                  </p>
-              }
+        <div className="card mb-5 overflow-hidden">
+          {/* Status banner */}
+          {ollamaChecking ? (
+            <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.02)" }}>
+              <div className="w-2.5 h-2.5 rounded-full bg-white/20 animate-pulse flex-shrink-0" />
+              <span className="text-xs text-white/50">Checking Ollama…</span>
             </div>
-            <button onClick={refreshOllamaStatus} className="btn-ghost text-xs py-1 px-3">Refresh</button>
-          </div>
-          <SettingRow label="Server URL" description="Ollama server address">
-            <input
-              type="text"
-              value={settings.ai_ollama_url}
-              onChange={(e) => update({ ai_ollama_url: e.target.value })}
-              placeholder="http://localhost:11434"
-              className="text-white/60 text-xs rounded-lg px-3 py-1.5 outline-none max-w-[200px]"
-              style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-            />
-          </SettingRow>
-          <SettingRow label="Model" description="Ollama model for text polishing">
-            {ollamaStatus?.running && ollamaStatus.models.length > 0 ? (
-              <select
-                value={settings.ai_ollama_model}
-                onChange={(e) => update({ ai_ollama_model: e.target.value })}
-                className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none max-w-[160px]"
-                style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-              >
-                {ollamaStatus.models.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={settings.ai_ollama_model}
-                onChange={(e) => update({ ai_ollama_model: e.target.value })}
-                placeholder="e.g. llama3.2"
-                className="text-white/60 text-xs rounded-lg px-3 py-1.5 outline-none max-w-[160px]"
-                style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-              />
-            )}
-          </SettingRow>
-          <div className="py-3 flex items-center gap-3">
-            <button onClick={() => handleTestConnection("ollama")} disabled={testLoading} className="btn-ghost text-xs py-1 px-3">
-              {testLoading ? "Testing…" : "Test Connection"}
-            </button>
-            {testResult && <span className={`text-xs font-mono ${testResult.startsWith("✓") ? "text-emerald-400" : "text-red-400/70"}`}>{testResult}</span>}
-          </div>
-          {!ollamaStatus?.running && (
-            <div className="pb-4 space-y-2 text-xs leading-relaxed">
-              <p className="text-white/70 font-medium text-sm">Setup Ollama</p>
+          ) : ollamaStatus?.running ? (
+            <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(52,211,153,0.05)" }}>
+              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: "#34d399", boxShadow: "0 0 6px rgba(52,211,153,0.5)" }} />
+              <div className="flex-1 min-w-0 text-xs">
+                <span className="font-semibold" style={{ color: "#34d399" }}>Connected</span>
+                <span className="text-white/40 ml-2 font-mono">
+                  {settings.ai_ollama_model} · {settings.ai_ollama_url} · {ollamaStatus.models.length} models
+                </span>
+              </div>
+              <button onClick={refreshOllamaStatus} disabled={ollamaChecking} className="btn-ghost text-xs py-1 px-3 flex-shrink-0">Refresh</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(251,191,36,0.05)" }}>
+              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: "#fbbf24", boxShadow: "0 0 6px rgba(251,191,36,0.5)" }} />
+              <div className="flex-1 text-xs">
+                <span className="font-semibold" style={{ color: "#fbbf24" }}>Ollama not detected</span>
+                <span className="text-white/40 ml-2">Install and start Ollama to continue</span>
+              </div>
+              <button onClick={refreshOllamaStatus} disabled={ollamaChecking} className="btn-ghost text-xs py-1 px-3 flex-shrink-0">Refresh</button>
+            </div>
+          )}
+
+          {/* Config fields — only when connected */}
+          {ollamaStatus?.running && (
+            <div className="px-5">
+              <SettingRow label="Model" description="Ollama model for text polishing">
+                <select
+                  value={settings.ai_ollama_model}
+                  onChange={(e) => update({ ai_ollama_model: e.target.value })}
+                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none max-w-[160px]"
+                  style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                >
+                  {ollamaStatus.models.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </SettingRow>
+              <SettingRow label="Server URL" description="Advanced">
+                <input
+                  type="text"
+                  value={settings.ai_ollama_url}
+                  onChange={(e) => update({ ai_ollama_url: e.target.value })}
+                  placeholder="http://localhost:11434"
+                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 outline-none max-w-[200px]"
+                  style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                />
+              </SettingRow>
+            </div>
+          )}
+
+          {/* Setup guide — only when not running */}
+          {!ollamaChecking && ollamaStatus !== null && !ollamaStatus.running && (
+            <div className="px-5 py-4 space-y-2 text-xs leading-relaxed">
               <p className="text-white/50">1. Download from{" "}
                 <button
                   onClick={() => invoke("plugin:opener|open_url", { url: "https://ollama.com" }).catch(() => {})}
@@ -606,148 +561,231 @@ function SmartDictationTab() {
                   ollama.com
                 </button>
               </p>
-              <p className="text-white/50">2. Install and open Ollama (it runs in your menu bar)</p>
-              <p className="text-white/50">3. Open Terminal and run:</p>
-              <button
-                onClick={() => navigator.clipboard.writeText("ollama pull llama3.2")}
-                className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left cursor-pointer hover:bg-white/[0.06] transition-colors group"
-                style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                title="Click to copy"
-              >
-                <code className="font-mono text-white/70 flex-1">ollama pull llama3.2</code>
-                <span className="text-white/30 group-hover:text-white/60 transition-colors text-[10px]">copy</span>
-              </button>
-              <p className="text-white/50">4. Click <span className="text-white/70">Refresh</span> above to detect it</p>
+              <p className="text-white/50">2. Run:{" "}
+                <button
+                  onClick={() => navigator.clipboard.writeText("ollama pull llama3.2")}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono cursor-pointer hover:bg-white/[0.06] transition-colors"
+                  style={{ background: "rgba(255,255,255,0.04)" }}
+                  title="Click to copy"
+                >
+                  <code className="text-white/70">ollama pull llama3.2</code>
+                </button>
+              </p>
+              <p className="text-white/50">3. Click <span className="text-white/70">Refresh</span> above</p>
             </div>
           )}
         </div>
       )}
 
       {/* Cloud API section */}
-      {effectiveBackend === "cloud" && (
-        <div className="card px-5 mb-5">
-          <SettingRow label="Provider" description="OpenAI-compatible API">
-            <select
-              value={
-                settings.ai_cloud_api_url.includes("openai.com") ? "openai"
-                : settings.ai_cloud_api_url.includes("anthropic.com") ? "anthropic"
-                : settings.ai_cloud_api_url.includes("googleapis.com") || settings.ai_cloud_api_url.includes("generativelanguage") ? "google"
-                : settings.ai_cloud_api_url.includes("groq.com") ? "groq"
-                : settings.ai_cloud_api_url.includes("mistral.ai") ? "mistral"
-                : settings.ai_cloud_api_url.includes("openrouter.ai") ? "openrouter"
-                : "custom"
-              }
-              onChange={(e) => {
-                const presets: Record<string, { url: string; model: string }> = {
-                  openai:     { url: "https://api.openai.com/v1",                                    model: "gpt-4o-mini" },
-                  anthropic:  { url: "https://api.anthropic.com/v1",                                 model: "claude-haiku-4-5-20251001" },
-                  google:     { url: "https://generativelanguage.googleapis.com/v1beta/openai",       model: "gemini-2.0-flash" },
-                  groq:       { url: "https://api.groq.com/openai/v1",                               model: "llama3-8b-8192" },
-                  mistral:    { url: "https://api.mistral.ai/v1",                                    model: "mistral-small-latest" },
-                  openrouter: { url: "https://openrouter.ai/api/v1",                                 model: "openai/gpt-4o-mini" },
-                  custom:     { url: "", model: "" },
-                };
-                const p = presets[e.target.value];
-                update({ ai_cloud_api_url: p.url, ai_cloud_model: p.model });
-              }}
-              className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
-              style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-            >
-              <option value="openai">OpenAI</option>
-              <option value="anthropic">Anthropic</option>
-              <option value="google">Google Gemini</option>
-              <option value="groq">Groq</option>
-              <option value="mistral">Mistral</option>
-              <option value="openrouter">OpenRouter</option>
-              <option value="custom">Custom</option>
-            </select>
-          </SettingRow>
-          {(() => {
-            const isCustom = !["openai.com","anthropic.com","googleapis.com","generativelanguage","groq.com","mistral.ai","openrouter.ai"]
-              .some((s) => settings.ai_cloud_api_url.includes(s));
-            return isCustom ? (
-              <SettingRow label="API URL" description="Base URL of your OpenAI-compatible endpoint">
-                <input
-                  type="text"
-                  value={settings.ai_cloud_api_url}
-                  onChange={(e) => update({ ai_cloud_api_url: e.target.value })}
-                  placeholder="https://your-api.example.com/v1"
-                  className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-56 font-mono"
-                  style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                />
-              </SettingRow>
-            ) : null;
-          })()}
-          <SettingRow label="API Key" description={apiKeySet ? "Key stored in macOS Keychain" : "Paste your API key"}>
-            {apiKeySet ? (
-              <div className="flex items-center gap-2">
-                <span className="text-emerald-400 text-xs font-mono">●●●●●●●●</span>
-                <button onClick={handleDeleteApiKey} className="text-red-400/60 hover:text-red-400 text-xs cursor-pointer">Remove</button>
+      {effectiveBackend === "cloud" && (() => {
+        const activeProvider =
+          settings.ai_cloud_api_url.includes("openai.com")      ? "openai"
+          : settings.ai_cloud_api_url.includes("anthropic.com") ? "anthropic"
+          : settings.ai_cloud_api_url.includes("googleapis.com") || settings.ai_cloud_api_url.includes("generativelanguage") ? "google"
+          : settings.ai_cloud_api_url.includes("groq.com")      ? "groq"
+          : settings.ai_cloud_api_url.includes("mistral.ai")    ? "mistral"
+          : settings.ai_cloud_api_url.includes("openrouter.ai") ? "openrouter"
+          : "custom";
+
+        return (
+          <div className="card mb-5 overflow-hidden">
+            {/* Status banner */}
+            {settings.ai_cloud_verified ? (
+              <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(52,211,153,0.05)" }}>
+                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: "#34d399", boxShadow: "0 0 6px rgba(52,211,153,0.5)" }} />
+                <div className="flex-1 text-xs">
+                  <span className="font-semibold" style={{ color: "#34d399" }}>Connected</span>
+                  <span className="text-white/40 ml-2 font-mono capitalize">{activeProvider} · {settings.ai_cloud_model}</span>
+                </div>
+              </div>
+            ) : cloudTestError ? (
+              <div className="flex items-start gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(248,113,113,0.05)" }}>
+                <div className="w-2.5 h-2.5 rounded-full mt-0.5 flex-shrink-0" style={{ background: "#f87171", boxShadow: "0 0 6px rgba(248,113,113,0.5)" }} />
+                <div className="flex-1 text-xs">
+                  <span className="font-semibold text-red-400">Connection failed</span>
+                  <span className="text-white/40 ml-2">{cloudTestError}</span>
+                </div>
               </div>
             ) : (
-              <div className="flex items-center gap-2">
-                <input
-                  type={showApiKey ? "text" : "password"}
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder="API key…"
-                  className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-56 font-mono"
-                  style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                  onKeyDown={(e) => e.key === "Enter" && handleSaveApiKey()}
-                />
-                <button onClick={() => setShowApiKey((v) => !v)} className="text-white/50 hover:text-white/60 text-xs cursor-pointer">{showApiKey ? "Hide" : "Show"}</button>
-                <button onClick={handleSaveApiKey} disabled={!apiKeyInput.trim()} className="btn-ghost text-xs py-1 px-2">Save</button>
+              <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(251,191,36,0.05)" }}>
+                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: "#fbbf24", boxShadow: "0 0 6px rgba(251,191,36,0.5)" }} />
+                <span className="text-xs" style={{ color: "#fbbf24" }}>Not verified — enter your API key and test the connection</span>
               </div>
             )}
-          </SettingRow>
-          <SettingRow label="Model" description="Model name">
-            <div className="flex flex-col items-end gap-1.5">
-              {(() => {
-                const activeProvider = settings.ai_cloud_api_url.includes("openai.com") ? "openai"
-                  : settings.ai_cloud_api_url.includes("anthropic.com") ? "anthropic"
-                  : settings.ai_cloud_api_url.includes("googleapis.com") || settings.ai_cloud_api_url.includes("generativelanguage") ? "google"
-                  : settings.ai_cloud_api_url.includes("groq.com") ? "groq"
-                  : settings.ai_cloud_api_url.includes("mistral.ai") ? "mistral"
-                  : settings.ai_cloud_api_url.includes("openrouter.ai") ? "openrouter"
-                  : "custom";
-                const presets = MODEL_PRESETS[activeProvider] ?? [];
-                return presets.length > 0 ? (
-                  <select
-                    value={presets.includes(settings.ai_cloud_model) ? settings.ai_cloud_model : presets[0]}
-                    onChange={(e) => update({ ai_cloud_model: e.target.value })}
-                    className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none w-40 font-mono"
-                    style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                  >
-                    {presets.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
-                ) : (
+
+            <div className="px-5">
+              {/* Provider */}
+              <SettingRow label="Provider" description="OpenAI-compatible API">
+                <select
+                  value={activeProvider}
+                  onChange={(e) => {
+                    const presets: Record<string, { url: string; model: string }> = {
+                      openai:     { url: "https://api.openai.com/v1",                                  model: "gpt-4o-mini" },
+                      anthropic:  { url: "https://api.anthropic.com/v1",                               model: "claude-haiku-4-5-20251001" },
+                      google:     { url: "https://generativelanguage.googleapis.com/v1beta/openai",     model: "gemini-2.0-flash" },
+                      groq:       { url: "https://api.groq.com/openai/v1",                             model: "llama3-8b-8192" },
+                      mistral:    { url: "https://api.mistral.ai/v1",                                  model: "mistral-small-latest" },
+                      openrouter: { url: "https://openrouter.ai/api/v1",                               model: "openai/gpt-4o-mini" },
+                      custom:     { url: "", model: "" },
+                    };
+                    const p = presets[e.target.value];
+                    setCloudTestError(null);
+                    update({ ai_cloud_api_url: p.url, ai_cloud_model: p.model, ai_cloud_verified: false });
+                  }}
+                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
+                  style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                >
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic</option>
+                  <option value="google">Google Gemini</option>
+                  <option value="groq">Groq</option>
+                  <option value="mistral">Mistral</option>
+                  <option value="openrouter">OpenRouter</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </SettingRow>
+
+              {/* Custom API URL — only for custom provider */}
+              {activeProvider === "custom" && (
+                <SettingRow label="API URL" description="Base URL of your OpenAI-compatible endpoint">
                   <input
                     type="text"
-                    value={customModelInput || settings.ai_cloud_model}
-                    onChange={(e) => setCustomModelInput(e.target.value)}
-                    onBlur={() => { if (customModelInput.trim()) update({ ai_cloud_model: customModelInput.trim() }); }}
-                    onKeyDown={(e) => { if (e.key === "Enter" && customModelInput.trim()) update({ ai_cloud_model: customModelInput.trim() }); }}
-                    placeholder="model-name"
-                    className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-40 font-mono"
+                    value={settings.ai_cloud_api_url}
+                    onChange={(e) => { setCloudTestError(null); update({ ai_cloud_api_url: e.target.value, ai_cloud_verified: false }); }}
+                    placeholder="https://your-api.example.com/v1"
+                    className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-56 font-mono"
                     style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
                   />
-                );
-              })()}
+                </SettingRow>
+              )}
+
+              {/* API Key */}
+              <SettingRow label="API Key" description={apiKeySet ? "Key stored in macOS Keychain" : "Paste your API key"}>
+                {apiKeySet ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400 text-xs font-mono">●●●●●●●●</span>
+                    <button onClick={handleDeleteApiKey} className="text-red-400/60 hover:text-red-400 text-xs cursor-pointer">Remove</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type={showApiKey ? "text" : "password"}
+                      value={apiKeyInput}
+                      onChange={(e) => setApiKeyInput(e.target.value)}
+                      placeholder="API key…"
+                      className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-56 font-mono"
+                      style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                      onKeyDown={(e) => e.key === "Enter" && handleSaveApiKey()}
+                    />
+                    <button onClick={() => setShowApiKey((v) => !v)} className="text-white/50 hover:text-white/60 text-xs cursor-pointer">{showApiKey ? "Hide" : "Show"}</button>
+                    <button onClick={handleSaveApiKey} disabled={!apiKeyInput.trim()} className="btn-ghost text-xs py-1 px-2">Save</button>
+                  </div>
+                )}
+              </SettingRow>
+
+              {/* Model */}
+              <SettingRow label="Model" description="Model name">
+                <div className="flex flex-col items-end gap-1.5">
+                  {(() => {
+                    const presets = MODEL_PRESETS[activeProvider] ?? [];
+                    const isOther = presets.length > 0 && (customModelMode || !presets.includes(settings.ai_cloud_model));
+                    return presets.length > 0 ? (
+                      <>
+                        <select
+                          value={isOther ? "__other__" : settings.ai_cloud_model}
+                          onChange={(e) => {
+                            if (e.target.value === "__other__") {
+                              setCustomModelMode(true);
+                              setCustomModelInput("");
+                            } else {
+                              setCustomModelMode(false);
+                              setCustomModelInput("");
+                              update({ ai_cloud_model: e.target.value, ai_cloud_verified: false });
+                              setCloudTestError(null);
+                            }
+                          }}
+                          className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none w-40 font-mono"
+                          style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                        >
+                          {presets.map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                          <option value="__other__">Other…</option>
+                        </select>
+                        {isOther && (
+                          <input
+                            type="text"
+                            autoFocus
+                            value={customModelInput}
+                            onChange={(e) => setCustomModelInput(e.target.value)}
+                            onBlur={() => {
+                              if (customModelInput.trim()) {
+                                update({ ai_cloud_model: customModelInput.trim(), ai_cloud_verified: false });
+                                setCloudTestError(null);
+                              } else {
+                                setCustomModelMode(false);
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && customModelInput.trim()) {
+                                update({ ai_cloud_model: customModelInput.trim(), ai_cloud_verified: false });
+                                setCloudTestError(null);
+                              } else if (e.key === "Escape") {
+                                setCustomModelMode(false);
+                                setCustomModelInput("");
+                              }
+                            }}
+                            placeholder={settings.ai_cloud_model || "model-id"}
+                            className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-40 font-mono"
+                            style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                          />
+                        )}
+                      </>
+                    ) : (
+                      <input
+                        type="text"
+                        value={customModelInput || settings.ai_cloud_model}
+                        onChange={(e) => setCustomModelInput(e.target.value)}
+                        onBlur={() => {
+                          if (customModelInput.trim()) {
+                            update({ ai_cloud_model: customModelInput.trim(), ai_cloud_verified: false });
+                            setCloudTestError(null);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && customModelInput.trim()) {
+                            update({ ai_cloud_model: customModelInput.trim(), ai_cloud_verified: false });
+                            setCloudTestError(null);
+                          }
+                        }}
+                        placeholder="model-name"
+                        className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-40 font-mono"
+                        style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                      />
+                    );
+                  })()}
+                </div>
+              </SettingRow>
+
+              {/* Test Connection */}
+              <div className="py-3 flex items-center gap-3">
+                <button
+                  onClick={() => handleTestConnection("cloud")}
+                  disabled={testLoading || !apiKeySet}
+                  className="btn-ghost text-xs py-1 px-3"
+                >
+                  {testLoading ? "Testing…" : "Test Connection"}
+                </button>
+              </div>
+
+              <p className="text-white/35 text-xs pb-3 leading-relaxed">
+                When using Cloud API, your transcription text is sent to the provider. Audio never leaves your device.
+              </p>
             </div>
-          </SettingRow>
-          <div className="py-3 flex items-center gap-3">
-            <button onClick={() => handleTestConnection("cloud")} disabled={testLoading || !apiKeySet} className="btn-ghost text-xs py-1 px-3">
-              {testLoading ? "Testing…" : "Test Connection"}
-            </button>
-            {testResult && <span className={`text-xs font-mono ${testResult.startsWith("✓") ? "text-emerald-400" : "text-red-400/70"}`}>{testResult}</span>}
           </div>
-          <p className="text-white/35 text-xs pb-3 leading-relaxed">
-            When using Cloud API, your transcription text is sent to the provider. Audio never leaves your device.
-          </p>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Smart Dictation config */}
       <h3 className="text-t3 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Smart Dictation</h3>
@@ -780,20 +818,18 @@ function SmartDictationTab() {
             </select>
           </SettingRow>
         )}
-        {effectiveBackend !== "built_in" && (
-          <SettingRow label="Timeout" description="Max seconds to wait for AI response">
-            <select
-              value={settings.ai_timeout_seconds}
-              onChange={(e) => update({ ai_timeout_seconds: parseInt(e.target.value) })}
-              className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
-              style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-            >
-              <option value={15}>15s</option>
-              <option value={30}>30s</option>
-              <option value={60}>60s</option>
-            </select>
-          </SettingRow>
-        )}
+        <SettingRow label="Timeout" description="Max seconds to wait for AI response">
+          <select
+            value={settings.ai_timeout_seconds}
+            onChange={(e) => update({ ai_timeout_seconds: parseInt(e.target.value) })}
+            className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
+            style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+          >
+            <option value={15}>15s</option>
+            <option value={30}>30s</option>
+            <option value={60}>60s</option>
+          </select>
+        </SettingRow>
       </div>
 
       {/* Polish styles — built-in */}
