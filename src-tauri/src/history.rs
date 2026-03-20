@@ -297,17 +297,6 @@ pub fn get_seconds_used_today() -> Result<i64> {
     Ok(seconds)
 }
 
-/// Adds `seconds` to today's usage counter (upsert).
-pub fn add_seconds_today(seconds: i64) -> Result<()> {
-    let conn = open_db()?;
-    let today = today_date();
-    conn.execute(
-        "INSERT INTO daily_usage (date, seconds_used) VALUES (?1, ?2)
-         ON CONFLICT(date) DO UPDATE SET seconds_used = seconds_used + ?2",
-        params![today, seconds],
-    )?;
-    Ok(())
-}
 
 #[cfg(test)]
 mod tests {

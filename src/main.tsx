@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/react";
 import App from "./App";
 import OverlayWindow from "./components/OverlayWindow";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { STORAGE_KEYS } from "./utils/storageKeys";
 import "./styles/globals.css";
 
 const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN ?? "";
@@ -22,6 +23,7 @@ getWindowLabel().then(label => {
   if (label === "overlay") {
     document.documentElement.style.cssText = "background: transparent !important; margin: 0; padding: 0;";
     document.body.style.cssText = "background: transparent !important; margin: 0; padding: 0; height: 100vh; overflow: hidden; display: flex; align-items: center; justify-content: center;";
+    root.style.cssText = "background: transparent !important; display: flex; align-items: center; justify-content: center;";
     ReactDOM.createRoot(root).render(<OverlayWindow />);
     return;
   }
@@ -29,7 +31,7 @@ getWindowLabel().then(label => {
   // Main window: init Sentry before first render.
   // localStorage key is written by Settings.tsx whenever the user changes the toggle.
   // Absent key = first launch = default on.
-  const crashEnabled = localStorage.getItem("crash_reporting_enabled") !== "false";
+  const crashEnabled = localStorage.getItem(STORAGE_KEYS.CRASH_REPORTING) !== "false";
   Sentry.init({
     dsn: crashEnabled ? SENTRY_DSN : "",
     beforeSend(event) {

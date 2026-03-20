@@ -556,17 +556,38 @@ function SmartDictationTab() {
             </div>
             <button onClick={refreshOllamaStatus} className="btn-ghost text-xs py-1 px-3">Refresh</button>
           </div>
-          <SettingRow label="Model" description="Ollama model for text polishing">
-            <select
-              value={settings.ai_ollama_model}
-              onChange={(e) => update({ ai_ollama_model: e.target.value })}
-              className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none max-w-[160px]"
+          <SettingRow label="Server URL" description="Ollama server address">
+            <input
+              type="text"
+              value={settings.ai_ollama_url}
+              onChange={(e) => update({ ai_ollama_url: e.target.value })}
+              placeholder="http://localhost:11434"
+              className="text-white/60 text-xs rounded-lg px-3 py-1.5 outline-none max-w-[200px]"
               style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-            >
-              {(ollamaStatus?.models.length ? ollamaStatus.models : [settings.ai_ollama_model]).map((m) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
+            />
+          </SettingRow>
+          <SettingRow label="Model" description="Ollama model for text polishing">
+            {ollamaStatus?.running && ollamaStatus.models.length > 0 ? (
+              <select
+                value={settings.ai_ollama_model}
+                onChange={(e) => update({ ai_ollama_model: e.target.value })}
+                className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none max-w-[160px]"
+                style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+              >
+                {ollamaStatus.models.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={settings.ai_ollama_model}
+                onChange={(e) => update({ ai_ollama_model: e.target.value })}
+                placeholder="e.g. llama3.2"
+                className="text-white/60 text-xs rounded-lg px-3 py-1.5 outline-none max-w-[160px]"
+                style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+              />
+            )}
           </SettingRow>
           <div className="py-3 flex items-center gap-3">
             <button onClick={() => handleTestConnection("ollama")} disabled={testLoading} className="btn-ghost text-xs py-1 px-3">
@@ -574,13 +595,29 @@ function SmartDictationTab() {
             </button>
             {testResult && <span className={`text-xs font-mono ${testResult.startsWith("✓") ? "text-emerald-400" : "text-red-400/70"}`}>{testResult}</span>}
           </div>
-          {ollamaStatus && !ollamaStatus.running && (
-            <div className="pb-4 space-y-1.5 text-white/40 text-xs leading-relaxed">
-              <p className="text-white/60 font-medium text-sm">Setup Ollama</p>
-              <p>1. Download from <button onClick={() => invoke("plugin:opener|open_url", { url: "https://ollama.com" }).catch(() => {})} className="text-violet-400 underline cursor-pointer">ollama.com</button></p>
-              <p>2. Install and open Ollama (it runs in the menu bar)</p>
-              <p>3. Open Terminal and run: <code className="bg-white/[0.06] px-1.5 py-0.5 rounded font-mono text-white/60">ollama pull llama3.2</code></p>
-              <p>4. Click Refresh above to detect it</p>
+          {!ollamaStatus?.running && (
+            <div className="pb-4 space-y-2 text-xs leading-relaxed">
+              <p className="text-white/70 font-medium text-sm">Setup Ollama</p>
+              <p className="text-white/50">1. Download from{" "}
+                <button
+                  onClick={() => invoke("plugin:opener|open_url", { url: "https://ollama.com" }).catch(() => {})}
+                  className="text-violet-400 underline cursor-pointer hover:text-violet-300 transition-colors"
+                >
+                  ollama.com
+                </button>
+              </p>
+              <p className="text-white/50">2. Install and open Ollama (it runs in your menu bar)</p>
+              <p className="text-white/50">3. Open Terminal and run:</p>
+              <button
+                onClick={() => navigator.clipboard.writeText("ollama pull llama3.2")}
+                className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left cursor-pointer hover:bg-white/[0.06] transition-colors group"
+                style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                title="Click to copy"
+              >
+                <code className="font-mono text-white/70 flex-1">ollama pull llama3.2</code>
+                <span className="text-white/30 group-hover:text-white/60 transition-colors text-[10px]">copy</span>
+              </button>
+              <p className="text-white/50">4. Click <span className="text-white/70">Refresh</span> above to detect it</p>
             </div>
           )}
         </div>

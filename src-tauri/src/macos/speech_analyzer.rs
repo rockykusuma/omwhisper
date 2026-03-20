@@ -5,6 +5,7 @@ mod ffi {
         pub fn apple_speech_auth_status() -> i32;
         pub fn request_speech_recognition_permission() -> bool;
         pub fn check_microphone_permission() -> bool;
+        pub fn get_microphone_auth_status() -> i32;
         pub fn request_microphone_permission() -> bool;
         pub fn apple_transcribe_buffer(
             samples: *const f32,
@@ -25,6 +26,15 @@ unsafe impl Send for SpeechAnalyzerEngine {}
 /// Returns true only if already authorized.
 pub fn check_microphone_permission() -> bool {
     unsafe { ffi::check_microphone_permission() }
+}
+
+/// Returns microphone auth status: "authorized", "not_determined", or "denied".
+pub fn get_microphone_auth_status() -> &'static str {
+    match unsafe { ffi::get_microphone_auth_status() } {
+        0 => "authorized",
+        1 => "not_determined",
+        _ => "denied",
+    }
 }
 
 /// Request microphone permission via AVCaptureDevice (proper macOS TCC path).

@@ -1,8 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { Sparkles } from "lucide-react";
 import type { AppSettings } from "../types";
+
+function formatElapsed(secs: number): string {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return m > 0 ? `${m}:${String(s).padStart(2, "0")}` : `0:${String(s).padStart(2, "0")}`;
+}
 
 // ─── Micro pill (bars only, compact) ─────────────────────────────────────────
 // 5 bars, no text, 28px tall pill
@@ -14,7 +20,7 @@ const MICRO_BARS = [
   { anim: "tb3", dur: 0.85, delay: 0.30 },
 ];
 
-function MicroPill() {
+function MicroPill({ elapsed }: { elapsed: number }) {
   return (
     <>
       <style>{`
@@ -28,11 +34,14 @@ function MicroPill() {
         display: "flex",
         alignItems: "center",
         gap: 3,
-        background: "rgba(29,158,117,0.12)",
-        border: "0.5px solid rgba(29,158,117,0.3)",
+        background: "rgba(10, 16, 13, 0.88)",
+        backdropFilter: "blur(14px) saturate(180%)",
+        WebkitBackdropFilter: "blur(14px) saturate(180%)",
+        border: "0.5px solid rgba(29,158,117,0.45)",
         borderRadius: 14,
         padding: "6px 10px",
         height: 28,
+        boxShadow: "0 2px 12px rgba(0,0,0,0.35)",
       }}>
         {MICRO_BARS.map((b, i) => (
           <div key={i} style={{
@@ -42,6 +51,14 @@ function MicroPill() {
             animation: `${b.anim} ${b.dur}s ease-in-out ${b.delay}s infinite`,
           }} />
         ))}
+        <span style={{
+          color: "rgba(29,158,117,0.85)",
+          fontSize: 10,
+          fontWeight: 600,
+          fontVariantNumeric: "tabular-nums",
+          marginLeft: 5,
+          letterSpacing: "0.3px",
+        }}>{formatElapsed(elapsed)}</span>
       </div>
     </>
   );
@@ -59,7 +76,7 @@ const WAVEFORM_BARS = [
   { anim: "wf1", dur: 1.15, delay: 0.35 },
 ];
 
-function WaveformPill() {
+function WaveformPill({ elapsed }: { elapsed: number }) {
   return (
     <>
       <style>{`
@@ -73,13 +90,16 @@ function WaveformPill() {
         }
       `}</style>
       <div style={{
-        background: "rgba(29,158,117,0.1)",
-        border: "1px solid rgba(29,158,117,0.25)",
+        background: "rgba(10, 16, 13, 0.88)",
+        backdropFilter: "blur(14px) saturate(180%)",
+        WebkitBackdropFilter: "blur(14px) saturate(180%)",
+        border: "1px solid rgba(29,158,117,0.4)",
         borderRadius: 28,
         padding: "16px 28px",
         display: "flex",
         alignItems: "center",
         gap: 14,
+        boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
       }}>
         {/* Equaliser bars */}
         <div style={{ display: "flex", alignItems: "center", gap: 4, height: 48 }}>
@@ -93,16 +113,25 @@ function WaveformPill() {
           ))}
         </div>
 
-        {/* Label */}
-        <span style={{
-          color: "rgba(255,255,255,0.7)",
-          fontSize: 13,
-          fontWeight: 500,
-          letterSpacing: "0.5px",
-          whiteSpace: "nowrap",
-        }}>
-          Listening
-        </span>
+        {/* Label + timer */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2 }}>
+          <span style={{
+            color: "rgba(255,255,255,0.7)",
+            fontSize: 13,
+            fontWeight: 500,
+            letterSpacing: "0.5px",
+            whiteSpace: "nowrap",
+          }}>
+            Listening
+          </span>
+          <span style={{
+            color: "rgba(29,158,117,0.8)",
+            fontSize: 11,
+            fontWeight: 600,
+            fontVariantNumeric: "tabular-nums",
+            letterSpacing: "0.3px",
+          }}>{formatElapsed(elapsed)}</span>
+        </div>
 
         {/* Red dot */}
         <div style={{
@@ -128,13 +157,16 @@ function PolishingPill({ large }: { large?: boolean }) {
           @keyframes sparkle-spin { 0% { opacity: 0.5; transform: scale(0.85) rotate(0deg); } 50% { opacity: 1; transform: scale(1.1) rotate(180deg); } 100% { opacity: 0.5; transform: scale(0.85) rotate(360deg); } }
         `}</style>
         <div style={{
-          background: "rgba(139,92,246,0.1)",
-          border: "1px solid rgba(139,92,246,0.25)",
+          background: "rgba(10, 8, 18, 0.88)",
+          backdropFilter: "blur(14px) saturate(180%)",
+          WebkitBackdropFilter: "blur(14px) saturate(180%)",
+          border: "1px solid rgba(139,92,246,0.4)",
           borderRadius: 28,
           padding: "16px 28px",
           display: "flex",
           alignItems: "center",
           gap: 14,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
         }}>
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.85)" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
             style={{ animation: "sparkle-spin 1.8s ease-in-out infinite", flexShrink: 0 }}>
@@ -163,9 +195,12 @@ function PolishingPill({ large }: { large?: boolean }) {
       `}</style>
       <div style={{
         display: "flex", alignItems: "center", gap: 6,
-        background: "rgba(139,92,246,0.12)",
-        border: "0.5px solid rgba(139,92,246,0.3)",
+        background: "rgba(10, 8, 18, 0.88)",
+        backdropFilter: "blur(14px) saturate(180%)",
+        WebkitBackdropFilter: "blur(14px) saturate(180%)",
+        border: "0.5px solid rgba(139,92,246,0.45)",
         borderRadius: 14, padding: "6px 10px", height: 28,
+        boxShadow: "0 2px 12px rgba(0,0,0,0.35)",
       }}>
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(167,139,250,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
           style={{ animation: "sparkle-pulse 1.2s ease-in-out infinite", flexShrink: 0 }}>
@@ -183,6 +218,18 @@ export default function OverlayWindow() {
   const [overlayStyle, setOverlayStyle] = useState<string>("micro");
   const [applyPolishRegular, setApplyPolishRegular] = useState(false);
   const [isPolishing, setIsPolishing] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startTimer = () => {
+    setElapsed(0);
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+  };
+
+  const stopTimer = () => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  };
 
   // Load current setting on mount, re-sync when settings change
   useEffect(() => {
@@ -199,17 +246,20 @@ export default function OverlayWindow() {
     return () => { unlistenSettings.then((f) => f()); };
   }, []);
 
-  // Re-read style when recording starts
+  // Timer lifecycle is driven entirely by recording-state events.
   useEffect(() => {
     const unlistenState = listen<boolean>("recording-state", (e) => {
       if (e.payload) {
         setIsPolishing(false);
+        startTimer();
         invoke<AppSettings>("get_settings")
           .then((s) => {
             setOverlayStyle(s.overlay_style ?? "micro");
             setApplyPolishRegular(s.apply_polish_to_regular ?? false);
           })
           .catch(() => {});
+      } else {
+        stopTimer();
       }
     });
     return () => { unlistenState.then((f) => f()); };
@@ -229,7 +279,7 @@ export default function OverlayWindow() {
         <PolishingPill large={overlayStyle === "waveform"} />
       ) : (
         <>
-          {overlayStyle === "waveform" ? <WaveformPill /> : <MicroPill />}
+          {overlayStyle === "waveform" ? <WaveformPill elapsed={elapsed} /> : <MicroPill elapsed={elapsed} />}
           {applyPolishRegular && (
             <div style={{
               display: "flex",

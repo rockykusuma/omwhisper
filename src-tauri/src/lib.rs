@@ -27,7 +27,7 @@ use commands::{
     delete_model, download_model, get_app_version, get_audio_devices, get_available_models,
     get_debug_info, get_history, get_license_info, get_license_status, get_models,
     get_models_disk_usage, get_settings, get_usage_today, hide_overlay, is_first_launch,
-    is_running_from_dmg, open_accessibility_settings, paste_transcription, check_microphone_permission, request_microphone_permission,
+    is_running_from_dmg, open_accessibility_settings, paste_transcription, check_microphone_permission, request_microphone_permission, get_microphone_auth_status, open_microphone_settings,
     save_transcription, search_history, show_main_window, show_overlay, start_transcription, stop_transcription,
     transcribe_file, update_settings, validate_license_bg,
     get_vocabulary, add_vocabulary_word, remove_vocabulary_word, add_word_replacement, remove_word_replacement,
@@ -78,14 +78,14 @@ fn activate_app_macos() {
     }
 }
 
-/// Center the main window on the primary monitor before showing it.
-/// This ensures the app always appears on the main screen even when an extended monitor is connected.
+/// Center the main window on the primary monitor.
+/// Must be called after the window is visible so outer_size() returns real dimensions.
 fn center_on_primary_monitor(win: &tauri::WebviewWindow) {
     if let Ok(Some(monitor)) = win.primary_monitor() {
         let screen = monitor.size();
         let origin = monitor.position();
         if let Ok(win_size) = win.outer_size() {
-            let x = origin.x + ((screen.width as i32 - win_size.width as i32) / 2);
+            let x = origin.x + ((screen.width  as i32 - win_size.width  as i32) / 2);
             let y = origin.y + ((screen.height as i32 - win_size.height as i32) / 2);
             let _ = win.set_position(tauri::PhysicalPosition { x, y });
         }
@@ -415,13 +415,13 @@ pub fn run() {
             let state_toggle = shared_state.clone();
             app.global_shortcut().on_shortcut(toggle_sc, move |app, _shortcut, event| {
                 if event.state != ShortcutState::Pressed { return; }
-                let is_recording = state_toggle.lock().expect("state mutex poisoned").capture.is_some();
+                let is_recording = state_toggle.lock().unwrap_or_else(|e| e.into_inner()).capture.is_some();
                 if is_recording {
                     let _ = app.emit("hotkey-stop-recording", ());
                 } else {
                     let focused = crate::paste::get_frontmost_app();
                     tracing::info!("toggle hotkey: captured frontmost app = {:?}", focused);
-                    *crate::commands::get_previous_app().lock().expect("state mutex poisoned") = focused;
+                    *crate::commands::get_previous_app().lock().unwrap_or_else(|e| e.into_inner()) = focused;
                     let _ = app.emit("hotkey-toggle-recording", ());
                 }
             })?;
@@ -434,13 +434,13 @@ pub fn run() {
                 if let Some(ptt_sc) = parse_hotkey(&initial_settings.push_to_talk_hotkey) {
                     let state_ptt = shared_state.clone();
                     if let Err(e) = app.global_shortcut().on_shortcut(ptt_sc, move |app, _shortcut, event| {
-                        let is_recording = state_ptt.lock().expect("state mutex poisoned").capture.is_some();
+                        let is_recording = state_ptt.lock().unwrap_or_else(|e| e.into_inner()).capture.is_some();
                         match event.state {
                             ShortcutState::Pressed => {
                                 if !is_recording {
                                     let focused = crate::paste::get_frontmost_app();
                                     tracing::info!("ptt pressed: captured frontmost app = {:?}", focused);
-                                    *crate::commands::get_previous_app().lock().expect("state mutex poisoned") = focused;
+                                    *crate::commands::get_previous_app().lock().unwrap_or_else(|e| e.into_inner()) = focused;
                                     let _ = app.emit("hotkey-toggle-recording", ());
                                 }
                             }
@@ -476,10 +476,10 @@ pub fn run() {
                             let app_release = app.handle().clone();
                             let state_press = shared_state.clone();
                             let on_press = move || {
-                                let is_recording = state_press.lock().expect("state mutex poisoned").capture.is_some();
+                                let is_recording = state_press.lock().unwrap_or_else(|e| e.into_inner()).capture.is_some();
                                 if !is_recording {
                                     let focused = crate::paste::get_frontmost_app();
-                                    *crate::commands::get_previous_app().lock().expect("state mutex poisoned") = focused;
+                                    *crate::commands::get_previous_app().lock().unwrap_or_else(|e| e.into_inner()) = focused;
                                     let _ = app_press.emit("hotkey-toggle-recording", ());
                                 }
                             };
@@ -531,14 +531,14 @@ pub fn run() {
 
                 match event.state {
                     ShortcutState::Pressed => {
-                        let is_recording = state_for_sd.lock().expect("state mutex poisoned").capture.is_some();
+                        let is_recording = state_for_sd.lock().unwrap_or_else(|e| e.into_inner()).capture.is_some();
                         if is_push_to_talk {
                             if !is_recording {
                                 // Capture focused app before showing window
                                 let focused = crate::paste::get_frontmost_app();
                                 tracing::info!("smart-dictation hotkey: captured frontmost app = {:?}", focused);
-                                *crate::commands::get_previous_app().lock().expect("state mutex poisoned") = focused;
-                                state_for_sd.lock().expect("state mutex poisoned").is_smart_dictation = true;
+                                *crate::commands::get_previous_app().lock().unwrap_or_else(|e| e.into_inner()) = focused;
+                                state_for_sd.lock().unwrap_or_else(|e| e.into_inner()).is_smart_dictation = true;
                                 // Don't show/focus the main window — overlay handles visual feedback
                                 let _ = app.emit("hotkey-smart-dictation", ());
                             }
@@ -550,8 +550,8 @@ pub fn run() {
                                 // Capture focused app before doing anything
                                 let focused = crate::paste::get_frontmost_app();
                                 tracing::info!("smart-dictation hotkey: captured frontmost app = {:?}", focused);
-                                *crate::commands::get_previous_app().lock().expect("state mutex poisoned") = focused;
-                                state_for_sd.lock().expect("state mutex poisoned").is_smart_dictation = true;
+                                *crate::commands::get_previous_app().lock().unwrap_or_else(|e| e.into_inner()) = focused;
+                                state_for_sd.lock().unwrap_or_else(|e| e.into_inner()).is_smart_dictation = true;
                                 // Don't show/focus the main window — overlay handles visual feedback
                                 let _ = app.emit("hotkey-smart-dictation", ());
                             }
@@ -560,7 +560,7 @@ pub fn run() {
                     ShortcutState::Released => {
                         if is_push_to_talk {
                             // Push-to-talk: delegate to frontend so isPendingPaste is set
-                            let is_recording = state_for_sd.lock().expect("state mutex poisoned").capture.is_some();
+                            let is_recording = state_for_sd.lock().unwrap_or_else(|e| e.into_inner()).capture.is_some();
                             if is_recording {
                                 let _ = app.emit("hotkey-stop-recording", ());
                             }
@@ -574,11 +574,17 @@ pub fn run() {
             app.global_shortcut().on_shortcut(show_window_sc, move |app, _shortcut, event| {
                 if event.state != ShortcutState::Pressed { return; }
                 if let Some(win) = app.get_webview_window("main") {
-                    #[cfg(target_os = "macos")]
-                    activate_app_macos();
-                    center_on_primary_monitor(&win);
-                    let _ = win.show();
-                    let _ = win.set_focus();
+                    let visible = win.is_visible().unwrap_or(false);
+                    let focused = win.is_focused().unwrap_or(false);
+                    if visible && focused {
+                        let _ = win.hide();
+                    } else {
+                        #[cfg(target_os = "macos")]
+                        activate_app_macos();
+                        center_on_primary_monitor(&win);
+                        let _ = win.show();
+                        let _ = win.set_focus();
+                    }
                 }
             })?;
 
@@ -601,8 +607,15 @@ pub fn run() {
             };
             if is_first {
                 if let Some(win) = app.get_webview_window("main") {
-                    center_on_primary_monitor(&win);
                     let _ = win.show();
+                    // Re-center after show — macOS repositions new windows when they become
+                    // visible, overriding any set_position called before show(). A brief delay
+                    // lets the window server commit the frame so centering sticks.
+                    let win_clone = win.clone();
+                    tauri::async_runtime::spawn(async move {
+                        tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+                        center_on_primary_monitor(&win_clone);
+                    });
                 }
             }
 
@@ -626,6 +639,20 @@ pub fn run() {
                     let _ = app_handle_upd.emit("update-available", info);
                 }
             });
+
+            // Notify frontend if settings.json was corrupted on the previous load
+            {
+                let corrupted_path = crate::settings::settings_path().with_extension("json.corrupted");
+                if corrupted_path.exists() {
+                    let _ = std::fs::remove_file(&corrupted_path);
+                    let app_handle_corrupted = app.handle().clone();
+                    // Small delay so the frontend event listeners are registered before we emit
+                    tauri::async_runtime::spawn(async move {
+                        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                        let _ = app_handle_corrupted.emit("settings-corrupted", ());
+                    });
+                }
+            }
 
 
             // Auto-delete old history on launch if configured
@@ -657,7 +684,7 @@ pub fn run() {
                             .await
                             {
                                 Ok(Ok(engine)) => {
-                                    let mut guard = engine_state.lock().expect("state mutex poisoned");
+                                    let mut guard = engine_state.lock().unwrap_or_else(|e| e.into_inner());
                                     *guard = Some(engine);
                                     tracing::info!("LlmEngine loaded at launch");
                                 }
@@ -718,6 +745,8 @@ pub fn run() {
             complete_onboarding,
             check_microphone_permission,
             request_microphone_permission,
+            get_microphone_auth_status,
+            open_microphone_settings,
             show_overlay,
             hide_overlay,
             show_main_window,

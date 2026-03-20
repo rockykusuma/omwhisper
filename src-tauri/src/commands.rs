@@ -17,6 +17,8 @@ pub struct TranscriptionState {
     /// Set by stop_transcription when capture is None (key released during startup delay).
     /// Causes start_transcription to abort after the sound delay.
     pub start_cancelled: bool,
+    /// Guards the startup window (sound delay) to prevent overlapping sessions.
+    pub is_starting: Arc<AtomicBool>,
     /// Timestamp when the current recording started (for duration_ms in analytics).
     pub recording_start_time: Option<std::time::Instant>,
     /// Name of the currently active transcription engine ("whisper" or "apple").
@@ -30,6 +32,7 @@ impl TranscriptionState {
             usage_running: Arc::new(AtomicBool::new(false)),
             is_smart_dictation: false,
             start_cancelled: false,
+            is_starting: Arc::new(AtomicBool::new(false)),
             recording_start_time: None,
             active_engine: "whisper",
         }
@@ -89,12 +92,6 @@ pub struct TranscriptionUpdate {
     pub segments: Vec<Segment>,
 }
 
-#[derive(Clone, serde::Serialize)]
-pub struct UsageUpdate {
-    pub seconds_used: i64,
-    pub seconds_remaining: i64,
-    pub is_free_tier: bool,
-}
 
 #[tauri::command]
 pub async fn start_transcription(
@@ -102,11 +99,22 @@ pub async fn start_transcription(
     state: tauri::State<'_, SharedState>,
     app: AppHandle,
 ) -> Result<(), String> {
+    // Guard against overlapping sessions (rapid hotkey taps during startup delay).
+    let is_starting = state.lock().unwrap_or_else(|e| e.into_inner()).is_starting.clone();
+    if is_starting.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+        return Err("cancelled".to_string()); // already starting, treat as silent no-op
+    }
+    // Also reject if a capture session is already active.
+    if state.lock().unwrap_or_else(|e| e.into_inner()).capture.is_some() {
+        is_starting.store(false, Ordering::SeqCst);
+        return Err("cancelled".to_string());
+    }
+
     // Clear any cancellation from a previous quick tap before we begin.
-    state.lock().expect("state mutex poisoned").start_cancelled = false;
+    state.lock().unwrap_or_else(|e| e.into_inner()).start_cancelled = false;
     // Reset active_engine so get_transcription_engine never returns a stale value
     // from a previous session if engine selection fails later in this call.
-    state.lock().expect("state mutex poisoned").active_engine = "whisper";
+    state.lock().unwrap_or_else(|e| e.into_inner()).active_engine = "whisper";
 
     // Load settings and play start chime BEFORE the mic starts,
     // then wait briefly so the chime finishes and room echo clears.
@@ -126,14 +134,15 @@ pub async fn start_transcription(
 
     // PTT: if the key was released during the sound delay, abort.
     // Return a sentinel error so the frontend knows not to set isRecording=true.
-    if state.lock().expect("state mutex poisoned").start_cancelled {
-        state.lock().expect("state mutex poisoned").start_cancelled = false;
+    if state.lock().unwrap_or_else(|e| e.into_inner()).start_cancelled {
+        state.lock().unwrap_or_else(|e| e.into_inner()).start_cancelled = false;
+        is_starting.store(false, Ordering::SeqCst);
         return Err("cancelled".to_string());
     }
 
     // Analytics: record_started
     {
-        let is_smart_dictation = state.lock().expect("state mutex poisoned").is_smart_dictation;
+        let is_smart_dictation = state.lock().unwrap_or_else(|e| e.into_inner()).is_smart_dictation;
         crate::analytics::track(settings.analytics_enabled, "recording_started", serde_json::json!({
             "mode": if is_smart_dictation { "smart_dictation" } else { &settings.recording_mode as &str }
         }));
@@ -142,15 +151,19 @@ pub async fn start_transcription(
     // Build capture object and start the audio pipeline.
     // AudioCapture::new signature is (vad_sensitivity, vad_engine) — sensitivity first, engine second.
     let capture = AudioCapture::new(settings.vad_sensitivity, &settings.vad_engine);
-    let (speech_rx, level_rx) = capture.start().map_err(|e| e.to_string())?;
+    let (speech_rx, level_rx) = capture.start(settings.audio_input_device.clone()).map_err(|e| {
+        is_starting.store(false, Ordering::SeqCst);
+        e.to_string()
+    })?;
 
-    // Store the capture handle so stop_transcription can reach it.
+    // Store the capture handle so stop_transcription can reach it, then clear the starting guard.
     {
-        let mut s = state.lock().expect("state mutex poisoned");
+        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
         s.capture = Some(capture);
         s.recording_start_time = Some(std::time::Instant::now());
         s.usage_running.store(true, Ordering::SeqCst);
     };
+    is_starting.store(false, Ordering::SeqCst);
 
     let model_path = resolve_model_path(&model);
 
@@ -160,12 +173,13 @@ pub async fn start_transcription(
         Err(err) => {
             eprintln!("failed to select transcription engine: {err}");
             sentry_anyhow::capture_anyhow(&err);
+            is_starting.store(false, Ordering::SeqCst);
             return Err(err.to_string());
         }
     };
     // Capture the name before moving engine into the thread (borrow-checker requirement).
     let engine_name = engine.name();
-    state.lock().expect("state mutex poisoned").active_engine = engine_name;
+    state.lock().unwrap_or_else(|e| e.into_inner()).active_engine = engine_name;
 
     // Spawn a thread to forward RMS level events to the frontend.
     let app_for_level = app.clone();
@@ -178,26 +192,55 @@ pub async fn start_transcription(
     // Spawn a dedicated thread to load the model and consume speech utterances.
     // TranscriptionEngine is Send (see engine.rs unsafe impl Send).
     std::thread::spawn(move || {
+        // Convert prompt to owned String so it can be cloned into sub-threads.
+        let prompt_owned: Option<String> = if initial_prompt.is_empty() { None } else { Some(initial_prompt) };
 
-        let prompt_ref: Option<&str> = if initial_prompt.is_empty() { None } else { Some(&initial_prompt) };
+        // Wrap the engine in Option so we can move it in/out of sub-threads for the timeout guard.
+        let mut engine_slot = Some(engine);
 
-        for chunk in speech_rx {
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                engine.transcribe(&chunk, &language, translate_to_english, prompt_ref, &word_replacements)
-            }));
-            match result {
-                Ok(Ok(segments)) => {
-                    if !segments.is_empty() {
-                        let _ = app.emit("transcription-update", TranscriptionUpdate { segments });
+        'chunks: for chunk in speech_rx {
+            let eng = match engine_slot.take() {
+                Some(e) => e,
+                None => break,
+            };
+            let lang = language.clone();
+            let prompt_clone = prompt_owned.clone();
+            let replacements = word_replacements.clone();
+            let (tx, rx) = std::sync::mpsc::sync_channel(0);
+            std::thread::spawn(move || {
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let prompt_ref = prompt_clone.as_deref();
+                    eng.transcribe(&chunk, &lang, translate_to_english, prompt_ref, &replacements)
+                }));
+                let _ = tx.send((eng, result));
+            });
+
+            const TRANSCRIPTION_TIMEOUT_SECS: u64 = 30;
+            match rx.recv_timeout(std::time::Duration::from_secs(TRANSCRIPTION_TIMEOUT_SECS)) {
+                Ok((eng_back, result)) => {
+                    engine_slot = Some(eng_back);
+                    match result {
+                        Ok(Ok(segments)) => {
+                            if !segments.is_empty() {
+                                let _ = app.emit("transcription-update", TranscriptionUpdate { segments });
+                            }
+                        }
+                        Ok(Err(err)) => {
+                            tracing::error!("transcription error: {err}");
+                            sentry_anyhow::capture_anyhow(&err);
+                        }
+                        Err(_) => {
+                            tracing::error!("{engine_name} engine panicked — recovering");
+                            let _ = app.emit("transcription-error", "Transcription engine crashed on this audio chunk, continuing.");
+                        }
                     }
                 }
-                Ok(Err(err)) => {
-                    tracing::error!("transcription error: {err}");
-                    sentry_anyhow::capture_anyhow(&err);
-                }
                 Err(_) => {
-                    tracing::error!("{engine_name} engine panicked — recovering");
-                    let _ = app.emit("transcription-error", "Transcription engine crashed on this audio chunk, continuing.");
+                    // Timeout — engine is leaking into the background thread but we can't interrupt it.
+                    // At least surface the error to the user so they can stop recording.
+                    tracing::error!("transcription timed out after {}s — aborting", TRANSCRIPTION_TIMEOUT_SECS);
+                    let _ = app.emit("transcription-error", "Transcription timed out — please stop recording.");
+                    break 'chunks;
                 }
             }
         }
@@ -211,7 +254,7 @@ pub async fn start_transcription(
 #[tauri::command]
 pub async fn stop_transcription(state: tauri::State<'_, SharedState>) -> Result<(), String> {
     {
-        let mut s = state.lock().expect("state mutex poisoned");
+        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
         s.usage_running.store(false, Ordering::SeqCst);
         if let Some(capture) = s.capture.take() {
             capture.stop();
@@ -222,7 +265,7 @@ pub async fn stop_transcription(state: tauri::State<'_, SharedState>) -> Result<
     } // MutexGuard dropped here before the await below
 
     let duration_ms = {
-        let mut s = state.lock().expect("state mutex poisoned");
+        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
         s.recording_start_time.take().map(|t| t.elapsed().as_millis() as u64).unwrap_or(0)
     };
 
@@ -432,7 +475,7 @@ pub async fn load_llm_engine(
     .map_err(|e| format!("spawn_blocking error: {}", e))?
     .map_err(|e| e.to_string())?;
 
-    let mut guard = engine_state.lock().expect("state mutex poisoned");
+    let mut guard = engine_state.lock().unwrap_or_else(|e| e.into_inner());
     *guard = Some(engine);
     Ok(())
 }
@@ -443,7 +486,7 @@ pub async fn load_llm_engine(
 pub async fn unload_llm_engine(
     engine_state: tauri::State<'_, LlmEngineState>,
 ) -> Result<(), String> {
-    let mut guard = engine_state.lock().expect("state mutex poisoned");
+    let mut guard = engine_state.lock().unwrap_or_else(|e| e.into_inner());
     *guard = None;
     Ok(())
 }
@@ -465,7 +508,7 @@ pub fn get_previous_app() -> &'static Mutex<Option<String>> {
 #[tauri::command]
 pub async fn capture_focused_app() -> Result<Option<String>, String> {
     let app_name = paste::get_frontmost_app();
-    *previous_app().lock().expect("state mutex poisoned") = app_name.clone();
+    *previous_app().lock().unwrap_or_else(|e| e.into_inner()) = app_name.clone();
     Ok(app_name)
 }
 
@@ -486,7 +529,7 @@ pub async fn paste_transcription(text: String, app: AppHandle) -> Result<(), Str
     // Paste into previously focused app if auto_paste is on
     if settings.auto_paste {
         let app_name = {
-            let guard = previous_app().lock().expect("state mutex poisoned");
+            let guard = previous_app().lock().unwrap_or_else(|e| e.into_inner());
             guard.clone()
         };
         tracing::info!("paste_transcription: previous_app={:?}", app_name);
@@ -643,9 +686,18 @@ pub async fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
             let screen = monitor.size();    // physical pixels
             let origin = monitor.position(); // physical top-left of this monitor
 
-            // Use the actual window size for positioning so centering is always accurate.
-            // The window dimensions are fixed at 280×100 in tauri.conf.json.
-            let actual = win.outer_size().ok().unwrap_or(tauri::PhysicalSize { width: 280, height: 100 });
+            // Overlay logical dimensions — must match the overlay window config in tauri.conf.json.
+            const OVERLAY_W: f64 = 280.0;
+            const OVERLAY_H: f64 = 100.0;
+
+            // Force the window to apply its configured size before reading it back.
+            // outer_size() returns (0,0) before the window has ever been rendered;
+            // set_size() ensures the dimensions are committed so the read is reliable.
+            let _ = win.set_size(tauri::LogicalSize::<f64> { width: OVERLAY_W, height: OVERLAY_H });
+            let actual = win.outer_size().unwrap_or(tauri::PhysicalSize {
+                width:  (OVERLAY_W * scale) as u32,
+                height: (OVERLAY_H * scale) as u32,
+            });
             let win_w = actual.width as i32;
             let win_h = actual.height as i32;
 
@@ -672,6 +724,7 @@ pub async fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
             };
             let _ = win.set_position(tauri::PhysicalPosition { x, y });
         }
+        let _ = app.emit("recording-state", true);
         win.show().map_err(|e| e.to_string())?;
     }
     Ok(())
@@ -694,6 +747,28 @@ pub async fn show_main_window(app: tauri::AppHandle) -> Result<(), String> {
         win.set_focus().map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn get_microphone_auth_status() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        return crate::macos::speech_analyzer::get_microphone_auth_status();
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        "authorized"
+    }
+}
+
+#[tauri::command]
+pub fn open_microphone_settings() {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
+            .spawn();
+    }
 }
 
 #[tauri::command]
@@ -1067,7 +1142,7 @@ pub async fn polish_text_cmd(
         let engine_state = app.state::<LlmEngineState>();
         let vocab = settings.custom_vocabulary.clone();
         let result: anyhow::Result<String> = {
-            let guard = engine_state.lock().expect("state mutex poisoned");
+            let guard = engine_state.lock().unwrap_or_else(|e| e.into_inner());
             match guard.as_ref() {
                 Some(engine) => engine.polish(&text, &style, &vocab),
                 None => return Err("llm_not_ready".to_string()),
@@ -1299,7 +1374,7 @@ pub async fn send_feedback(
 /// Returns the name of the currently active transcription engine ("whisper" or "apple").
 #[tauri::command]
 pub fn get_transcription_engine(state: tauri::State<'_, SharedState>) -> &'static str {
-    state.lock().expect("state mutex poisoned").active_engine
+    state.lock().unwrap_or_else(|e| e.into_inner()).active_engine
 }
 
 /// Returns whether Apple Speech is available on this device.

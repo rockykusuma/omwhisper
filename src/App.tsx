@@ -10,6 +10,7 @@ import Onboarding from "./components/Onboarding";
 import TranscriptionHistory from "./components/TranscriptionHistory";
 import Vocabulary from "./components/Vocabulary";
 import { logger } from "./utils/logger";
+import { STORAGE_KEYS } from "./utils/storageKeys";
 import { initTheme } from "./hooks/useTheme";
 import { useToast } from "./hooks/useToast";
 import type { UpdateInfo, TranscriptionSegment } from "./types";
@@ -32,7 +33,7 @@ function App() {
   const [noModelBanner, setNoModelBanner] = useState(false);
   const [appVersion, setAppVersion] = useState("0.1.0");
   const [sidebarOpen, setSidebarOpen] = useState(() => {
-    return localStorage.getItem("omwhisper-sidebar") !== "closed";
+    return localStorage.getItem(STORAGE_KEYS.SIDEBAR) !== "closed";
   });
   const { toast, showToast } = useToast();
 
@@ -170,8 +171,12 @@ function App() {
       invoke("open_accessibility_settings").catch(() => {});
     });
 
+    const unlistenSettingsCorrupted = listen("settings-corrupted", () => {
+      showToast("⚠ Settings were corrupted and reset to defaults. A backup was saved as settings.json.bak.");
+    });
+
     return () => {
-      Promise.all([unlistenHotkey, unlistenHotkeyStop, unlistenSmartDictation, unlistenState, unlistenUpdate, unlistenMic, unlistenTrayNav, unlistenLlmNudge, unlistenAccessibility])
+      Promise.all([unlistenHotkey, unlistenHotkeyStop, unlistenSmartDictation, unlistenState, unlistenUpdate, unlistenMic, unlistenTrayNav, unlistenLlmNudge, unlistenAccessibility, unlistenSettingsCorrupted])
         .then((fns) => fns.forEach((f) => f()));
     };
   }, [startRecording, stopRecording]);
@@ -287,7 +292,7 @@ function App() {
           isOpen={sidebarOpen}
           onToggle={() => setSidebarOpen((v) => {
             const next = !v;
-            localStorage.setItem("omwhisper-sidebar", next ? "open" : "closed");
+            localStorage.setItem(STORAGE_KEYS.SIDEBAR, next ? "open" : "closed");
             return next;
           })}
         />

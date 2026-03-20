@@ -5,7 +5,7 @@ import {
   Sliders, Mic, FileText, Info, ShieldCheck, ShieldAlert, Keyboard, Brain, Activity, Zap, Sparkles, Cpu, ExternalLink
 } from "lucide-react";
 import { logger } from "../utils/logger";
-import { useTheme, THEMES } from "../hooks/useTheme";
+import { STORAGE_KEYS } from "../utils/storageKeys";
 import type { AppSettings, StorageInfo } from "../types";
 
 type Settings = AppSettings;
@@ -178,10 +178,10 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
   }, [initialTab]);
   const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
   const [accessibilityGranted, setAccessibilityGranted] = useState<boolean | null>(null);
+  const [micAuthStatus, setMicAuthStatus] = useState<"authorized" | "not_determined" | "denied" | null>(null);
   const [platform, setPlatform] = useState<string>("macos");
   const [appleAvailable, setAppleAvailable] = useState<boolean>(true);
   const [appleSpeechAuthStatus, setAppleSpeechAuthStatus] = useState<"authorized" | "not_determined" | "denied">("denied");
-  const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     invoke<string>("get_platform").then(setPlatform).catch(() => {});
@@ -197,6 +197,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
     invoke<string[]>("get_audio_devices").then(setDevices).catch(() => {});
     invoke<StorageInfo>("get_storage_info").then(setStorageInfo).catch(() => {});
     invoke<boolean>("check_accessibility_permission").then(setAccessibilityGranted).catch(() => {});
+    invoke<string>("get_microphone_auth_status").then((s) => setMicAuthStatus(s as typeof micAuthStatus)).catch(() => {});
 
     // Re-sync when settings are changed from another view (e.g. model selection in Models tab)
     const unlisten = listen("settings-changed", () => {
@@ -258,44 +259,6 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
 
         {activeTab === "general" && (
           <div>
-            {/* Theme picker */}
-            <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Appearance</h3>
-            <div className="card px-5 py-4 mb-6">
-              <p className="text-t3 text-xs mb-4">Theme</p>
-              <div className="flex items-end gap-3 flex-wrap">
-                {THEMES.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => setTheme(t.id)}
-                    title={t.label}
-                    className="flex flex-col items-center gap-1.5 cursor-pointer group"
-                    aria-pressed={theme === t.id}
-                  >
-                    <div
-                      className="w-11 h-11 rounded-xl transition-all duration-200 relative"
-                      style={{
-                        background: t.bg,
-                        boxShadow: theme === t.id
-                          ? `0 0 0 2.5px ${t.accent}, 0 0 14px ${t.accent}55`
-                          : "inset 2px 2px 5px rgba(0,0,0,0.25), inset -2px -2px 5px rgba(255,255,255,0.12)",
-                      }}
-                    >
-                      <span
-                        className="absolute bottom-1.5 right-1.5 w-2 h-2 rounded-full"
-                        style={{ background: t.accent }}
-                      />
-                    </div>
-                    <span
-                      className="text-[10px] font-mono transition-colors"
-                      style={{ color: theme === t.id ? "var(--accent)" : "var(--t3)" }}
-                    >
-                      {t.label}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">General</h3>
             <div className="card px-5">
               <SettingRow label="Launch at Login" description="Start OmWhisper when you log in">
@@ -433,12 +396,75 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
         {activeTab === "audio" && (
           <div>
             <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Audio</h3>
+
+            {/* Microphone permission row */}
+            {platform === "macos" && micAuthStatus !== "authorized" && (
+              <div className="card px-5 mb-4">
+                <div className="flex items-center justify-between gap-4 py-3.5">
+                  <div className="flex items-center gap-2.5">
+                    {micAuthStatus === "denied"
+                      ? <ShieldAlert size={15} className="text-red-400 shrink-0" />
+                      : <ShieldAlert size={15} style={{ color: "#fb923c", flexShrink: 0 }} />
+                    }
+                    <div>
+                      <p className="text-sm" style={{ color: "var(--t1)" }}>Microphone</p>
+                      <p className="text-xs mt-0.5" style={{ color: "var(--t3)" }}>
+                        {micAuthStatus === "denied"
+                          ? "Permission denied — open System Settings to allow"
+                          : "Permission required to record your voice"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span
+                      className="text-[10px] font-mono px-2 py-0.5 rounded-full"
+                      style={{
+                        color: micAuthStatus === "denied" ? "#f87171" : "#fb923c",
+                        background: micAuthStatus === "denied" ? "rgba(248,113,113,0.12)" : "rgba(251,146,60,0.12)",
+                        boxShadow: "var(--nm-pressed-sm)",
+                      }}
+                    >
+                      {micAuthStatus === null ? "checking…" : micAuthStatus === "denied" ? "Denied" : "Not granted"}
+                    </span>
+                    {micAuthStatus === "not_determined" ? (
+                      <button
+                        onClick={() => {
+                          invoke<boolean>("request_microphone_permission").then((granted) => {
+                            setMicAuthStatus(granted ? "authorized" : "denied");
+                          }).catch(() => {});
+                        }}
+                        className="btn-primary text-xs px-3 py-1.5"
+                      >
+                        Allow
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          invoke("open_microphone_settings").catch(() => {});
+                          setTimeout(() => {
+                            invoke<string>("get_microphone_auth_status")
+                              .then((s) => setMicAuthStatus(s as typeof micAuthStatus))
+                              .catch(() => {});
+                          }, 3000);
+                        }}
+                        className="btn-ghost p-1.5"
+                        title="Open System Settings → Microphone"
+                      >
+                        <ExternalLink size={13} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="card px-5">
               <SettingRow label="Microphone" description="Input device for recording">
                 <select
                   value={settings.audio_input_device ?? ""}
                   onChange={(e) => update({ audio_input_device: e.target.value || null })}
-                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none max-w-[160px]" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                  disabled={micAuthStatus === "denied"}
+                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none max-w-[160px]" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)", opacity: micAuthStatus === "denied" ? 0.4 : 1 }}
                   aria-label="Microphone device"
                 >
                   <option value="">Default</option>
@@ -709,7 +735,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
               {[
                 { action: "Dictate in any app",    keys: ["⌘", "⇧", "V"], note: "Toggle recording" },
                 { action: "Smart Dictation",        keys: ["⌘", "⇧", "B"], note: "Record + AI polish" },
-                { action: "Open / close app",       keys: ["⌘", "⇧", "V"], note: "From menu bar" },
+                { action: "Open / close app",       keys: ["⌘", "⇧", "O"], note: "Show app window" },
               ].map(({ action, keys, note }) => (
                 <div key={action} className="flex items-center justify-between py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
                   <div>
@@ -965,7 +991,7 @@ function AboutSection({ settings, update }: { settings: Settings; update: (patch
                 value={settings.crash_reporting_enabled}
                 onChange={(v) => {
                   update({ crash_reporting_enabled: v });
-                  localStorage.setItem("crash_reporting_enabled", String(v));
+                  localStorage.setItem(STORAGE_KEYS.CRASH_REPORTING, String(v));
                 }}
                 label="Crash reporting"
               />

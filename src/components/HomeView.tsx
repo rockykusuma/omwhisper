@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { Mic, MicOff, Sparkles } from "lucide-react";
 import type { TranscriptionSegment, AppSettings } from "../types";
+import { STORAGE_KEYS } from "../utils/storageKeys";
 import TipsSection from "./TipsSection";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -77,7 +78,7 @@ export default function HomeView({
   const [micName, setMicName] = useState("Default Microphone");
   const [applyPolishToRegular, setApplyPolishToRegular] = useState(false);
   const [modelNudgeDismissed, setModelNudgeDismissed] = useState(
-    () => localStorage.getItem("omw_model_nudge_dismissed") === "1"
+    () => localStorage.getItem(STORAGE_KEYS.MODEL_NUDGE_DISMISSED) === "1"
   );
 
   // ── Engine badge ──
@@ -96,7 +97,7 @@ export default function HomeView({
   // ── Smart Dictation nudge ──
   const [smartDictationNudge, setSmartDictationNudge] = useState<"not_configured" | "model_not_downloaded" | null>(null);
   const [sdNudgeDismissed, setSdNudgeDismissed] = useState(
-    () => localStorage.getItem("omw_sd_nudge_dismissed") === "1"
+    () => localStorage.getItem(STORAGE_KEYS.SD_NUDGE_DISMISSED) === "1"
   );
 
   // ── Data loaders ──
@@ -109,7 +110,7 @@ export default function HomeView({
     if (!s || s.ai_backend === "disabled") {
       setSmartDictationNudge("not_configured");
       setSdNudgeDismissed(false);
-      localStorage.removeItem("omw_sd_nudge_dismissed");
+      localStorage.removeItem(STORAGE_KEYS.SD_NUDGE_DISMISSED);
     } else if (s.ai_backend === "built_in") {
       try {
         const models = await invoke<{ is_downloaded: boolean; is_active: boolean }[]>("get_llm_models");
@@ -119,7 +120,7 @@ export default function HomeView({
         } else {
           setSmartDictationNudge("model_not_downloaded");
           setSdNudgeDismissed(false);
-          localStorage.removeItem("omw_sd_nudge_dismissed");
+          localStorage.removeItem(STORAGE_KEYS.SD_NUDGE_DISMISSED);
         }
       } catch {
         setSmartDictationNudge("model_not_downloaded");
@@ -422,7 +423,7 @@ export default function HomeView({
               <p className="text-xs font-semibold" style={{ color: "var(--t2)" }}>Smart Dictation needs setup</p>
             </div>
             <button
-              onClick={() => { setSdNudgeDismissed(true); localStorage.setItem("omw_sd_nudge_dismissed", "1"); }}
+              onClick={() => { setSdNudgeDismissed(true); localStorage.setItem(STORAGE_KEYS.SD_NUDGE_DISMISSED, "1"); }}
               className="text-[11px] cursor-pointer transition-colors"
               style={{ color: "var(--t4)" }}
               aria-label="Dismiss"
@@ -456,7 +457,7 @@ export default function HomeView({
           <div className="flex items-center justify-between px-4 pt-3 pb-2">
             <p className="text-xs font-semibold" style={{ color: "var(--t2)" }}>Choosing the right model</p>
             <button
-              onClick={() => { setModelNudgeDismissed(true); localStorage.setItem("omw_model_nudge_dismissed", "1"); }}
+              onClick={() => { setModelNudgeDismissed(true); localStorage.setItem(STORAGE_KEYS.MODEL_NUDGE_DISMISSED, "1"); }}
               className="text-[11px] cursor-pointer transition-colors"
               style={{ color: "var(--t4)" }}
               aria-label="Dismiss"
