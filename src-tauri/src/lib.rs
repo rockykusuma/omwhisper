@@ -32,7 +32,7 @@ use commands::{
     transcribe_file, update_settings, validate_license_bg,
     get_vocabulary, add_vocabulary_word, remove_vocabulary_word, add_word_replacement, remove_word_replacement,
     get_usage_stats, get_storage_info,
-    check_ollama_status, get_ollama_models, polish_text_cmd, test_ai_connection,
+    check_ollama_status, get_ollama_models, polish_text_cmd, polish_selected_text, test_ai_connection,
     save_cloud_api_key, get_cloud_api_key_status, delete_cloud_api_key_cmd,
     get_model_recommendation,
     get_llm_models, get_llm_models_disk_usage, download_llm_model, delete_llm_model, import_llm_model,
@@ -636,6 +636,16 @@ pub fn run() {
                 }
             })?;
 
+            // --- Global Shortcut: Polish Selected Text (default Cmd+Shift+P) ---
+            if let Some(polish_sc) = parse_hotkey(&initial_settings.polish_text_hotkey) {
+                if let Err(e) = app.global_shortcut().on_shortcut(polish_sc, move |app, _shortcut, event| {
+                    if event.state != ShortcutState::Pressed { return; }
+                    let _ = app.emit("hotkey-polish-selected", ());
+                }) {
+                    tracing::warn!("Could not register Polish Selected Text shortcut: {}", e);
+                }
+            }
+
             // Intercept the close button — hide instead of destroying the window
             // so "Show Window" from the tray always works.
             if let Some(win) = app.get_webview_window("main") {
@@ -827,6 +837,7 @@ pub fn run() {
             check_ollama_status,
             get_ollama_models,
             polish_text_cmd,
+            polish_selected_text,
             test_ai_connection,
             save_cloud_api_key,
             get_cloud_api_key_status,

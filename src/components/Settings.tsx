@@ -690,6 +690,12 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                   onChange={(v) => update({ smart_dictation_hotkey: v || "CmdOrCtrl+Shift+B" })}
                 />
               </SettingRow>
+              <SettingRow label="Polish Selected Text" description="Copy selection, polish via AI, paste back. Restart app to apply hotkey changes.">
+                <HotkeyRecorder
+                  value={settings.polish_text_hotkey ?? "CmdOrCtrl+Shift+P"}
+                  onChange={(v) => update({ polish_text_hotkey: v || "CmdOrCtrl+Shift+P" })}
+                />
+              </SettingRow>
             </div>
 
             {platform !== "windows" && (

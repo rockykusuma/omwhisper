@@ -134,6 +134,16 @@ function App() {
       startRecording(true);
     });
 
+    const unlistenPolishSelected = listen("hotkey-polish-selected", async () => {
+      try {
+        await invoke("polish_selected_text");
+      } catch (err) {
+        const msg = typeof err === "string" ? err : "Polish failed";
+        setMicError(msg);
+        setTimeout(() => setMicError(null), 5000);
+      }
+    });
+
     // Rust signals forced stop (usage limit, etc.)
     const unlistenState = listen<boolean>("recording-state", (event) => {
       if (!event.payload) {
@@ -176,7 +186,7 @@ function App() {
     });
 
     return () => {
-      Promise.all([unlistenHotkey, unlistenHotkeyStop, unlistenSmartDictation, unlistenState, unlistenUpdate, unlistenMic, unlistenTrayNav, unlistenLlmNudge, unlistenAccessibility, unlistenSettingsCorrupted])
+      Promise.all([unlistenHotkey, unlistenHotkeyStop, unlistenSmartDictation, unlistenPolishSelected, unlistenState, unlistenUpdate, unlistenMic, unlistenTrayNav, unlistenLlmNudge, unlistenAccessibility, unlistenSettingsCorrupted])
         .then((fns) => fns.forEach((f) => f()));
     };
   }, [startRecording, stopRecording]);

@@ -65,6 +65,66 @@ pub fn get_frontmost_app() -> Option<String> {
     None
 }
 
+/// Simulate Cmd+C to copy the current selection to the clipboard (macOS only).
+/// The caller must wait ~80ms after this call before reading the clipboard.
+#[cfg(target_os = "macos")]
+pub fn simulate_copy() {
+    use std::os::raw::{c_int, c_uint, c_void};
+
+    type CGEventRef = *mut c_void;
+    type CGEventSourceRef = *mut c_void;
+    type CGKeyCode = u16;
+    type CGEventFlags = u64;
+    type CGEventTapLocation = c_uint;
+
+    const K_VK_ANSI_C: CGKeyCode = 0x08;
+    const K_CG_EVENT_FLAG_MASK_COMMAND: CGEventFlags = 0x00100000;
+    const K_CG_HID_EVENT_TAP: CGEventTapLocation = 0;
+
+    #[allow(clashing_extern_declarations)]
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGEventCreateKeyboardEvent(
+            source: CGEventSourceRef,
+            virtualKey: CGKeyCode,
+            keyDown: c_int,
+        ) -> CGEventRef;
+        fn CGEventSetFlags(event: CGEventRef, flags: CGEventFlags);
+        fn CGEventPost(tap: CGEventTapLocation, event: CGEventRef);
+    }
+
+    #[allow(clashing_extern_declarations)]
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFRelease(cf: *mut c_void);
+    }
+
+    #[allow(clashing_extern_declarations)]
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXIsProcessTrusted() -> bool;
+    }
+    let trusted = unsafe { AXIsProcessTrusted() };
+    if !trusted {
+        tracing::warn!("simulate_copy: Accessibility permission not granted — Cmd+C will not fire");
+        return;
+    }
+
+    unsafe {
+        let event_down = CGEventCreateKeyboardEvent(std::ptr::null_mut(), K_VK_ANSI_C, 1);
+        if event_down.is_null() { return; }
+        CGEventSetFlags(event_down, K_CG_EVENT_FLAG_MASK_COMMAND);
+        CGEventPost(K_CG_HID_EVENT_TAP, event_down);
+        CFRelease(event_down);
+
+        let event_up = CGEventCreateKeyboardEvent(std::ptr::null_mut(), K_VK_ANSI_C, 0);
+        if event_up.is_null() { return; }
+        CGEventSetFlags(event_up, K_CG_EVENT_FLAG_MASK_COMMAND);
+        CGEventPost(K_CG_HID_EVENT_TAP, event_up);
+        CFRelease(event_up);
+    }
+}
+
 /// Bring an app to front and paste from clipboard (macOS only).
 #[cfg(target_os = "macos")]
 pub fn paste_to_app(app_name: &str) -> Result<()> {

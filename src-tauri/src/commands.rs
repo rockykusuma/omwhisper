@@ -1200,6 +1200,89 @@ pub async fn polish_text_cmd(
     result
 }
 
+/// Copy the current text selection, run AI polish using the active style, paste back.
+#[tauri::command]
+pub async fn polish_selected_text(app: tauri::AppHandle) -> Result<String, String> {
+    use tauri::Emitter;
+
+    // Save original clipboard for restore later
+    let original_clipboard = crate::paste::read_clipboard();
+
+    // Capture frontmost app before doing anything
+    let frontmost = crate::paste::get_frontmost_app();
+
+    // Simulate Cmd+C to copy selection (macOS only)
+    #[cfg(target_os = "macos")]
+    crate::paste::simulate_copy();
+    #[cfg(not(target_os = "macos"))]
+    return Err("Polish Selected Text is only supported on macOS".to_string());
+
+    // Wait for clipboard to settle
+    tokio::time::sleep(tokio::time::Duration::from_millis(80)).await;
+
+    // Read the updated clipboard
+    let text = crate::paste::read_clipboard()
+        .ok_or_else(|| "No text selected".to_string())?;
+
+    // If clipboard didn't change, there was no selection
+    if Some(&text) == original_clipboard.as_ref() {
+        return Err("No text selected".to_string());
+    }
+
+    // Notify frontend that polishing is in progress
+    let _ = app.emit("polish-state", true);
+
+    // Load settings and get active style
+    let settings = crate::settings::load_settings().await;
+    let style = settings.active_polish_style.clone();
+
+    // Polish using the existing pipeline
+    let polished = polish_text_cmd(text, style, None, app.clone()).await
+        .map_err(|e| {
+            let _ = app.emit("polish-state", false);
+            e
+        })?;
+
+    // Write polished text to clipboard
+    if let Ok(mut clipboard) = arboard::Clipboard::new() {
+        let _ = clipboard.set_text(&polished);
+    }
+
+    // Paste into the focused app — paste_to_app blocks for ~500ms (osascript + sleep)
+    // so it must run on a blocking thread, not the async executor.
+    if let Some(app_name) = frontmost {
+        #[cfg(target_os = "macos")]
+        {
+            let result = tokio::task::spawn_blocking(move || {
+                crate::paste::paste_to_app(&app_name).map_err(|e| e.to_string())
+            })
+            .await
+            .unwrap_or_else(|e| Err(e.to_string()));
+            if let Err(e) = result {
+                tracing::warn!("polish_selected_text: paste failed: {}", e);
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = app_name;
+    }
+
+    // Restore original clipboard after delay if setting is enabled
+    if settings.restore_clipboard {
+        if let Some(orig) = original_clipboard {
+            let delay = settings.clipboard_restore_delay_ms;
+            tokio::spawn(async move {
+                tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
+                if let Ok(mut cb) = arboard::Clipboard::new() {
+                    let _ = cb.set_text(&orig);
+                }
+            });
+        }
+    }
+
+    let _ = app.emit("polish-state", false);
+    Ok(polished)
+}
+
 #[tauri::command]
 pub async fn test_ai_connection(backend: String) -> Result<String, String> {
     let settings = crate::settings::load_settings().await;
