@@ -309,7 +309,7 @@ function SmartDictationTab() {
   const [newStylePrompt, setNewStylePrompt] = useState("");
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
-  const [ollamaChecking, setOllamaChecking] = useState(false);
+  const [ollamaChecking, setOllamaChecking] = useState(() => settings?.ai_backend === "ollama");
   const [customModelInput, setCustomModelInput] = useState("");
 
   useEffect(() => {
@@ -317,12 +317,13 @@ function SmartDictationTab() {
   }, [settings?.ai_cloud_api_url]);
 
   useEffect(() => {
-    if (settings?.ai_backend === "ollama") {
-      setOllamaChecking(true);
-      invoke<OllamaStatus>("check_ollama_status")
-        .then((status) => { setOllamaStatus(status); setOllamaChecking(false); })
-        .catch(() => { setOllamaChecking(false); });
-    }
+    if (settings?.ai_backend !== "ollama") return;
+    let cancelled = false;
+    setOllamaChecking(true);
+    invoke<OllamaStatus>("check_ollama_status")
+      .then((status) => { if (!cancelled) { setOllamaStatus(status); setOllamaChecking(false); } })
+      .catch(() => { if (!cancelled) setOllamaChecking(false); });
+    return () => { cancelled = true; };
   }, [settings?.ai_backend]);
 
   useEffect(() => {
