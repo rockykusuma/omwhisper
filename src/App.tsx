@@ -63,6 +63,7 @@ function App() {
 
   // ── Centralised start / stop ────────────────────────────────────────────
   const startRecording = useCallback(async (smartDictation = false) => {
+    if (isRecordingRef.current) return;
     recordingStartRef.current = Date.now();
     segmentsRef.current = [];
     hasPasted.current = false;
