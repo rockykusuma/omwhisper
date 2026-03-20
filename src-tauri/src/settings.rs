@@ -72,6 +72,9 @@ pub struct Settings {
     /// Smart Dictation hotkey
     #[serde(default = "default_smart_dictation_hotkey")]
     pub smart_dictation_hotkey: String,
+    /// Polish Selected Text hotkey — copies selection, polishes via AI, pastes back
+    #[serde(default = "default_polish_text_hotkey")]
+    pub polish_text_hotkey: String,
     /// Dedicated Push-to-Talk hotkey combo (used when ptt_key == "custom")
     #[serde(default = "default_push_to_talk_hotkey")]
     pub push_to_talk_hotkey: String,
@@ -127,6 +130,7 @@ fn default_ai_timeout_seconds() -> u32 { 30 }
 fn default_active_polish_style() -> String { "professional".to_string() }
 fn default_translate_target_language() -> String { "English".to_string() }
 fn default_smart_dictation_hotkey() -> String { "CmdOrCtrl+Shift+B".to_string() }
+fn default_polish_text_hotkey() -> String { "CmdOrCtrl+Shift+P".to_string() }
 fn default_push_to_talk_hotkey() -> String { "Fn".to_string() }
 fn default_ptt_key() -> String { "custom".to_string() }
 
@@ -171,6 +175,7 @@ impl Default for Settings {
             active_polish_style: "professional".to_string(),
             translate_target_language: "English".to_string(),
             smart_dictation_hotkey: "CmdOrCtrl+Shift+B".to_string(),
+            polish_text_hotkey: "CmdOrCtrl+Shift+P".to_string(),
             push_to_talk_hotkey: "Fn".to_string(),
             ptt_key: "custom".to_string(),
             overlay_placement: "top-center".to_string(),

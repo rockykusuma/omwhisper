@@ -61,6 +61,7 @@ export interface AppSettings {
   active_polish_style: string;
   translate_target_language: string;
   smart_dictation_hotkey: string;
+  polish_text_hotkey: string;
   push_to_talk_hotkey: string;
   ptt_key: string;
   overlay_placement: string;

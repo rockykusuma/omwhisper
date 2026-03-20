@@ -32,7 +32,7 @@ use commands::{
     transcribe_file, update_settings, validate_license_bg,
     get_vocabulary, add_vocabulary_word, remove_vocabulary_word, add_word_replacement, remove_word_replacement,
     get_usage_stats, get_storage_info,
-    check_ollama_status, get_ollama_models, polish_text_cmd, test_ai_connection,
+    check_ollama_status, get_ollama_models, polish_text_cmd, polish_selected_text, test_ai_connection,
     save_cloud_api_key, get_cloud_api_key_status, delete_cloud_api_key_cmd,
     get_model_recommendation,
     get_llm_models, get_llm_models_disk_usage, download_llm_model, delete_llm_model, import_llm_model,
@@ -44,11 +44,87 @@ use commands::{
 use commands::{load_llm_engine, unload_llm_engine};
 use std::sync::{Arc, Mutex};
 use tauri::{
-    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Emitter, Manager,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+
+/// Build the tray menu reflecting current settings (mic checkmark + style checkmark).
+fn build_tray_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+
+    let current_settings = crate::settings::load_settings_sync();
+    let selected_device = current_settings.audio_input_device.clone().unwrap_or_default();
+    let device_names = crate::settings::list_audio_devices();
+
+    let show_item     = MenuItem::with_id(app, "show",     "Show Window",     true, None::<&str>)?;
+    let settings_item = MenuItem::with_id(app, "settings", "Settings…",       true, None::<&str>)?;
+    let sep2          = PredefinedMenuItem::separator(app)?;
+
+    // Microphone submenu
+    let using_default = current_settings.audio_input_device.is_none();
+    let default_label = if using_default { "✓  Default Microphone".to_string() } else { "Default Microphone".to_string() };
+    let default_item = MenuItem::with_id(app, "mic:default", default_label, true, None::<&str>)?;
+    let mic_items: Vec<MenuItem<_>> = if device_names.is_empty() {
+        vec![]
+    } else {
+        device_names.iter().map(|d| {
+            let label = if !using_default && *d == selected_device { format!("✓  {}", d) } else { d.clone() };
+            MenuItem::with_id(app, format!("mic:{}", d), label, true, None::<&str>)
+        }).collect::<std::result::Result<Vec<_>, _>>()?
+    };
+
+    let sep_mic = PredefinedMenuItem::separator(app)?;
+    let mut mic_refs: Vec<&dyn tauri::menu::IsMenuItem<_>> = vec![&default_item];
+    if !mic_items.is_empty() {
+        mic_refs.push(&sep_mic);
+        for item in &mic_items {
+            mic_refs.push(item as &dyn tauri::menu::IsMenuItem<_>);
+        }
+    }
+    let mic_submenu = Submenu::with_items(app, "Microphone", true, &mic_refs)?;
+
+    // Polish Style submenu — built-ins + custom styles, checkmark on active
+    let active_style = &current_settings.active_polish_style;
+    let built_in_styles = crate::styles::built_in_styles();
+    let mut style_items: Vec<MenuItem<_>> = Vec::new();
+    for style in &built_in_styles {
+        let label = if style.id == *active_style { format!("✓  {}", style.name) } else { style.name.clone() };
+        style_items.push(MenuItem::with_id(app, format!("style:{}", style.id), label, true, None::<&str>)?);
+    }
+    for custom in &current_settings.custom_polish_styles {
+        let label = if custom.name == *active_style { format!("✓  {}", custom.name) } else { custom.name.clone() };
+        style_items.push(MenuItem::with_id(app, format!("style:{}", custom.name), label, true, None::<&str>)?);
+    }
+    let style_refs: Vec<&dyn tauri::menu::IsMenuItem<_>> = style_items.iter()
+        .map(|i| i as &dyn tauri::menu::IsMenuItem<_>)
+        .collect();
+    let style_submenu = Submenu::with_items(app, "Polish Style", true, &style_refs)?;
+
+    let sep3      = PredefinedMenuItem::separator(app)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit OmWhisper", true, None::<&str>)?;
+
+    Menu::with_items(app, &[
+        &show_item,
+        &settings_item,
+        &sep2,
+        &mic_submenu,
+        &style_submenu,
+        &sep3,
+        &quit_item,
+    ])
+}
+
+/// Rebuild and re-attach the tray menu (called after mic or style selection changes).
+fn rebuild_tray_menu(app: &tauri::AppHandle) {
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        if let Ok(menu) = build_tray_menu(app) {
+            if let Err(e) = tray.set_menu(Some(menu)) {
+                tracing::warn!("Failed to rebuild tray menu: {}", e);
+            }
+        }
+    }
+}
 
 /// Bring the app to the foreground on macOS.
 ///
@@ -221,49 +297,7 @@ pub fn run() {
             }
 
             // --- System Tray ---
-            let current_settings = crate::settings::load_settings_sync();
-            let selected_device = current_settings.audio_input_device.clone().unwrap_or_default();
-            let device_names = crate::settings::list_audio_devices();
-
-            let show_item     = MenuItem::with_id(app, "show",     "Show Window",     true, None::<&str>)?;
-            let settings_item = MenuItem::with_id(app, "settings", "Settings…",       true, None::<&str>)?;
-            let sep2          = PredefinedMenuItem::separator(app)?;
-
-            // Microphone submenu — "Default" entry + all devices, check-mark on the active one
-            let using_default = current_settings.audio_input_device.is_none();
-            let default_label = if using_default { "✓  Default Microphone".to_string() } else { "Default Microphone".to_string() };
-            let default_item = MenuItem::with_id(app, "mic:default", default_label, true, None::<&str>)?;
-
-            let mic_items: Vec<MenuItem<_>> = if device_names.is_empty() {
-                vec![]
-            } else {
-                device_names.iter().map(|d| {
-                    let label = if !using_default && *d == selected_device { format!("✓  {}", d) } else { d.clone() };
-                    MenuItem::with_id(app, format!("mic:{}", d), label, true, None::<&str>)
-                }).collect::<std::result::Result<Vec<_>, _>>()?
-            };
-
-            let sep_mic = PredefinedMenuItem::separator(app)?;
-            let mut mic_refs: Vec<&dyn tauri::menu::IsMenuItem<_>> = vec![&default_item];
-            if !mic_items.is_empty() {
-                mic_refs.push(&sep_mic);
-                for item in &mic_items {
-                    mic_refs.push(item as &dyn tauri::menu::IsMenuItem<_>);
-                }
-            }
-            let mic_submenu = Submenu::with_items(app, "Microphone", true, &mic_refs)?;
-
-            let sep3      = PredefinedMenuItem::separator(app)?;
-            let quit_item = MenuItem::with_id(app, "quit", "Quit OmWhisper", true, None::<&str>)?;
-
-            let menu = Menu::with_items(app, &[
-                &show_item,
-                &settings_item,
-                &sep2,
-                &mic_submenu,
-                &sep3,
-                &quit_item,
-            ])?;
+            let menu = build_tray_menu(&app.handle().clone())?;
 
             let tray_icon = {
                 const TRAY_PNG: &[u8] = include_bytes!("../icons/tray-icon@2x.png");
@@ -278,7 +312,7 @@ pub fn run() {
                 }
             };
 
-            let _tray = TrayIconBuilder::new()
+            let _tray = TrayIconBuilder::with_id("main-tray")
                 .menu(&menu)
                 .tooltip("OmWhisper — Click to toggle recording")
                 .icon(tray_icon)
@@ -318,6 +352,20 @@ pub fn run() {
                                     tracing::error!("Failed to save mic selection: {}", e);
                                 }
                                 let _ = app_handle.emit("settings-changed", ());
+                                rebuild_tray_menu(&app_handle);
+                            });
+                        }
+                        id if id.starts_with("style:") => {
+                            let style_id = id.trim_start_matches("style:").to_string();
+                            let app_handle = app.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let mut s = crate::settings::load_settings().await;
+                                s.active_polish_style = style_id;
+                                if let Err(e) = crate::settings::save_settings(&s).await {
+                                    tracing::error!("Failed to save style selection: {}", e);
+                                }
+                                let _ = app_handle.emit("settings-changed", ());
+                                rebuild_tray_menu(&app_handle);
                             });
                         }
                         _ => {}
@@ -588,6 +636,16 @@ pub fn run() {
                 }
             })?;
 
+            // --- Global Shortcut: Polish Selected Text (default Cmd+Shift+P) ---
+            if let Some(polish_sc) = parse_hotkey(&initial_settings.polish_text_hotkey) {
+                if let Err(e) = app.global_shortcut().on_shortcut(polish_sc, move |app, _shortcut, event| {
+                    if event.state != ShortcutState::Pressed { return; }
+                    let _ = app.emit("hotkey-polish-selected", ());
+                }) {
+                    tracing::warn!("Could not register Polish Selected Text shortcut: {}", e);
+                }
+            }
+
             // Intercept the close button — hide instead of destroying the window
             // so "Show Window" from the tray always works.
             if let Some(win) = app.get_webview_window("main") {
@@ -779,6 +837,7 @@ pub fn run() {
             check_ollama_status,
             get_ollama_models,
             polish_text_cmd,
+            polish_selected_text,
             test_ai_connection,
             save_cloud_api_key,
             get_cloud_api_key_status,
