@@ -1242,15 +1242,11 @@ pub async fn polish_selected_text(app: tauri::AppHandle) -> Result<String, Strin
         .get_webview_window("overlay")
         .map(|w| !w.is_visible().unwrap_or(false))
         .unwrap_or(false);
+    // Use show_overlay so the window is repositioned to the correct monitor
+    // (same cursor-based monitor detection used for recording). The recording-state:true
+    // event it emits is immediately overridden by polish-state:true below.
     if overlay_was_hidden {
-        if let Some(overlay_win) = app.get_webview_window("overlay") {
-            let _ = overlay_win.show();
-            #[cfg(target_os = "macos")]
-            {
-                let win_clone = overlay_win.clone();
-                let _ = overlay_win.run_on_main_thread(move || set_overlay_window_level(&win_clone));
-            }
-        }
+        let _ = show_overlay(app.clone()).await;
     }
 
     // Notify frontend that polishing is in progress
