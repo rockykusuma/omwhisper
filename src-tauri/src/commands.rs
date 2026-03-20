@@ -1208,6 +1208,13 @@ pub async fn polish_selected_text(app: tauri::AppHandle) -> Result<String, Strin
     // Capture frontmost app before doing anything
     let frontmost = crate::paste::get_frontmost_app();
 
+    // Plant a sentinel so we can detect "nothing was selected" even when the
+    // selection matches what was already in the clipboard.
+    const SENTINEL: &str = "__omwhisper_copy_sentinel__";
+    if let Ok(mut cb) = arboard::Clipboard::new() {
+        let _ = cb.set_text(SENTINEL);
+    }
+
     // Simulate Cmd+C to copy selection (macOS only)
     #[cfg(target_os = "macos")]
     crate::paste::simulate_copy();
@@ -1217,12 +1224,15 @@ pub async fn polish_selected_text(app: tauri::AppHandle) -> Result<String, Strin
     // Wait for clipboard to settle
     tokio::time::sleep(tokio::time::Duration::from_millis(80)).await;
 
-    // Read the updated clipboard
+    // Read the updated clipboard — if still sentinel (or empty), nothing was selected
     let text = crate::paste::read_clipboard()
         .ok_or_else(|| "No text selected".to_string())?;
 
-    // If clipboard didn't change, there was no selection (overlay not shown yet)
-    if Some(&text) == original_clipboard.as_ref() {
+    if text == SENTINEL {
+        // Restore original clipboard so we don't leave the sentinel behind
+        if let (Ok(mut cb), Some(orig)) = (arboard::Clipboard::new(), original_clipboard) {
+            let _ = cb.set_text(&orig);
+        }
         return Err("No text selected".to_string());
     }
 
