@@ -702,6 +702,12 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
               <>
                 <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Push to Talk</h3>
                 <div className="card px-5 mb-6">
+                  <div className="flex items-start gap-2 py-3 border-b" style={{ borderColor: "rgba(251,191,36,0.15)" }}>
+                    <span className="text-[11px]" style={{ color: "rgba(251,191,36,0.7)" }}>⚠</span>
+                    <p className="text-[10px] leading-relaxed" style={{ color: "rgba(251,191,36,0.6)" }}>
+                      Push to Talk is experimental — you may experience crashes or unresponsive keys. Requires Accessibility permission and an app restart to take effect.
+                    </p>
+                  </div>
                   <SettingRow label="Push to Talk Mode" description="Hold a key to record, release when done">
                     <Toggle
                       value={settings.recording_mode === "push_to_talk"}
