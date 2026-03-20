@@ -726,8 +726,36 @@ pub async fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
         }
         let _ = app.emit("recording-state", true);
         win.show().map_err(|e| e.to_string())?;
+        #[cfg(target_os = "macos")]
+        set_overlay_window_level(&win);
     }
     Ok(())
+}
+
+/// Set the overlay window to NSStatusWindowLevel (25) so it floats above all app windows.
+/// Tauri's built-in set_always_on_top only reaches NSFloatingWindowLevel (3), which
+/// is insufficient when other apps are focused.
+#[cfg(target_os = "macos")]
+fn set_overlay_window_level(win: &tauri::WebviewWindow) {
+    use std::os::raw::{c_char, c_void};
+    
+
+    let ns_window = match win.ns_window() {
+        Ok(w) => w as *mut c_void,
+        Err(_) => return,
+    };
+
+    #[allow(clashing_extern_declarations)]
+    extern "C" {
+        fn sel_registerName(str: *const c_char) -> *const c_void;
+        #[link_name = "objc_msgSend"]
+        fn msg_send_level(receiver: *mut c_void, sel: *const c_void, val: isize);
+    }
+
+    unsafe {
+        let sel = sel_registerName(b"setLevel:\0".as_ptr() as *const c_char);
+        msg_send_level(ns_window, sel, 25); // NSStatusWindowLevel = 25
+    }
 }
 
 #[tauri::command]
