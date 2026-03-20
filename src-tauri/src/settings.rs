@@ -60,6 +60,9 @@ pub struct Settings {
     /// Cloud API base URL (OpenAI-compatible)
     #[serde(default = "default_ai_cloud_api_url")]
     pub ai_cloud_api_url: String,
+    /// Whether the Cloud API connection has been verified by the user. Resets when key/model/URL changes.
+    #[serde(default)]
+    pub ai_cloud_verified: bool,
     /// Timeout in seconds for AI requests
     #[serde(default = "default_ai_timeout_seconds")]
     pub ai_timeout_seconds: u32,
@@ -171,6 +174,7 @@ impl Default for Settings {
             ai_ollama_url: "http://localhost:11434".to_string(),
             ai_cloud_model: "gpt-4o-mini".to_string(),
             ai_cloud_api_url: "https://api.openai.com/v1".to_string(),
+            ai_cloud_verified: false,
             ai_timeout_seconds: 30,
             active_polish_style: "professional".to_string(),
             translate_target_language: "English".to_string(),
