@@ -309,11 +309,21 @@ function SmartDictationTab() {
   const [newStylePrompt, setNewStylePrompt] = useState("");
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testLoading, setTestLoading] = useState(false);
+  const [ollamaChecking, setOllamaChecking] = useState(false);
   const [customModelInput, setCustomModelInput] = useState("");
 
   useEffect(() => {
     setCustomModelInput("");
   }, [settings?.ai_cloud_api_url]);
+
+  useEffect(() => {
+    if (settings?.ai_backend === "ollama") {
+      setOllamaChecking(true);
+      invoke<OllamaStatus>("check_ollama_status")
+        .then((status) => { setOllamaStatus(status); setOllamaChecking(false); })
+        .catch(() => { setOllamaChecking(false); });
+    }
+  }, [settings?.ai_backend]);
 
   useEffect(() => {
     invoke<AppSettings>("get_settings").then(setSettings).catch(() => {});
@@ -325,8 +335,13 @@ function SmartDictationTab() {
   }, []);
 
   async function refreshOllamaStatus() {
-    const status = await invoke<OllamaStatus>("check_ollama_status");
-    setOllamaStatus(status);
+    setOllamaChecking(true);
+    try {
+      const status = await invoke<OllamaStatus>("check_ollama_status");
+      setOllamaStatus(status);
+    } finally {
+      setOllamaChecking(false);
+    }
   }
 
   async function handleSaveApiKey() {
@@ -451,61 +466,66 @@ function SmartDictationTab() {
 
       {/* Ollama section */}
       {effectiveBackend === "ollama" && (
-        <div className="card px-5 mb-5">
-          <div className="flex items-center justify-between py-3 border-b border-white/[0.04]">
-            <div>
-              <p className="text-white/80 text-sm">Ollama Status</p>
-              {ollamaStatus === null
-                ? <p className="text-white/50 text-xs mt-0.5">Not checked yet</p>
-                : <p className={`text-xs mt-0.5 ${ollamaStatus.running ? "text-emerald-400" : "text-red-400/70"}`}>
-                    {ollamaStatus.running ? `Running · ${ollamaStatus.models.length} model(s)` : "Not running"}
-                  </p>
-              }
+        <div className="card mb-5 overflow-hidden">
+          {/* Status banner */}
+          {ollamaChecking ? (
+            <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.02)" }}>
+              <div className="w-2.5 h-2.5 rounded-full bg-white/20 animate-pulse flex-shrink-0" />
+              <span className="text-xs text-white/50">Checking Ollama…</span>
             </div>
-            <button onClick={refreshOllamaStatus} className="btn-ghost text-xs py-1 px-3">Refresh</button>
-          </div>
-          <SettingRow label="Server URL" description="Ollama server address">
-            <input
-              type="text"
-              value={settings.ai_ollama_url}
-              onChange={(e) => update({ ai_ollama_url: e.target.value })}
-              placeholder="http://localhost:11434"
-              className="text-white/60 text-xs rounded-lg px-3 py-1.5 outline-none max-w-[200px]"
-              style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-            />
-          </SettingRow>
-          <SettingRow label="Model" description="Ollama model for text polishing">
-            {ollamaStatus?.running && ollamaStatus.models.length > 0 ? (
-              <select
-                value={settings.ai_ollama_model}
-                onChange={(e) => update({ ai_ollama_model: e.target.value })}
-                className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none max-w-[160px]"
-                style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-              >
-                {ollamaStatus.models.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={settings.ai_ollama_model}
-                onChange={(e) => update({ ai_ollama_model: e.target.value })}
-                placeholder="e.g. llama3.2"
-                className="text-white/60 text-xs rounded-lg px-3 py-1.5 outline-none max-w-[160px]"
-                style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-              />
-            )}
-          </SettingRow>
-          <div className="py-3 flex items-center gap-3">
-            <button onClick={() => handleTestConnection("ollama")} disabled={testLoading} className="btn-ghost text-xs py-1 px-3">
-              {testLoading ? "Testing…" : "Test Connection"}
-            </button>
-            {testResult && <span className={`text-xs font-mono ${testResult.startsWith("✓") ? "text-emerald-400" : "text-red-400/70"}`}>{testResult}</span>}
-          </div>
-          {!ollamaStatus?.running && (
-            <div className="pb-4 space-y-2 text-xs leading-relaxed">
-              <p className="text-white/70 font-medium text-sm">Setup Ollama</p>
+          ) : ollamaStatus?.running ? (
+            <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(52,211,153,0.05)" }}>
+              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: "#34d399", boxShadow: "0 0 6px rgba(52,211,153,0.5)" }} />
+              <div className="flex-1 min-w-0 text-xs">
+                <span className="font-semibold" style={{ color: "#34d399" }}>Connected</span>
+                <span className="text-white/40 ml-2 font-mono">
+                  {settings.ai_ollama_model} · {settings.ai_ollama_url} · {ollamaStatus.models.length} models
+                </span>
+              </div>
+              <button onClick={refreshOllamaStatus} disabled={ollamaChecking} className="btn-ghost text-xs py-1 px-3 flex-shrink-0">Refresh</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(251,191,36,0.05)" }}>
+              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: "#fbbf24", boxShadow: "0 0 6px rgba(251,191,36,0.5)" }} />
+              <div className="flex-1 text-xs">
+                <span className="font-semibold" style={{ color: "#fbbf24" }}>Ollama not detected</span>
+                <span className="text-white/40 ml-2">Install and start Ollama to continue</span>
+              </div>
+              <button onClick={refreshOllamaStatus} disabled={ollamaChecking} className="btn-ghost text-xs py-1 px-3 flex-shrink-0">Refresh</button>
+            </div>
+          )}
+
+          {/* Config fields — only when connected */}
+          {ollamaStatus?.running && (
+            <div className="px-5">
+              <SettingRow label="Model" description="Ollama model for text polishing">
+                <select
+                  value={settings.ai_ollama_model}
+                  onChange={(e) => update({ ai_ollama_model: e.target.value })}
+                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none max-w-[160px]"
+                  style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                >
+                  {ollamaStatus.models.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </SettingRow>
+              <SettingRow label="Server URL" description="Advanced">
+                <input
+                  type="text"
+                  value={settings.ai_ollama_url}
+                  onChange={(e) => update({ ai_ollama_url: e.target.value })}
+                  placeholder="http://localhost:11434"
+                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 outline-none max-w-[200px]"
+                  style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                />
+              </SettingRow>
+            </div>
+          )}
+
+          {/* Setup guide — only when not running */}
+          {!ollamaChecking && ollamaStatus !== null && !ollamaStatus.running && (
+            <div className="px-5 py-4 space-y-2 text-xs leading-relaxed">
               <p className="text-white/50">1. Download from{" "}
                 <button
                   onClick={() => invoke("plugin:opener|open_url", { url: "https://ollama.com" }).catch(() => {})}
@@ -514,18 +534,17 @@ function SmartDictationTab() {
                   ollama.com
                 </button>
               </p>
-              <p className="text-white/50">2. Install and open Ollama (it runs in your menu bar)</p>
-              <p className="text-white/50">3. Open Terminal and run:</p>
-              <button
-                onClick={() => navigator.clipboard.writeText("ollama pull llama3.2")}
-                className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-left cursor-pointer hover:bg-white/[0.06] transition-colors group"
-                style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
-                title="Click to copy"
-              >
-                <code className="font-mono text-white/70 flex-1">ollama pull llama3.2</code>
-                <span className="text-white/30 group-hover:text-white/60 transition-colors text-[10px]">copy</span>
-              </button>
-              <p className="text-white/50">4. Click <span className="text-white/70">Refresh</span> above to detect it</p>
+              <p className="text-white/50">2. Run:{" "}
+                <button
+                  onClick={() => navigator.clipboard.writeText("ollama pull llama3.2")}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono cursor-pointer hover:bg-white/[0.06] transition-colors"
+                  style={{ background: "rgba(255,255,255,0.04)" }}
+                  title="Click to copy"
+                >
+                  <code className="text-white/70">ollama pull llama3.2</code>
+                </button>
+              </p>
+              <p className="text-white/50">3. Click <span className="text-white/70">Refresh</span> above</p>
             </div>
           )}
         </div>
