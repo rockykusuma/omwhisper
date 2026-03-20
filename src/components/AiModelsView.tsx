@@ -314,7 +314,7 @@ function SmartDictationTab() {
 
   useEffect(() => {
     setCustomModelInput("");
-  }, [settings?.ai_cloud_api_url]);
+  }, [settings?.ai_cloud_api_url, settings?.ai_cloud_model]);
 
   useEffect(() => {
     if (!settings) return;
