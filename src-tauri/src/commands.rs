@@ -726,8 +726,12 @@ pub async fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
         }
         let _ = app.emit("recording-state", true);
         win.show().map_err(|e| e.to_string())?;
+        // NSWindow operations must run on the main thread
         #[cfg(target_os = "macos")]
-        set_overlay_window_level(&win);
+        {
+            let win_clone = win.clone();
+            let _ = win.run_on_main_thread(move || set_overlay_window_level(&win_clone));
+        }
     }
     Ok(())
 }
