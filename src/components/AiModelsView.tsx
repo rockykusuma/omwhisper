@@ -317,9 +317,10 @@ function SmartDictationTab() {
   }, [settings?.ai_cloud_api_url]);
 
   useEffect(() => {
-    if (settings && settings.ai_cloud_verified) {
+    if (!settings) return;
+    setCloudTestError(null);
+    if (settings.ai_cloud_verified) {
       update({ ai_cloud_verified: false });
-      setCloudTestError(null);
     }
   }, [settings?.ai_cloud_model, settings?.ai_cloud_api_url]);
 
