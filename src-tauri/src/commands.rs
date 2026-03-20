@@ -1200,7 +1200,7 @@ pub async fn polish_text_cmd(
 /// Copy the current text selection, run AI polish using the active style, paste back.
 #[tauri::command]
 pub async fn polish_selected_text(app: tauri::AppHandle) -> Result<String, String> {
-    use tauri::Emitter;
+    use tauri::{Emitter, Manager};
 
     // Save original clipboard for restore later
     let original_clipboard = crate::paste::read_clipboard();
@@ -1221,9 +1221,26 @@ pub async fn polish_selected_text(app: tauri::AppHandle) -> Result<String, Strin
     let text = crate::paste::read_clipboard()
         .ok_or_else(|| "No text selected".to_string())?;
 
-    // If clipboard didn't change, there was no selection
+    // If clipboard didn't change, there was no selection (overlay not shown yet)
     if Some(&text) == original_clipboard.as_ref() {
         return Err("No text selected".to_string());
+    }
+
+    // Show overlay window so user has visual feedback (shown before polish-state so it
+    // renders in polishing mode from the first frame, not the recording waveform mode)
+    let overlay_was_hidden = app
+        .get_webview_window("overlay")
+        .map(|w| !w.is_visible().unwrap_or(false))
+        .unwrap_or(false);
+    if overlay_was_hidden {
+        if let Some(overlay_win) = app.get_webview_window("overlay") {
+            let _ = overlay_win.show();
+            #[cfg(target_os = "macos")]
+            {
+                let win_clone = overlay_win.clone();
+                let _ = overlay_win.run_on_main_thread(move || set_overlay_window_level(&win_clone));
+            }
+        }
     }
 
     // Notify frontend that polishing is in progress
@@ -1237,6 +1254,9 @@ pub async fn polish_selected_text(app: tauri::AppHandle) -> Result<String, Strin
     let polished = polish_text_cmd(text, style, None, app.clone()).await
         .map_err(|e| {
             let _ = app.emit("polish-state", false);
+            if overlay_was_hidden {
+                if let Some(w) = app.get_webview_window("overlay") { let _ = w.hide(); }
+            }
             e
         })?;
 
@@ -1277,6 +1297,18 @@ pub async fn polish_selected_text(app: tauri::AppHandle) -> Result<String, Strin
     }
 
     let _ = app.emit("polish-state", false);
+
+    // Hide the overlay after a brief pause so the user sees the state clear
+    if overlay_was_hidden {
+        let app_clone = app.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
+            if let Some(w) = app_clone.get_webview_window("overlay") {
+                let _ = w.hide();
+            }
+        });
+    }
+
     Ok(polished)
 }
 
