@@ -588,6 +588,16 @@ pub async fn get_settings() -> Result<Settings, String> {
 
 #[tauri::command]
 pub async fn update_settings(app: tauri::AppHandle, new_settings: Settings) -> Result<(), String> {
+    // Sync autostart when auto_launch changes.
+    {
+        use tauri_plugin_autostart::ManagerExt;
+        let autostart = app.autolaunch();
+        if new_settings.auto_launch {
+            let _ = autostart.enable();
+        } else {
+            let _ = autostart.disable();
+        }
+    }
     settings::save_settings(&new_settings).await.map_err(|e| e.to_string())?;
     let _ = app.emit("settings-changed", ());
     Ok(())

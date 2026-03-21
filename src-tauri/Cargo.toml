@@ -47,6 +47,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 image = { version = "0.25", default-features = false, features = ["png"] }
 tauri-plugin-opener = "2"
+tauri-plugin-autostart = "2"
 regex = "1"
 rodio = { version = "0.19", default-features = false, features = ["wav"] }
 sysinfo = { version = "0.30", default-features = true }

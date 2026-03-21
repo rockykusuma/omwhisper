@@ -259,7 +259,23 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .setup(move |app| {
+            // Sync autostart with the persisted setting on every launch.
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                let s = crate::settings::load_settings_sync();
+                let autostart = app.autolaunch();
+                if s.auto_launch {
+                    let _ = autostart.enable();
+                } else {
+                    let _ = autostart.disable();
+                }
+            }
+
             // Analytics: fire app_launched (tokio runtime is live inside setup)
             {
                 let s = crate::settings::load_settings_sync();
