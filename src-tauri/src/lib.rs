@@ -876,7 +876,7 @@ pub fn run() {
             commands::is_apple_speech_available,
             commands::get_apple_speech_auth_status,
             commands::request_speech_recognition_permission,
-            commands::open_feedback_url,
+            commands::open_external_url,
             commands::send_feedback,
         ])
         .build(tauri::generate_context!())

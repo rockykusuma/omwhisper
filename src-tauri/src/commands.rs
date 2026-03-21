@@ -1458,7 +1458,7 @@ pub fn get_platform() -> &'static str {
 }
 
 #[tauri::command]
-pub fn open_feedback_url(url: String, app: AppHandle) -> Result<(), String> {
+pub fn open_external_url(url: String, app: AppHandle) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
     app.opener().open_url(&url, None::<&str>).map_err(|e| e.to_string())
 }

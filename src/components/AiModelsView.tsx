@@ -555,7 +555,7 @@ function SmartDictationTab() {
             <div className="px-5 py-4 space-y-2 text-xs leading-relaxed">
               <p className="text-white/50">1. Download from{" "}
                 <span
-                  onClick={() => invoke("plugin:opener|open_url", { url: "https://ollama.com" }).catch(() => {})}
+                  onClick={() => invoke("open_external_url", { url: "https://ollama.com" })}
                   className="text-violet-400 underline cursor-pointer hover:text-violet-300 transition-colors"
                 >
                   ollama.com
