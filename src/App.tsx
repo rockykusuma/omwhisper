@@ -328,7 +328,7 @@ function App() {
               </span>
               <div className="flex items-center gap-3 shrink-0">
                 <button
-                  onClick={() => invoke("plugin:opener|open_url", { url: updateInfo.download_url }).catch(() => {})}
+                  onClick={() => invoke("open_external_url", { url: updateInfo.download_url })}
                   className="text-emerald-400 text-xs underline hover:text-emerald-300 cursor-pointer bg-transparent border-0 p-0"
                 >
                   Download
