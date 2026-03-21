@@ -554,13 +554,12 @@ function SmartDictationTab() {
           {!ollamaChecking && ollamaStatus !== null && !ollamaStatus.running && (
             <div className="px-5 py-4 space-y-2 text-xs leading-relaxed">
               <p className="text-white/50">1. Download from{" "}
-                <a
-                  href="https://ollama.com"
-                  onClick={(e) => { e.preventDefault(); invoke("plugin:opener|open_url", { url: "https://ollama.com" }).catch((err) => { console.error("opener error:", err); }); }}
+                <span
+                  onClick={() => invoke("plugin:opener|open_url", { url: "https://ollama.com" }).catch(() => {})}
                   className="text-violet-400 underline cursor-pointer hover:text-violet-300 transition-colors"
                 >
                   ollama.com
-                </a>
+                </span>
               </p>
               <p className="text-white/50 flex items-center gap-2">
                 <span>2. Run:</span>
