@@ -6,10 +6,6 @@
     "darwin-aarch64": {
       "url": "https://github.com/rockykusuma/omwhisper/releases/download/v0.1.0-beta.5/OmWhisper_0.1.0-beta.5_arm64.app.tar.gz",
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRRFBIVkVXQW84bEFpb0huMXladGVldlBZb0xINE9LN2Z5MXRNYkNQRDdheTZLR054NURuNW1EdUZZeGJONDlWWGMwZ3NPL0NtajFLZ284eVlSeHlyZmRpc1FsY3I0dlFNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc0MTcxOTcwCWZpbGU6T21XaGlzcGVyXzAuMS4wLWJldGEuNV9hcm02NC5hcHAudGFyLmd6Ckk5RjdybGdaUTdhc3ZNbXlSTUNuamF3REpKNlFCWEpnelJzNmxPNU5HejBKMm9ObU1kVFo2eEFra1plZFg2TGNnQmJTbmJPQ0FPdXExQmNsTTN2MUJBPT0K"
-    },
-    "windows-x86_64": {
-      "url": "https://github.com/rockykusuma/omwhisper/releases/download/v0.1.0-beta.5/OmWhisper_0.1.0-beta.5_x64-setup.nsis.zip",
-      "signature": "PLACEHOLDER_WINDOWS_SIG_FROM_CI"
     }
   }
 }
