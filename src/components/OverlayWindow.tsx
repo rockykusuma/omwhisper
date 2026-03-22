@@ -283,6 +283,8 @@ function LiveTextBubble({ text }: { text: string }) {
 export default function OverlayWindow() {
   const [overlayStyle, setOverlayStyle] = useState<string>("micro");
   const [applyPolishRegular, setApplyPolishRegular] = useState(false);
+  const [liveTextStreaming, setLiveTextStreaming] = useState(true);
+  const liveTextStreamingRef = useRef(true);
   const [isPolishing, setIsPolishing] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -306,6 +308,9 @@ export default function OverlayWindow() {
         .then((s) => {
           setOverlayStyle(s.overlay_style ?? "micro");
           setApplyPolishRegular(s.apply_polish_to_regular ?? false);
+          const enabled = s.live_text_streaming ?? true;
+          setLiveTextStreaming(enabled);
+          liveTextStreamingRef.current = enabled;
         })
         .catch(() => {});
     load();
@@ -346,6 +351,7 @@ export default function OverlayWindow() {
     const unlistenUpdate = listen<{ segments: { text: string }[] }>(
       "transcription-update",
       (event) => {
+        if (!liveTextStreamingRef.current) return;
         const newText = event.payload.segments
           .map((s) => s.text.trim())
           .filter(Boolean)
@@ -359,6 +365,9 @@ export default function OverlayWindow() {
       }
     );
 
+    // Clear on recording START so the bubble resets for each new session.
+    // We do NOT clear on transcription-complete — the text stays visible
+    // until the overlay hides (1500ms after stop), giving the user time to read it.
     const unlistenStart = listen<boolean>("recording-state", (e) => {
       if (e.payload) {
         liveTextRef.current = "";
@@ -366,17 +375,9 @@ export default function OverlayWindow() {
       }
     });
 
-    const unlistenComplete = listen("transcription-complete", () => {
-      setTimeout(() => {
-        liveTextRef.current = "";
-        setLiveText("");
-      }, 500);
-    });
-
     return () => {
       unlistenUpdate.then((f) => f());
       unlistenStart.then((f) => f());
-      unlistenComplete.then((f) => f());
     };
   }, []);
 
@@ -403,7 +404,7 @@ export default function OverlayWindow() {
           )}
         </>
       )}
-      {!isPolishing && liveText && <LiveTextBubble text={liveText} />}
+      {!isPolishing && liveTextStreaming && liveText && <LiveTextBubble text={liveText} />}
     </div>
   );
 }

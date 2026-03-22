@@ -153,7 +153,7 @@ function SettingRow({
   children,
 }: {
   label: string;
-  description?: string;
+  description?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -316,6 +316,21 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                       <option value="micro">Micro — compact bars</option>
                       <option value="waveform">Waveform — bars + label</option>
                     </select>
+                  </SettingRow>
+                  <SettingRow
+                    label="Live Text Streaming"
+                    description={
+                      <span>
+                        Show partial transcription below the overlay during recording.{" "}
+                        <span className="text-amber-400/80">May reduce accuracy for long uninterrupted speech.</span>
+                      </span>
+                    }
+                  >
+                    <Toggle
+                      value={settings.live_text_streaming ?? true}
+                      onChange={(v) => update({ live_text_streaming: v })}
+                      label="Live text streaming"
+                    />
                   </SettingRow>
                 </>
               )}

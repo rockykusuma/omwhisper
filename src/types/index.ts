@@ -69,6 +69,7 @@ export interface AppSettings {
   transcription_engine: string;
   analytics_enabled: boolean;
   crash_reporting_enabled: boolean;
+  live_text_streaming: boolean;
 }
 
 // ─── AI ────────────────────────────────────────────────────────────────────────
