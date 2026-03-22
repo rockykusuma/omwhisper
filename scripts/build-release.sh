@@ -122,33 +122,31 @@ else
 fi
 
 # ── Updater artifact ─────────────────────────────────────────────────────────
+# Tauri 2 does not auto-create .app.tar.gz — we create and sign it here.
 echo ""
-echo "Locating updater artifact..."
-TAR_PATH=$(find "$BUNDLE_DIR/macos" -name "*.app.tar.gz" 2>/dev/null | head -1)
+echo "Creating updater tarball..."
+ARCH=$(uname -m)
+TAR_PATH="$BUNDLE_DIR/macos/OmWhisper_${VERSION}_${ARCH}.app.tar.gz"
+SIG_PATH="${TAR_PATH}.sig"
 
-if [ -n "$TAR_PATH" ]; then
-    SIG_PATH="${TAR_PATH}.sig"
-    echo "Updater tarball: $TAR_PATH"
-    if [ -f "$SIG_PATH" ]; then
-        echo "Signature:       $SIG_PATH"
-        echo ""
-        echo "Copy the signature contents into landing/public/api/updater.json"
-        echo "  platforms.darwin-aarch64.url:       https://github.com/rockykusuma/omwhisper/releases/download/v${VERSION}/$(basename "$TAR_PATH")"
-        echo "  platforms.darwin-aarch64.signature: \$(cat $SIG_PATH)"
-    else
-        echo "WARNING: No .sig file found — TAURI_SIGNING_PRIVATE_KEY may not be set."
-        echo "Set it in .env and rebuild to produce a signed artifact."
-    fi
-elif [ -n "$APP_PATH" ]; then
-    # Fallback: create tarball manually (unsigned — for local testing without signing key)
-    ARCH=$(uname -m)
-    TAR_PATH="$BUNDLE_DIR/macos/OmWhisper_${VERSION}_${ARCH}.app.tar.gz"
-    echo "No signed tarball found — creating unsigned tarball for testing..."
-    cd "$BUNDLE_DIR/macos"
-    tar czf "$TAR_PATH" "$(basename "$APP_PATH")"
-    cd "$PROJECT_ROOT"
-    echo "Unsigned updater tarball: $TAR_PATH"
-    echo "WARNING: This tarball is unsigned. Set TAURI_SIGNING_PRIVATE_KEY in .env for a signed build."
+cd "$BUNDLE_DIR/macos"
+tar czf "$TAR_PATH" "$(basename "$APP_PATH")"
+cd "$PROJECT_ROOT"
+echo "Tarball: $TAR_PATH"
+
+if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+    echo "Signing updater tarball..."
+    npx @tauri-apps/cli signer sign "$TAR_PATH" \
+        --private-key "$TAURI_SIGNING_PRIVATE_KEY" \
+        --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
+    echo "Signature: $SIG_PATH"
+    echo ""
+    echo "Add to landing/public/api/updater.json:"
+    echo "  platforms.darwin-aarch64.url:       https://github.com/rockykusuma/omwhisper/releases/download/v${VERSION}/$(basename "$TAR_PATH")"
+    echo "  platforms.darwin-aarch64.signature: $(cat "$SIG_PATH")"
+else
+    echo "WARNING: TAURI_SIGNING_PRIVATE_KEY not set — tarball is unsigned."
+    echo "Set it in .env and rebuild to produce a signed artifact."
 fi
 
 echo ""
