@@ -1,0 +1,15 @@
+{
+  "version": "0.1.0-beta.5",
+  "notes": "Smart Dictation AI backend redesign, Ollama status banner, Cloud API verified persistence, Launch at Login, bug fixes.",
+  "pub_date": "2026-03-21T00:00:00Z",
+  "platforms": {
+    "darwin-aarch64": {
+      "url": "https://github.com/rockykusuma/omwhisper/releases/download/v0.1.0-beta.5/OmWhisper_0.1.0-beta.5_aarch64.app.tar.gz",
+      "signature": "PLACEHOLDER_REPLACE_WITH_CONTENTS_OF_APP_TAR_GZ_SIG"
+    },
+    "windows-x86_64": {
+      "url": "https://github.com/rockykusuma/omwhisper/releases/download/v0.1.0-beta.5/OmWhisper_0.1.0-beta.5_x64-setup.nsis.zip",
+      "signature": "PLACEHOLDER_REPLACE_WITH_CONTENTS_OF_NSIS_ZIP_SIG"
+    }
+  }
+}
