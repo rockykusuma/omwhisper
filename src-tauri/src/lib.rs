@@ -38,7 +38,7 @@ use commands::{
     get_platform,
     get_transcription_engine,
     install_update,
-    SharedState, TranscriptionState,
+    SharedState, TranscriptionState, WhisperEngineCache,
 };
 #[cfg(target_os = "macos")]
 use commands::{load_llm_engine, unload_llm_engine};
@@ -234,6 +234,7 @@ pub fn run() {
     crate::analytics::init();
 
     let shared_state: SharedState = Arc::new(Mutex::new(TranscriptionState::new()));
+    let engine_cache: WhisperEngineCache = Arc::new(Mutex::new(None));
 
     // Separate managed state for LlmEngine — must NOT be inside SharedState
     // because inference blocks the calling thread for several seconds — holding the shared mutex during inference would deadlock the shortcut handlers.
@@ -241,6 +242,7 @@ pub fn run() {
     let builder = {
         let b = tauri::Builder::default()
             .manage(shared_state.clone())
+            .manage(engine_cache)
             .manage(std::sync::Arc::new(std::sync::Mutex::new(
                 Option::<crate::ai::llm::LlmEngine>::None,
             )));
@@ -250,7 +252,8 @@ pub fn run() {
     #[cfg(not(target_os = "macos"))]
     let builder = {
         let b = tauri::Builder::default()
-            .manage(shared_state.clone());
+            .manage(shared_state.clone())
+            .manage(engine_cache);
         b
     };
 

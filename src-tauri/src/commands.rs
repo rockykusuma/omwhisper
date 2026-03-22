@@ -41,6 +41,11 @@ impl TranscriptionState {
 
 pub type SharedState = Arc<Mutex<TranscriptionState>>;
 
+/// Cached transcription engine — avoids reloading the Whisper model (~500ms) on every session.
+/// Stores the engine alongside the model path it was loaded for so the cache is automatically
+/// invalidated when the user switches models.
+pub type WhisperEngineCache = Arc<Mutex<Option<(crate::engine::TranscriptionEngine, std::path::PathBuf)>>>;
+
 /// Resolve a possibly-relative model path.
 /// In dev the binary is at src-tauri/target/debug/omwhisper — walk up 4 levels
 /// to reach the project root, then join the relative path.
@@ -97,6 +102,7 @@ pub struct TranscriptionUpdate {
 pub async fn start_transcription(
     model: String,
     state: tauri::State<'_, SharedState>,
+    engine_cache: tauri::State<'_, WhisperEngineCache>,
     app: AppHandle,
 ) -> Result<(), String> {
     // Guard against overlapping sessions (rapid hotkey taps during startup delay).
@@ -167,15 +173,36 @@ pub async fn start_transcription(
 
     let model_path = resolve_model_path(&model);
 
-    // Select the transcription engine (Apple or Whisper) before spawning the thread.
-    let engine = match crate::engine::TranscriptionEngine::select(&model_path, &engine_preference) {
-        Ok(e) => e,
-        Err(err) => {
-            eprintln!("failed to select transcription engine: {err}");
-            sentry_anyhow::capture_anyhow(&err);
-            is_starting.store(false, Ordering::SeqCst);
-            return Err(err.to_string());
+    // Try to reuse a cached engine (avoids ~500ms model reload on every session).
+    // Cache is invalidated automatically when the model path changes.
+    let cached = {
+        let mut guard = engine_cache.lock().unwrap_or_else(|e| e.into_inner());
+        match guard.take() {
+            Some((eng, path)) if path == model_path => {
+                tracing::debug!("whisper: reusing cached engine for {:?}", model_path);
+                Some(eng)
+            }
+            Some((eng, _)) => {
+                tracing::debug!("whisper: model changed, dropping cached engine");
+                drop(eng); // explicit drop makes intent clear
+                None
+            }
+            None => None,
         }
+    };
+
+    // Load a fresh engine only when the cache missed.
+    let engine = match cached {
+        Some(e) => e,
+        None => match crate::engine::TranscriptionEngine::select(&model_path, &engine_preference) {
+            Ok(e) => e,
+            Err(err) => {
+                eprintln!("failed to select transcription engine: {err}");
+                sentry_anyhow::capture_anyhow(&err);
+                is_starting.store(false, Ordering::SeqCst);
+                return Err(err.to_string());
+            }
+        },
     };
     // Capture the name before moving engine into the thread (borrow-checker requirement).
     let engine_name = engine.name();
@@ -188,6 +215,10 @@ pub async fn start_transcription(
             let _ = app_for_level.emit("audio-level", level);
         }
     });
+
+    // Clone the cache Arc so the transcription thread can return the engine when done.
+    let engine_cache_for_thread = Arc::clone(&engine_cache);
+    let model_path_for_thread = model_path.clone();
 
     // Spawn a dedicated thread to load the model and consume speech utterances.
     // TranscriptionEngine is Send (see engine.rs unsafe impl Send).
@@ -244,6 +275,15 @@ pub async fn start_transcription(
                 }
             }
         }
+        // Return the engine to the cache so the next recording session can reuse it
+        // without reloading the model from disk. Only cached on clean exit — a panicked
+        // or timed-out engine is dropped (engine_slot is None in those cases).
+        if let Some(eng) = engine_slot {
+            let mut guard = engine_cache_for_thread.lock().unwrap_or_else(|e| e.into_inner());
+            *guard = Some((eng, model_path_for_thread));
+            tracing::debug!("whisper: engine returned to cache");
+        }
+
         // All audio chunks have been processed — signal the frontend to paste/save
         let _ = app.emit("transcription-complete", ());
     });
@@ -353,7 +393,22 @@ pub async fn download_model(name: String, app: tauri::AppHandle) -> Result<(), S
 }
 
 #[tauri::command]
-pub async fn delete_model(name: String) -> Result<(), String> {
+pub async fn delete_model(
+    name: String,
+    engine_cache: tauri::State<'_, WhisperEngineCache>,
+) -> Result<(), String> {
+    // Invalidate the cache if the deleted model is currently loaded — avoids
+    // a use-after-free where the next recording would try to use a missing file.
+    {
+        let mut guard = engine_cache.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((_, ref path)) = *guard {
+            let deleted_path = resolve_model_path(&name);
+            if *path == deleted_path {
+                tracing::debug!("whisper: invalidating engine cache for deleted model {:?}", name);
+                *guard = None;
+            }
+        }
+    }
     models::delete_model(&name).await.map_err(|e| e.to_string())
 }
 
