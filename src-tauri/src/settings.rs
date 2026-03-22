@@ -118,6 +118,11 @@ pub struct Settings {
     /// Allow crash reports to be sent via Sentry. Default: true. Takes effect after restart.
     #[serde(default = "default_true")]
     pub crash_reporting_enabled: bool,
+    /// Periodically flush the VAD buffer to Whisper during recording so live text appears
+    /// in the overlay even without natural speech pauses. May slightly reduce accuracy for
+    /// long uninterrupted speech. Default: false.
+    #[serde(default)]
+    pub live_text_streaming: bool,
 }
 
 fn default_clipboard_restore_delay_ms() -> u64 { 2000 }
@@ -193,6 +198,7 @@ impl Default for Settings {
             transcription_engine: default_transcription_engine(),
             analytics_enabled: true,
             crash_reporting_enabled: true,
+            live_text_streaming: false,
         }
     }
 }

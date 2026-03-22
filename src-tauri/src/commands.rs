@@ -151,7 +151,7 @@ pub async fn start_transcription(
     // Build capture object and start the audio pipeline.
     // AudioCapture::new signature is (vad_sensitivity, vad_engine) — sensitivity first, engine second.
     let capture = AudioCapture::new(settings.vad_sensitivity, &settings.vad_engine);
-    let (speech_rx, level_rx) = capture.start(settings.audio_input_device.clone()).map_err(|e| {
+    let (speech_rx, level_rx) = capture.start(settings.audio_input_device.clone(), settings.live_text_streaming).map_err(|e| {
         is_starting.store(false, Ordering::SeqCst);
         e.to_string()
     })?;
@@ -697,8 +697,8 @@ pub async fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
             let origin = monitor.position(); // physical top-left of this monitor
 
             // Overlay logical dimensions — must match the overlay window config in tauri.conf.json.
-            const OVERLAY_W: f64 = 280.0;
-            const OVERLAY_H: f64 = 100.0;
+            const OVERLAY_W: f64 = 340.0;
+            const OVERLAY_H: f64 = 220.0;
 
             // Force the window to apply its configured size before reading it back.
             // outer_size() returns (0,0) before the window has ever been rendered;

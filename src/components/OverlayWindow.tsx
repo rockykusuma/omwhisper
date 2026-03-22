@@ -212,14 +212,84 @@ function PolishingPill({ large }: { large?: boolean }) {
   );
 }
 
+function LiveTextBubble({ text }: { text: string }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [text]);
+
+  if (!text) return null;
+
+  const displayText = text.length > 150 ? "…" + text.slice(-150) : text;
+
+  return (
+    <>
+      <style>{`
+        @keyframes blink-cursor { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+        .live-bubble::-webkit-scrollbar { display: none; }
+      `}</style>
+      <div
+        ref={scrollRef}
+        className="live-bubble"
+        style={{
+          maxWidth: 320,
+          maxHeight: 60,
+          overflowY: "auto",
+          background: "rgba(10, 16, 13, 0.88)",
+          backdropFilter: "blur(14px) saturate(180%)",
+          WebkitBackdropFilter: "blur(14px) saturate(180%)",
+          border: "0.5px solid rgba(29,158,117,0.3)",
+          borderRadius: 10,
+          padding: "8px 12px",
+          marginTop: 4,
+          scrollbarWidth: "none",
+        }}
+      >
+        <p
+          style={{
+            color: "rgba(255, 255, 255, 0.75)",
+            fontSize: 11,
+            lineHeight: "1.5",
+            margin: 0,
+            fontWeight: 400,
+            letterSpacing: "0.2px",
+            wordBreak: "break-word",
+          }}
+        >
+          {displayText}
+          <span
+            style={{
+              display: "inline-block",
+              width: 3,
+              height: 12,
+              background: "rgba(29,158,117,0.75)",
+              marginLeft: 3,
+              borderRadius: 1,
+              animation: "blink-cursor 1s step-end infinite",
+              verticalAlign: "text-bottom",
+            }}
+          />
+        </p>
+      </div>
+    </>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function OverlayWindow() {
   const [overlayStyle, setOverlayStyle] = useState<string>("micro");
   const [applyPolishRegular, setApplyPolishRegular] = useState(false);
+  const [liveTextStreaming, setLiveTextStreaming] = useState(false);
+  const liveTextStreamingRef = useRef(false);
   const [isPolishing, setIsPolishing] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [liveText, setLiveText] = useState<string>("");
+  const liveTextRef = useRef<string>("");
 
   const startTimer = () => {
     setElapsed(0);
@@ -238,6 +308,9 @@ export default function OverlayWindow() {
         .then((s) => {
           setOverlayStyle(s.overlay_style ?? "micro");
           setApplyPolishRegular(s.apply_polish_to_regular ?? false);
+          const enabled = s.live_text_streaming ?? true;
+          setLiveTextStreaming(enabled);
+          liveTextStreamingRef.current = enabled;
         })
         .catch(() => {});
     load();
@@ -273,6 +346,41 @@ export default function OverlayWindow() {
     return () => { unlisten.then((f) => f()); };
   }, []);
 
+  // ── Live transcription text ─────────────────────────────────────────
+  useEffect(() => {
+    const unlistenUpdate = listen<{ segments: { text: string }[] }>(
+      "transcription-update",
+      (event) => {
+        if (!liveTextStreamingRef.current) return;
+        const newText = event.payload.segments
+          .map((s) => s.text.trim())
+          .filter(Boolean)
+          .join(" ");
+        if (newText) {
+          liveTextRef.current = liveTextRef.current
+            ? liveTextRef.current + " " + newText
+            : newText;
+          setLiveText(liveTextRef.current);
+        }
+      }
+    );
+
+    // Clear on recording START so the bubble resets for each new session.
+    // We do NOT clear on transcription-complete — the text stays visible
+    // until the overlay hides (1500ms after stop), giving the user time to read it.
+    const unlistenStart = listen<boolean>("recording-state", (e) => {
+      if (e.payload) {
+        liveTextRef.current = "";
+        setLiveText("");
+      }
+    });
+
+    return () => {
+      unlistenUpdate.then((f) => f());
+      unlistenStart.then((f) => f());
+    };
+  }, []);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
       {isPolishing ? (
@@ -296,6 +404,7 @@ export default function OverlayWindow() {
           )}
         </>
       )}
+      {!isPolishing && liveTextStreaming && liveText && <LiveTextBubble text={liveText} />}
     </div>
   );
 }

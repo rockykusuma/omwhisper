@@ -31,7 +31,7 @@ impl AudioCapture {
     ///
     /// `preferred_device` — name of a specific input device to use (from settings).
     /// Falls back to the system default if the named device is not found.
-    pub fn start(&self, preferred_device: Option<String>) -> Result<(std::sync::mpsc::Receiver<Vec<f32>>, std::sync::mpsc::Receiver<f32>)> {
+    pub fn start(&self, preferred_device: Option<String>, live_text_streaming: bool) -> Result<(std::sync::mpsc::Receiver<Vec<f32>>, std::sync::mpsc::Receiver<f32>)> {
         let running = self.running.clone();
         running.store(true, Ordering::SeqCst);
 
@@ -189,7 +189,35 @@ impl AudioCapture {
                 sentry_anyhow::capture_anyhow(&err);
                 Err(err)
             }
-            Err(_) => Ok((speech_rx, level_rx)), // sender dropped without sending = success
+            Err(_) => {
+                // Startup succeeded. Optionally spawn a periodic flush thread that sends
+                // accumulated speech to Whisper every 4 seconds — makes live text appear
+                // during continuous speech even without natural pauses for VAD to detect.
+                // Only spawned when live_text_streaming is enabled in settings.
+                if live_text_streaming {
+                    let periodic_running = self.running.clone();
+                    let periodic_vad = self.vad.clone();
+                    let periodic_tx = Arc::clone(&self.speech_tx);
+                    std::thread::spawn(move || {
+                        loop {
+                            std::thread::sleep(std::time::Duration::from_millis(4000));
+                            if !periodic_running.load(Ordering::SeqCst) { break; }
+                            // Exit if stop() has already dropped the sender.
+                            {
+                                let guard = periodic_tx.lock().unwrap_or_else(|e| e.into_inner());
+                                if guard.is_none() { break; }
+                            }
+                            // Flush any accumulated speech so the overlay shows live text.
+                            if let Some(speech) = periodic_vad.lock().unwrap_or_else(|e| e.into_inner()).flush() {
+                                if let Some(tx) = periodic_tx.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+                                    let _ = tx.send(speech);
+                                }
+                            }
+                        }
+                    });
+                }
+                Ok((speech_rx, level_rx))
+            }
         }
     }
 
