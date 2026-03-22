@@ -44,6 +44,7 @@ coverage/
 # Claude Code / agent tooling artifacts
 .agents/
 .claude/
+!.claude/settings.json
 .superpowers/
 skills-lock.json
 
