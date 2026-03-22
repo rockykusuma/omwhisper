@@ -1,0 +1,19 @@
+title: OmWhisper Docs
+description: Documentation for OmWhisper — on-device voice transcription
+remote_theme: just-the-docs/just-the-docs
+
+url: https://rockykusuma.github.io
+baseurl: /omwhisper/docs
+
+aux_links:
+  "OmWhisper Website":
+    - "https://www.omwhisper.in"
+  "Download":
+    - "https://github.com/rockykusuma/omwhisper/releases"
+
+color_scheme: dark
+
+back_to_top: true
+back_to_top_text: "Back to top"
+
+footer_content: "© 2026 OmWhisper"
