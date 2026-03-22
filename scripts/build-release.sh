@@ -121,8 +121,39 @@ else
     echo "Skipping notarization (APPLE_ID / APPLE_ID_PASSWORD / APPLE_TEAM_ID not set)."
 fi
 
+# ── Updater artifact ─────────────────────────────────────────────────────────
 echo ""
-echo "Upload the .dmg to your distribution host, then update:"
+echo "Locating updater artifact..."
+TAR_PATH=$(find "$BUNDLE_DIR/macos" -name "*.app.tar.gz" 2>/dev/null | head -1)
+
+if [ -n "$TAR_PATH" ]; then
+    SIG_PATH="${TAR_PATH}.sig"
+    echo "Updater tarball: $TAR_PATH"
+    if [ -f "$SIG_PATH" ]; then
+        echo "Signature:       $SIG_PATH"
+        echo ""
+        echo "Copy the signature contents into landing/public/api/updater.json"
+        echo "  platforms.darwin-aarch64.url:       https://github.com/rockykusuma/omwhisper/releases/download/v${VERSION}/$(basename "$TAR_PATH")"
+        echo "  platforms.darwin-aarch64.signature: \$(cat $SIG_PATH)"
+    else
+        echo "WARNING: No .sig file found — TAURI_SIGNING_PRIVATE_KEY may not be set."
+        echo "Set it in .env and rebuild to produce a signed artifact."
+    fi
+elif [ -n "$APP_PATH" ]; then
+    # Fallback: create tarball manually (unsigned — for local testing without signing key)
+    ARCH=$(uname -m)
+    TAR_PATH="$BUNDLE_DIR/macos/OmWhisper_${VERSION}_${ARCH}.app.tar.gz"
+    echo "No signed tarball found — creating unsigned tarball for testing..."
+    cd "$BUNDLE_DIR/macos"
+    tar czf "$TAR_PATH" "$(basename "$APP_PATH")"
+    cd "$PROJECT_ROOT"
+    echo "Unsigned updater tarball: $TAR_PATH"
+    echo "WARNING: This tarball is unsigned. Set TAURI_SIGNING_PRIVATE_KEY in .env for a signed build."
+fi
+
+echo ""
+echo "Upload the .dmg and .app.tar.gz to the GitHub release, then update:"
 echo "  landing/public/api/version.json  →  latest: \"$VERSION\""
+echo "  landing/public/api/updater.json  →  version, url, signature"
 echo ""
 echo "Done."
