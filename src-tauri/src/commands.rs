@@ -588,6 +588,16 @@ pub async fn get_settings() -> Result<Settings, String> {
 
 #[tauri::command]
 pub async fn update_settings(app: tauri::AppHandle, new_settings: Settings) -> Result<(), String> {
+    // Sync autostart when auto_launch changes.
+    {
+        use tauri_plugin_autostart::ManagerExt;
+        let autostart = app.autolaunch();
+        if new_settings.auto_launch {
+            let _ = autostart.enable();
+        } else {
+            let _ = autostart.disable();
+        }
+    }
     settings::save_settings(&new_settings).await.map_err(|e| e.to_string())?;
     let _ = app.emit("settings-changed", ());
     Ok(())
@@ -1448,7 +1458,7 @@ pub fn get_platform() -> &'static str {
 }
 
 #[tauri::command]
-pub fn open_feedback_url(url: String, app: AppHandle) -> Result<(), String> {
+pub fn open_external_url(url: String, app: AppHandle) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
     app.opener().open_url(&url, None::<&str>).map_err(|e| e.to_string())
 }
@@ -1559,6 +1569,20 @@ pub async fn request_speech_recognition_permission() -> bool {
     }
     #[cfg(not(target_os = "macos"))]
     false
+}
+
+#[tauri::command]
+pub async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_updater::UpdaterExt;
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let Some(update) = updater.check().await.map_err(|e| e.to_string())? else {
+        return Ok(()); // already up to date
+    };
+    update
+        .download_and_install(|_, _| {}, || {})
+        .await
+        .map_err(|e| e.to_string())?;
+    app.restart();
 }
 
 #[cfg(test)]

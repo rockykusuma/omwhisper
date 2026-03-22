@@ -5,7 +5,6 @@ mod settings;
 mod paste;
 mod history;
 mod license;
-mod updater;
 mod sounds;
 mod ai;
 mod styles;
@@ -38,6 +37,7 @@ use commands::{
     get_llm_models, get_llm_models_disk_usage, download_llm_model, delete_llm_model, import_llm_model,
     get_platform,
     get_transcription_engine,
+    install_update,
     SharedState, TranscriptionState,
 };
 #[cfg(target_os = "macos")]
@@ -257,9 +257,26 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .setup(move |app| {
+            // Sync autostart with the persisted setting on every launch.
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                let s = crate::settings::load_settings_sync();
+                let autostart = app.autolaunch();
+                if s.auto_launch {
+                    let _ = autostart.enable();
+                } else {
+                    let _ = autostart.disable();
+                }
+            }
+
             // Analytics: fire app_launched (tokio runtime is live inside setup)
             {
                 let s = crate::settings::load_settings_sync();
@@ -690,14 +707,6 @@ pub fn run() {
                 let _ = app_handle.emit("license-status", status_str);
             });
 
-            // Background update check (non-blocking, fails silently if offline)
-            let app_handle_upd = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                if let Some(info) = crate::updater::check_for_update().await {
-                    let _ = app_handle_upd.emit("update-available", info);
-                }
-            });
-
             // Notify frontend if settings.json was corrupted on the previous load
             {
                 let corrupted_path = crate::settings::settings_path().with_extension("json.corrupted");
@@ -860,8 +869,9 @@ pub fn run() {
             commands::is_apple_speech_available,
             commands::get_apple_speech_auth_status,
             commands::request_speech_recognition_permission,
-            commands::open_feedback_url,
+            commands::open_external_url,
             commands::send_feedback,
+            install_update,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

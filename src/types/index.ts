@@ -21,12 +21,6 @@ export interface TranscriptionEntry {
 
 // ─── App events ────────────────────────────────────────────────────────────────
 
-export interface UpdateInfo {
-  latest: string;
-  download_url: string;
-  release_notes: string;
-}
-
 export interface UsageUpdate {
   seconds_used: number;
   seconds_remaining: number;

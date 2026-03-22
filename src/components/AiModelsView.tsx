@@ -554,22 +554,23 @@ function SmartDictationTab() {
           {!ollamaChecking && ollamaStatus !== null && !ollamaStatus.running && (
             <div className="px-5 py-4 space-y-2 text-xs leading-relaxed">
               <p className="text-white/50">1. Download from{" "}
-                <button
-                  onClick={() => invoke("plugin:opener|open_url", { url: "https://ollama.com" }).catch(() => {})}
+                <span
+                  onClick={() => invoke("open_external_url", { url: "https://ollama.com" })}
                   className="text-violet-400 underline cursor-pointer hover:text-violet-300 transition-colors"
                 >
                   ollama.com
-                </button>
+                </span>
               </p>
-              <p className="text-white/50">2. Run:{" "}
-                <button
-                  onClick={() => navigator.clipboard.writeText("ollama pull llama3.2")}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono cursor-pointer hover:bg-white/[0.06] transition-colors"
-                  style={{ background: "rgba(255,255,255,0.04)" }}
-                  title="Click to copy"
-                >
-                  <code className="text-white/70">ollama pull llama3.2</code>
-                </button>
+              <p className="text-white/50 flex items-center gap-2">
+                <span>2. Run:</span>
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded font-mono" style={{ background: "rgba(255,255,255,0.04)" }}>
+                  <code className="text-white/70 select-text">ollama pull llama3.2</code>
+                  <button
+                    onClick={() => navigator.clipboard.writeText("ollama pull llama3.2")}
+                    className="text-white/30 hover:text-white/60 transition-colors cursor-pointer"
+                    title="Copy"
+                  >⧉</button>
+                </span>
               </p>
               <p className="text-white/50">3. Click <span className="text-white/70">Refresh</span> above</p>
             </div>

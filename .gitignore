@@ -47,6 +47,9 @@ coverage/
 .superpowers/
 skills-lock.json
 
+# Git worktrees
+.worktrees/
+
 # Internal / private docs (not for public repo)
 SETUP.md
 docs/PRO_REVERT_GUIDE.md

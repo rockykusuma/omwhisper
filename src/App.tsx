@@ -13,7 +13,7 @@ import { logger } from "./utils/logger";
 import { STORAGE_KEYS } from "./utils/storageKeys";
 import { initTheme } from "./hooks/useTheme";
 import { useToast } from "./hooks/useToast";
-import type { UpdateInfo, TranscriptionSegment } from "./types";
+import type { TranscriptionSegment } from "./types";
 
 // Apply saved theme before first render
 initTheme();
@@ -26,7 +26,10 @@ function App() {
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab | undefined>(undefined);
   const [activeModel, setActiveModel] = useState("tiny.en");
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [updateNotes, setUpdateNotes] = useState("");
+  const [updateVersion, setUpdateVersion] = useState("");
+  const [isInstalling, setIsInstalling] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const [runningFromDmg, setRunningFromDmg] = useState(false);
   const [showLlmNudge, setShowLlmNudge] = useState(false);
@@ -159,8 +162,6 @@ function App() {
       }
     });
 
-    const unlistenUpdate = listen<UpdateInfo>("update-available", (event) => setUpdateInfo(event.payload));
-
     const unlistenMic = listen<string>("transcription-error", (event) => {
       setMicError(event.payload);
       setTimeout(() => setMicError(null), 5000);
@@ -187,7 +188,7 @@ function App() {
     });
 
     return () => {
-      Promise.all([unlistenHotkey, unlistenHotkeyStop, unlistenSmartDictation, unlistenPolishSelected, unlistenState, unlistenUpdate, unlistenMic, unlistenTrayNav, unlistenLlmNudge, unlistenAccessibility, unlistenSettingsCorrupted])
+      Promise.all([unlistenHotkey, unlistenHotkeyStop, unlistenSmartDictation, unlistenPolishSelected, unlistenState, unlistenMic, unlistenTrayNav, unlistenLlmNudge, unlistenAccessibility, unlistenSettingsCorrupted])
         .then((fns) => fns.forEach((f) => f()));
     };
   }, [startRecording, stopRecording]);
@@ -278,6 +279,17 @@ function App() {
     return () => { unlisten.then((f) => f()); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    import("@tauri-apps/plugin-updater").then(({ check }) => {
+      check().then((update) => {
+        if (update?.available) {
+          setUpdateAvailable(true);
+          setUpdateVersion(update.version);
+          setUpdateNotes(update.body ?? "");
+        }
+      }).catch(() => {}); // silently ignore network errors
+    });
+  }, []);
 
   if (showOnboarding === null) {
     return <div className="min-h-screen" />;
@@ -321,19 +333,28 @@ function App() {
             </div>
           )}
 
-          {updateInfo && (
-            <div className="flex items-center justify-between px-5 py-2 shrink-0" style={{ background: "rgba(52,211,153,0.07)", boxShadow: "0 2px 8px var(--shadow-dark)" }}>
+          {updateAvailable && (
+            <div className="flex items-center justify-between px-5 py-2 shrink-0"
+                 style={{ background: "rgba(52,211,153,0.07)", boxShadow: "0 2px 8px var(--shadow-dark)" }}>
               <span className="text-emerald-400 text-xs">
-                OmWhisper v{updateInfo.latest} is available — {updateInfo.release_notes}
+                OmWhisper v{updateVersion} is available — {updateNotes}
               </span>
               <div className="flex items-center gap-3 shrink-0">
                 <button
-                  onClick={() => invoke("plugin:opener|open_url", { url: updateInfo.download_url }).catch(() => {})}
-                  className="text-emerald-400 text-xs underline hover:text-emerald-300 cursor-pointer bg-transparent border-0 p-0"
+                  disabled={isInstalling}
+                  onClick={async () => {
+                    setIsInstalling(true);
+                    await invoke("install_update").catch(() => setIsInstalling(false));
+                  }}
+                  className="text-emerald-400 text-xs underline hover:text-emerald-300 cursor-pointer bg-transparent border-0 p-0 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Download
+                  {isInstalling ? "Installing…" : "Install & Restart"}
                 </button>
-                <button onClick={() => setUpdateInfo(null)} className="text-white/50 hover:text-white/60 text-xs cursor-pointer" aria-label="Dismiss update notification">
+                <button
+                  onClick={() => setUpdateAvailable(false)}
+                  className="text-white/50 hover:text-white/60 text-xs cursor-pointer"
+                  aria-label="Dismiss update notification"
+                >
                   ✕
                 </button>
               </div>

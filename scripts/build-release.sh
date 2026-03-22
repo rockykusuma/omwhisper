@@ -121,8 +121,37 @@ else
     echo "Skipping notarization (APPLE_ID / APPLE_ID_PASSWORD / APPLE_TEAM_ID not set)."
 fi
 
+# ── Updater artifact ─────────────────────────────────────────────────────────
+# Tauri 2 does not auto-create .app.tar.gz — we create and sign it here.
 echo ""
-echo "Upload the .dmg to your distribution host, then update:"
+echo "Creating updater tarball..."
+ARCH=$(uname -m)
+TAR_PATH="$BUNDLE_DIR/macos/OmWhisper_${VERSION}_${ARCH}.app.tar.gz"
+SIG_PATH="${TAR_PATH}.sig"
+
+cd "$BUNDLE_DIR/macos"
+tar czf "$TAR_PATH" "$(basename "$APP_PATH")"
+cd "$PROJECT_ROOT"
+echo "Tarball: $TAR_PATH"
+
+if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+    echo "Signing updater tarball..."
+    npx @tauri-apps/cli signer sign "$TAR_PATH" \
+        --private-key "$TAURI_SIGNING_PRIVATE_KEY" \
+        --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
+    echo "Signature: $SIG_PATH"
+    echo ""
+    echo "Add to landing/public/api/updater.json:"
+    echo "  platforms.darwin-aarch64.url:       https://github.com/rockykusuma/omwhisper/releases/download/v${VERSION}/$(basename "$TAR_PATH")"
+    echo "  platforms.darwin-aarch64.signature: $(cat "$SIG_PATH")"
+else
+    echo "WARNING: TAURI_SIGNING_PRIVATE_KEY not set — tarball is unsigned."
+    echo "Set it in .env and rebuild to produce a signed artifact."
+fi
+
+echo ""
+echo "Upload the .dmg and .app.tar.gz to the GitHub release, then update:"
 echo "  landing/public/api/version.json  →  latest: \"$VERSION\""
+echo "  landing/public/api/updater.json  →  version, url, signature"
 echo ""
 echo "Done."
