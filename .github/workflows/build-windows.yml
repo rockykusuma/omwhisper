@@ -33,6 +33,8 @@ jobs:
         env:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Upload NSIS installer
         uses: actions/upload-artifact@v4
@@ -40,3 +42,12 @@ jobs:
           name: OmWhisper-Windows-NSIS
           path: src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
+
+      - name: Upload NSIS updater artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OmWhisper-Windows-Updater
+          path: |
+            src-tauri/target/release/bundle/nsis/*.nsis.zip
+            src-tauri/target/release/bundle/nsis/*.nsis.zip.sig
+          if-no-files-found: warn
