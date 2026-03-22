@@ -53,11 +53,7 @@ skills-lock.json
 
 # Internal / private docs (not for public repo)
 SETUP.md
-docs/PRO_REVERT_GUIDE.md
-docs/PROJECT_BLUEPRINT.md
-docs/SETUP_GUIDE.md
-docs/superpowers/
-docs/prompts/
+docs/
 
 # Misc
 *.dmg
