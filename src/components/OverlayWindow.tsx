@@ -283,8 +283,8 @@ function LiveTextBubble({ text }: { text: string }) {
 export default function OverlayWindow() {
   const [overlayStyle, setOverlayStyle] = useState<string>("micro");
   const [applyPolishRegular, setApplyPolishRegular] = useState(false);
-  const [liveTextStreaming, setLiveTextStreaming] = useState(true);
-  const liveTextStreamingRef = useRef(true);
+  const [liveTextStreaming, setLiveTextStreaming] = useState(false);
+  const liveTextStreamingRef = useRef(false);
   const [isPolishing, setIsPolishing] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);

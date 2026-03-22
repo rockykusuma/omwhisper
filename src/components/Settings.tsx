@@ -327,7 +327,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                     }
                   >
                     <Toggle
-                      value={settings.live_text_streaming ?? true}
+                      value={settings.live_text_streaming ?? false}
                       onChange={(v) => update({ live_text_streaming: v })}
                       label="Live text streaming"
                     />

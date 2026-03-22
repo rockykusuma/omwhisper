@@ -120,8 +120,8 @@ pub struct Settings {
     pub crash_reporting_enabled: bool,
     /// Periodically flush the VAD buffer to Whisper during recording so live text appears
     /// in the overlay even without natural speech pauses. May slightly reduce accuracy for
-    /// long uninterrupted speech. Default: true.
-    #[serde(default = "default_true")]
+    /// long uninterrupted speech. Default: false.
+    #[serde(default)]
     pub live_text_streaming: bool,
 }
 
@@ -198,7 +198,7 @@ impl Default for Settings {
             transcription_engine: default_transcription_engine(),
             analytics_enabled: true,
             crash_reporting_enabled: true,
-            live_text_streaming: true,
+            live_text_streaming: false,
         }
     }
 }
