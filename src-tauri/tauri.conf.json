@@ -80,5 +80,13 @@
         "installMode": "currentUser"
       }
     }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": ["https://omwhisper.in/api/updater.json"],
+      "dialog": false,
+      "pubkey": "PLACEHOLDER_PUBKEY_REPLACE_WITH_ACTUAL_KEY"
+    }
   }
 }
