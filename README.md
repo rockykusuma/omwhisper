@@ -22,6 +22,8 @@ A fast, privacy-first voice transcription app for **macOS** and **Windows**. Pow
 - **Smart Dictation** — Voice → Whisper → LLM polish → Paste (`Cmd+Shift+B`)
 - **Apple Speech** — Use macOS built-in speech engine as an alternative to Whisper
 - **Push-to-Talk** — Hold a key to record, release to stop (macOS)
+- **Silero VAD** — Neural voice activity detection filters silence before Whisper inference
+- **Live Text Streaming** — See partial transcription in the overlay as you speak
 - **Custom Vocabulary** — Bias Whisper toward domain-specific words
 - **History** — Searchable SQLite log of all transcriptions
 - **Metal GPU** — Apple Silicon accelerated on macOS
@@ -36,7 +38,7 @@ A fast, privacy-first voice transcription app for **macOS** and **Windows**. Pow
 | 📦 GitHub Releases | [github.com/rockykusuma/omwhisper/releases](https://github.com/rockykusuma/omwhisper/releases) |
 
 - **macOS** — Download the `.dmg`, drag OmWhisper to Applications, and launch. The app ships with the `tiny.en` model — no initial download needed.
-- **Windows** — Coming soon
+- **Windows** — Download the `.exe` installer and run it. CPU-only transcription, no additional setup needed.
 
 ---
 
@@ -46,6 +48,8 @@ A fast, privacy-first voice transcription app for **macOS** and **Windows**. Pow
 |---------|-------|---------|
 | Real-time transcription | ✅ Metal GPU | ✅ CPU |
 | Auto-paste | ✅ Accessibility API | ✅ SendInput |
+| Silero VAD (neural) | ✅ | ✅ |
+| Live Text Streaming | ✅ | ✅ |
 | Apple Speech engine | ✅ | ❌ |
 | Push-to-Talk | ✅ CGEventTap | ❌ Toggle only |
 | Smart Dictation (AI) | ✅ Ollama + Cloud + Built-in LLM | ✅ Ollama + Cloud |
