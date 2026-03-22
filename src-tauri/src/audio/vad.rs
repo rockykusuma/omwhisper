@@ -1,7 +1,8 @@
 //! Voice Activity Detection.
 //!
-//! Uses the Silero VAD ONNX model (v5) for neural speech detection.
-//! Falls back to energy-based RMS VAD if the ONNX session fails to initialise.
+//! Uses the Silero VAD ONNX model (v5) for neural speech detection via `tract-onnx`
+//! (pure Rust ONNX runtime — no C++ dependency, works on all platforms including macOS ARM).
+//! Falls back to energy-based RMS VAD if the tract session fails to initialise.
 //!
 //! The `rms()` static helper is kept for the frontend audio level meter in
 //! `capture.rs` and is not involved in VAD decisions.
@@ -12,51 +13,48 @@
 //!
 //! Audio captured at 16kHz is decimated to 8kHz (every other sample) before inference.
 
-#[cfg(not(target_os = "macos"))]
-use ndarray::{Array2, Array3};
-#[cfg(not(target_os = "macos"))]
-use ort::{session::Session, value::TensorRef};
+use tract_onnx::prelude::*;
+use tract_onnx::prelude::tract_ndarray::{Array2, Array3};
 
 /// Silero VAD ONNX model, embedded at compile time.
-/// Only used on non-macOS platforms — on macOS, ORT's global destructors crash
-/// with ARM PAC violation on macOS 26+, so Silero is disabled entirely.
-#[cfg(not(target_os = "macos"))]
 const SILERO_MODEL: &[u8] = include_bytes!("../../assets/silero_vad.onnx");
 
 /// Seconds of silence after which the current utterance is finalised.
-const SILENCE_TIMEOUT_SECS: f32 = 1.5;
+const SILENCE_TIMEOUT_SECS: f32 = 1.0;
 
 /// Maximum speech buffer size: 60 seconds at 16kHz. Utterances longer than this
 /// are flushed automatically to prevent unbounded memory growth.
 const MAX_SPEECH_BUFFER_SAMPLES: usize = 60 * 16_000;
 
 /// Audio is captured at 16kHz; we buffer 512-sample frames.
-#[cfg(not(target_os = "macos"))]
 const FRAME_SIZE: usize = 512;
 
 /// After decimation (every other sample), the 8kHz frame fed to Silero is 256 samples.
-#[cfg(not(target_os = "macos"))]
 const SILERO_FRAME_SIZE: usize = 256;
+
+/// Tract runnable model type alias.
+type SileroModel = SimplePlan<TypedFact, Box<dyn TypedOp>, Graph<TypedFact, Box<dyn TypedOp>>>;
 
 // ── Internal implementation ───────────────────────────────────────────────────
 
-// The Silero variant is large (ONNX session + state array).
+// The Silero variant is large (model graph + state array).
 // VadImpl lives inside Arc<Mutex<Vad>> in capture.rs, so the stack impact is negligible.
 #[allow(clippy::large_enum_variant)]
 enum VadImpl {
-    #[cfg(not(target_os = "macos"))]
     Silero {
-        session: Session,
+        model: SileroModel,
         /// Combined LSTM state [2, 1, 128] — persists between frames, zeroed on utterance end/flush.
         /// Silero v5 uses a single `state` tensor (not separate h/c like v4).
         state: Array3<f32>,
     },
-    /// RMS energy VAD. On macOS this is always used; on other platforms it is the fallback
-    /// when the Silero ONNX session fails to initialise.
+    /// RMS energy VAD. Used as fallback when the Silero model fails to initialise.
     Rms {
         threshold: f32,
     },
 }
+
+// tract's SimplePlan is Send — all contained types satisfy Send + Sync.
+unsafe impl Send for VadImpl {}
 
 // ── Public struct ─────────────────────────────────────────────────────────────
 
@@ -78,19 +76,15 @@ pub struct Vad {
 
 impl Vad {
     /// Public constructor — loads from the embedded `silero_vad.onnx` model bytes,
-    /// or constructs an RMS VAD directly (bypassing ORT entirely) when `vad_engine` is not `"silero"`.
+    /// or constructs an RMS VAD directly when `vad_engine` is not `"silero"`.
     pub fn new(vad_engine: &str, vad_sensitivity: f32, sample_rate: u32) -> Self {
-        #[cfg(not(target_os = "macos"))]
         if vad_engine == "silero" {
             return Self::from_bytes(SILERO_MODEL, vad_sensitivity, sample_rate);
         }
-        // On macOS, always use RMS VAD — ORT crashes on macOS 26 (ARM PAC violation).
-        // Apple Speech handles its own VAD internally, so this is sufficient.
-        let _ = vad_engine;
         Self::rms_only(vad_sensitivity, sample_rate)
     }
 
-    /// Constructs an RMS-only VAD without initialising ORT at all.
+    /// Constructs an RMS-only VAD without initialising tract at all.
     fn rms_only(vad_sensitivity: f32, sample_rate: u32) -> Self {
         let threshold = 1.0 - vad_sensitivity.clamp(0.0, 1.0);
         let rms_threshold = 0.02 * threshold + 0.001;
@@ -107,15 +101,10 @@ impl Vad {
 
     /// Internal constructor that accepts model bytes directly.
     /// Used by tests to inject empty/corrupt bytes and exercise the RMS fallback path.
-    /// Only available on non-macOS — ORT is not linked on macOS.
-    #[cfg(not(target_os = "macos"))]
     pub(crate) fn from_bytes(model_bytes: &[u8], vad_sensitivity: f32, sample_rate: u32) -> Self {
         let threshold = 1.0 - vad_sensitivity.clamp(0.0, 1.0);
         let silence_timeout_samples = (SILENCE_TIMEOUT_SECS * sample_rate as f32) as usize;
 
-        // Short-circuit: never initialise ORT with empty bytes. The fallback path below
-        // already handles this, but on macOS 26 even a failed ORT session init registers
-        // global destructors that SIGABRT on process exit (ARM PAC violation in ORT).
         if model_bytes.is_empty() {
             let rms_threshold = 0.02 * threshold + 0.001;
             return Vad {
@@ -128,22 +117,17 @@ impl Vad {
             };
         }
 
-        let impl_ = match Session::builder()
-            .and_then(|mut b| b.commit_from_memory(model_bytes))
-        {
-            Ok(session) => {
-                tracing::info!("Silero VAD v5 initialised successfully");
+        let impl_ = match Self::load_model(model_bytes) {
+            Ok(model) => {
+                tracing::info!("Silero VAD v5 initialised successfully (tract)");
                 VadImpl::Silero {
-                    session,
+                    model,
                     state: Array3::zeros((2, 1, 128)),
                 }
             }
             Err(e) => {
                 tracing::error!("Silero VAD init failed, falling back to RMS VAD: {e}");
-                sentry::capture_error(&e);
-                // RMS energy scale (0.0–1.0 amplitude) is very different from Silero
-                // probability scale. Map sensitivity to a sensible energy threshold:
-                // sensitivity=0.5 → 0.01 (old default), higher sensitivity → lower threshold.
+                sentry_anyhow::capture_anyhow(&e);
                 let rms_threshold = 0.02 * (1.0 - vad_sensitivity.clamp(0.0, 1.0)) + 0.001;
                 VadImpl::Rms { threshold: rms_threshold }
             }
@@ -157,6 +141,14 @@ impl Vad {
             silence_timeout_samples,
             leftover: Vec::new(),
         }
+    }
+
+    fn load_model(model_bytes: &[u8]) -> anyhow::Result<SileroModel> {
+        let model = tract_onnx::onnx()
+            .model_for_read(&mut std::io::Cursor::new(model_bytes))?
+            .into_optimized()?
+            .into_runnable()?;
+        Ok(model)
     }
 
     /// Calculate RMS energy of a chunk.
@@ -175,7 +167,6 @@ impl Vad {
     /// Returns `None` if still accumulating or if no speech has been detected.
     pub fn process(&mut self, samples: &[f32]) -> Option<Vec<f32>> {
         match &self.impl_ {
-            #[cfg(not(target_os = "macos"))]
             VadImpl::Silero { .. } => self.process_silero(samples),
             VadImpl::Rms { threshold } => self.process_rms(samples, *threshold),
         }
@@ -230,7 +221,6 @@ impl Vad {
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
     fn process_silero(&mut self, samples: &[f32]) -> Option<Vec<f32>> {
         self.leftover.extend_from_slice(samples);
         let mut result = None;
@@ -268,8 +258,7 @@ impl Vad {
         result
     }
 
-    #[cfg(not(target_os = "macos"))]
-    /// Runs one 512-sample 16kHz frame through the Silero v5 ONNX session.
+    /// Runs one 512-sample 16kHz frame through the Silero v5 tract session.
     ///
     /// The frame is decimated to 8kHz (256 samples) before inference — the v5 model's
     /// 16kHz STFT path is broken; the 8kHz LSTM path works correctly.
@@ -277,38 +266,24 @@ impl Vad {
     /// Updates LSTM state in place. Returns speech probability [0.0, 1.0].
     /// Returns 0.0 on inference error (treated as silence).
     fn run_silero_inference(&mut self, frame: &[f32]) -> f32 {
-        let VadImpl::Silero { session, state } = &mut self.impl_ else {
+        let VadImpl::Silero { model, state } = &mut self.impl_ else {
             return 0.0;
         };
 
         // Decimate 16kHz → 8kHz: take every other sample.
         let frame_8k: Vec<f32> = frame.iter().step_by(2).copied().collect();
 
-        let input = match Array2::<f32>::from_shape_vec((1, SILERO_FRAME_SIZE), frame_8k) {
+        let input: Array2<f32> = match Array2::<f32>::from_shape_vec((1, SILERO_FRAME_SIZE), frame_8k) {
             Ok(a) => a,
             Err(_) => return 0.0,
         };
-        // sr must be a 0D scalar tensor (shape []); arr0 produces this.
-        let sr_scalar = ndarray::arr0(8000i64);
+        let sr_scalar = tract_onnx::prelude::tract_ndarray::arr0(8000i64);
 
-        let input_ref = match TensorRef::<f32>::from_array_view(input.view()) {
-            Ok(t) => t,
-            Err(_) => return 0.0,
-        };
-        let state_ref = match TensorRef::<f32>::from_array_view(state.view()) {
-            Ok(t) => t,
-            Err(_) => return 0.0,
-        };
-        let sr_ref = match TensorRef::<i64>::from_array_view(sr_scalar.view()) {
-            Ok(t) => t,
-            Err(_) => return 0.0,
-        };
+        let input_tval: TValue = input.into_tensor().into();
+        let state_tval: TValue = state.clone().into_tensor().into();
+        let sr_tval: TValue = sr_scalar.into_tensor().into();
 
-        let outputs = match session.run(ort::inputs![
-            "input" => input_ref,
-            "state" => state_ref,
-            "sr"    => sr_ref,
-        ]) {
+        let outputs = match model.run(tvec![input_tval, state_tval, sr_tval]) {
             Ok(o) => o,
             Err(e) => {
                 tracing::warn!("Silero inference error: {e}");
@@ -317,14 +292,16 @@ impl Vad {
         };
 
         // Extract speech probability from output [1, 1]
-        let prob = outputs["output"]
-            .try_extract_tensor::<f32>()
-            .map(|(_shape, data)| data.first().copied().unwrap_or(0.0))
+        let prob = outputs[0]
+            .to_array_view::<f32>()
+            .ok()
+            .and_then(|v| v.iter().next().copied())
             .unwrap_or(0.0);
 
         // Update LSTM state from stateN output [2, 1, 128]
-        if let Ok((_shape, data)) = outputs["stateN"].try_extract_tensor::<f32>() {
-            if let Ok(new_state) = Array3::from_shape_vec((2, 1, 128), data.to_vec()) {
+        if let Ok(state_view) = outputs[1].to_array_view::<f32>() {
+            let state_vec: Vec<f32> = state_view.iter().copied().collect();
+            if let Ok(new_state) = Array3::from_shape_vec((2, 1, 128), state_vec) {
                 *state = new_state;
             }
         }
@@ -333,7 +310,6 @@ impl Vad {
     }
 
     fn reset_state(&mut self) {
-        #[cfg(not(target_os = "macos"))]
         if let VadImpl::Silero { state, .. } = &mut self.impl_ {
             *state = Array3::zeros((2, 1, 128));
         }
@@ -366,14 +342,12 @@ mod tests {
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    /// Returns a Vad using the RMS path directly (bypasses ORT entirely).
+    /// Returns a Vad using the RMS path directly (bypasses tract entirely).
     fn rms_vad(sensitivity: f32) -> Vad {
         Vad::rms_only(sensitivity, 16000)
     }
 
     /// Returns a Vad using the real embedded Silero model.
-    /// Only available and run on non-macOS (ORT is not linked on macOS).
-    #[cfg(not(target_os = "macos"))]
     fn silero_vad() -> Vad {
         Vad::new("silero", 0.5, 16000)
     }
@@ -409,21 +383,17 @@ mod tests {
     // ── fallback ─────────────────────────────────────────────────────────────
 
     #[test]
-    #[cfg(not(target_os = "macos"))]
     fn vad_new_with_bad_model_bytes_does_not_panic() {
-        // Empty bytes → ort session init fails → silently falls back to RMS
-        // Not run on macOS — ORT is not linked there.
+        // Empty bytes → tract session init fails → silently falls back to RMS
         let mut vad = Vad::from_bytes(&[], 0.5, 16000);
         // Must be functional: can call process without panic
         let _ = vad.process(&silence_samples());
     }
 
     #[test]
-    #[cfg(not(target_os = "macos"))]
     fn vad_engine_silero_loads_model() {
-        // Requires the embedded silero_vad.onnx to load successfully (same dependency as lstm_state_zeroed_after_flush).
-        // If ORT fails to init on a given machine, this test will fail with "expected Silero variant" — that indicates
-        // an ORT/model issue, not a bug in the routing logic.
+        // Requires the embedded silero_vad.onnx to load successfully.
+        // If tract fails to init, this test will fail with "expected Silero variant".
         let vad = Vad::new("silero", 0.5, 16000);
         match &vad.impl_ {
             VadImpl::Silero { .. } => {}
@@ -436,7 +406,6 @@ mod tests {
         let vad = Vad::new("rms", 0.5, 16000);
         match &vad.impl_ {
             VadImpl::Rms { .. } => {}
-            #[cfg(not(target_os = "macos"))]
             VadImpl::Silero { .. } => panic!("expected Rms variant"),
         }
     }
@@ -446,7 +415,6 @@ mod tests {
         let vad = Vad::new("unknown_engine", 0.5, 16000);
         match &vad.impl_ {
             VadImpl::Rms { .. } => {}
-            #[cfg(not(target_os = "macos"))]
             VadImpl::Silero { .. } => panic!("expected Rms fallback for unknown engine"),
         }
     }
@@ -478,8 +446,6 @@ mod tests {
 
     #[test]
     fn utterance_returned_after_silence_timeout() {
-        // silence_timeout = 1.5s * 16000 = 24000 samples
-        // Each silence chunk = 1600 samples → need 15 chunks to exceed 24000
         let mut vad = rms_vad(0.5);
         assert!(vad.process(&speech_samples()).is_none());
 
@@ -508,7 +474,6 @@ mod tests {
     // ── LSTM state reset after utterance (Silero path) ───────────────────────
 
     #[test]
-    #[cfg(not(target_os = "macos"))]
     fn lstm_state_zeroed_after_flush() {
         // Uses the real Silero model. Verifies that flush() resets LSTM state to zeros.
         let mut vad = silero_vad();
@@ -525,7 +490,6 @@ mod tests {
         };
 
         // Ensure speech_buffer is non-empty so flush() actually reaches reset_state().
-        // (flush() early-returns None on empty speech_buffer, skipping the reset entirely.)
         vad.speech_buffer.push(0.1f32);
 
         let _ = vad.flush();

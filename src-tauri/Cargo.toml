@@ -52,15 +52,9 @@ tauri-plugin-updater = "2"
 regex = "1"
 rodio = { version = "0.19", default-features = false, features = ["wav"] }
 sysinfo = { version = "0.30", default-features = true }
-ndarray = "0"
+tract-onnx = "0.21"
 sentry = { version = "0.47", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"] }
 sentry-anyhow = "0.47"
-
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-# Silero VAD uses ORT (ONNX Runtime). On macOS 26+ ORT's global destructors crash with
-# ARM PAC violation — gate it to non-macOS. macOS uses RMS VAD; Apple Speech handles its
-# own voice activity detection internally.
-ort = { version = "2.0.0-rc.12", features = ["download-binaries"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.52", features = ["Win32_UI_Input_KeyboardAndMouse"] }
