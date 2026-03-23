@@ -2,4 +2,7 @@ title: OmWhisper Docs
 description: Documentation for OmWhisper — on-device voice transcription
 theme: jekyll-theme-cayman
 
+url: https://rockykusuma.github.io
+baseurl: /omwhisper
+
 show_downloads: false
