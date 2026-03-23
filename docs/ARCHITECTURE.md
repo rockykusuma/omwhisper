@@ -3,6 +3,7 @@
 This document explains how OmWhisper works internally, so you understand what you're building before writing code.
 
 ---
+layout: default
 
 ## System Overview
 
@@ -14,6 +15,7 @@ OmWhisper is a Tauri 2 desktop app. That means:
 All the heavy lifting — audio capture, speech recognition, license validation — happens in Rust. The React frontend is purely for display and user interaction.
 
 ---
+layout: default
 
 ## Core Modules
 
@@ -198,6 +200,7 @@ app.emit("audio-level", AudioLevel { rms: 0.3 });
 ```
 
 ---
+layout: default
 
 ## Frontend Architecture
 
@@ -241,6 +244,7 @@ interface AppState {
 **LicenseActivation** — Simple form: paste key, click activate, see confirmation.
 
 ---
+layout: default
 
 ## Data Storage
 
@@ -253,6 +257,7 @@ interface AppState {
 | Transcription log | ~/Library/Application Support/com.omwhisper/logs   | JSON      |
 
 ---
+layout: default
 
 ## Performance Targets
 
@@ -266,6 +271,7 @@ interface AppState {
 | Battery impact             | Minimal when idle   | Energy tab in Activity Mon  |
 
 ---
+layout: default
 
 ## Security Considerations
 

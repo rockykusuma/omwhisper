@@ -1,11 +1,14 @@
 ---
+layout: default
 title: Recording Modes & VAD
 nav_order: 3
 ---
+layout: default
 
 # Recording Modes & Voice Activity Detection
 
 ---
+layout: default
 
 ## Recording Modes
 
@@ -24,6 +27,7 @@ Best for: quick one-off phrases, chat messages, voice commands.
 Configure in **Settings → General → Recording Mode**.
 
 ---
+layout: default
 
 ## Voice Activity Detection (VAD)
 
@@ -48,6 +52,7 @@ Simple volume threshold — if the audio level exceeds a threshold, it's conside
 Adjust in **Settings → Audio → VAD Sensitivity**. Higher = more sensitive (picks up quieter speech). Lower = more aggressive silence filtering.
 
 ---
+layout: default
 
 ## Live Text Streaming
 
@@ -56,6 +61,7 @@ When enabled (**Settings → Overlay → Live Text Streaming**), partial transcr
 > **Note:** May slightly reduce accuracy for long uninterrupted speech, as Whisper works best on complete utterances. Disabled by default — opt in if you want live feedback.
 
 ---
+layout: default
 
 ## Whisper Models
 

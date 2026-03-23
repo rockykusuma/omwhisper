@@ -9,6 +9,7 @@
 **Tech Stack:** `tauri-plugin-updater` (Rust + TS), `@tauri-apps/plugin-updater` (npm), Tauri CLI signing, GitHub Actions (Windows), `scripts/build-release.sh` (macOS)
 
 ---
+layout: default
 
 ## File Map
 
@@ -27,6 +28,7 @@
 | `landing/public/api/updater.json` | New file — Tauri updater endpoint (per-platform URLs + signatures) |
 
 ---
+layout: default
 
 ## Task 1: Generate Tauri signing keypair
 
@@ -90,6 +92,7 @@ echo ".env" >> .gitignore
 ```
 
 ---
+layout: default
 
 ## Task 2: Add `tauri-plugin-updater` to the Rust backend
 
@@ -174,6 +177,7 @@ git commit -m "feat: add tauri-plugin-updater to Rust backend"
 ```
 
 ---
+layout: default
 
 ## Task 3: Install the npm package and update the frontend
 
@@ -273,6 +277,7 @@ git commit -m "feat: replace update banner with in-app install via tauri-plugin-
 ```
 
 ---
+layout: default
 
 ## Task 4: Update the macOS build script to produce signed updater artifacts
 
@@ -333,6 +338,7 @@ git commit -m "feat: build-release.sh produces signed updater tarball"
 ```
 
 ---
+layout: default
 
 ## Task 5: Update the Windows CI workflow to produce signed updater artifacts
 
@@ -376,6 +382,7 @@ git commit -m "feat: Windows CI produces signed updater artifacts"
 ```
 
 ---
+layout: default
 
 ## Task 6: Publish the updater JSON endpoint
 
@@ -440,6 +447,7 @@ git commit -m "feat: publish Tauri updater JSON endpoint"
 ```
 
 ---
+layout: default
 
 ## Release Workflow (after this is implemented)
 
@@ -455,6 +463,7 @@ For every future release, do this in order:
 Users running the old version will see "Install & Restart" in the banner. Clicking it downloads, verifies the signature, installs, and relaunches automatically.
 
 ---
+layout: default
 
 ## Known Constraints
 

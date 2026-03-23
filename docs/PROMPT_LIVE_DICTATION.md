@@ -12,6 +12,7 @@
 > **Prerequisite:** `PROMPT_LIVE_TEXT_STREAMING.md` must be implemented first (overlay live text).
 
 ---
+layout: default
 
 ## Overview
 
@@ -51,6 +52,7 @@ The complete task-by-task implementation spec was prepared and is preserved belo
 this feature is picked up. See the Tasks section for exact code.
 
 ---
+layout: default
 
 ## Task 1: Add `type_text_direct` function to `paste.rs`
 
