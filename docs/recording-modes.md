@@ -7,7 +7,6 @@ nav_order: 3
 # Recording Modes & Voice Activity Detection
 
 ---
-layout: default
 
 ## Recording Modes
 
@@ -50,7 +49,6 @@ Simple volume threshold — if the audio level exceeds a threshold, it's conside
 Adjust in **Settings → Audio → VAD Sensitivity**. Higher = more sensitive (picks up quieter speech). Lower = more aggressive silence filtering.
 
 ---
-layout: default
 
 ## Live Text Streaming
 

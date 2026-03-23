@@ -9,7 +9,6 @@ nav_order: 2
 All hotkeys can be customised in **Settings → General**.
 
 ---
-layout: default
 
 ## Global Hotkeys
 
@@ -35,7 +34,6 @@ In Push-to-Talk mode, you can use a single key instead of a chord:
 Configure in **Settings → General → Recording Mode → Push to Talk**.
 
 ---
-layout: default
 
 ## In-App
 
