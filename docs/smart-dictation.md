@@ -11,7 +11,6 @@ Smart Dictation takes your raw voice transcription and polishes it through an LL
 **Shortcut:** `Cmd+Shift+B` (macOS) · `Ctrl+Shift+B` (Windows)
 
 ---
-layout: default
 
 ## How It Works
 
@@ -61,7 +60,6 @@ Connect to OpenAI, Groq, or any OpenAI-compatible API.
 Your API key is stored in your system keychain — never in plain text.
 
 ---
-layout: default
 
 ## Polish Styles
 

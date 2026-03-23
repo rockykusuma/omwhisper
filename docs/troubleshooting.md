@@ -7,7 +7,6 @@ nav_order: 5
 # Troubleshooting
 
 ---
-layout: default
 
 ## Auto-Paste Not Working (macOS)
 
@@ -37,7 +36,6 @@ If the issue persists after an update, the new binary may need to be re-granted.
 4. If using an external mic, plug it in before launching OmWhisper
 
 ---
-layout: default
 
 ## Whisper Hallucinations (Random Words on Silence)
 
@@ -59,7 +57,6 @@ If Silero VAD is already enabled, try increasing **VAD Sensitivity** slightly.
 - On macOS: some apps capture global shortcuts inside their own window. Try clicking elsewhere first, then using the hotkey
 
 ---
-layout: default
 
 ## Smart Dictation Shows "AI Error"
 
@@ -85,7 +82,6 @@ OmWhisper always falls back to pasting the raw transcription if AI polish fails.
 3. On macOS with notch displays, the icon may be hidden — try reducing menu bar items
 
 ---
-layout: default
 
 ## Viewing Logs
 

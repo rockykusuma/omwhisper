@@ -9,7 +9,6 @@ nav_order: 1
 OmWhisper is a privacy-first voice transcription app for macOS and Windows. Everything runs on your device — no audio ever leaves your machine.
 
 ---
-layout: default
 
 ## Installation
 
@@ -41,7 +40,6 @@ On first launch, OmWhisper walks you through a 5-step setup:
 5. **Ready** — Set your hotkey preference and start using the app
 
 ---
-layout: default
 
 ## Basic Usage
 
@@ -67,7 +65,6 @@ OmWhisper requires two permissions:
 Both are requested during onboarding. If auto-paste stops working after an app update, go to **System Settings → Privacy & Security → Accessibility**, remove OmWhisper, and re-add it.
 
 ---
-layout: default
 
 ## Next Steps
 
