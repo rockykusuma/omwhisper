@@ -1052,6 +1052,15 @@ function AboutSection({ settings, update }: { settings: Settings; update: (patch
               {copying ? "✓ Copied" : "Copy"}
             </button>
           </SettingRow>
+          <SettingRow label="Documentation" description="Guides, shortcuts, and troubleshooting">
+            <button
+              onClick={() => invoke("open_external_url", { url: "https://rockykusuma.github.io/omwhisper/" })}
+              aria-label="Open documentation"
+              className="btn-ghost text-xs py-1.5"
+            >
+              Open →
+            </button>
+          </SettingRow>
           <SettingRow label="Send Feedback" description="Bug report, feature request, or general thoughts">
             <button
               onClick={() => setShowFeedback(true)}
