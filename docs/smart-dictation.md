@@ -3,7 +3,6 @@ layout: default
 title: Smart Dictation
 nav_order: 4
 ---
-layout: default
 
 # Smart Dictation
 
@@ -25,7 +24,6 @@ layout: default
 The overlay shows a ✦ indicator during AI processing.
 
 ---
-layout: default
 
 ## AI Backends
 
@@ -83,7 +81,6 @@ Six built-in styles ship with OmWhisper:
 Create your own in **Settings → AI → Polish Styles → Add Style**. Write any system prompt — OmWhisper will apply it to every Smart Dictation run when that style is active.
 
 ---
-layout: default
 
 ## Tips
 

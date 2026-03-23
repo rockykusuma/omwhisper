@@ -3,7 +3,6 @@ layout: default
 title: Keyboard Shortcuts
 nav_order: 2
 ---
-layout: default
 
 # Keyboard Shortcuts
 
@@ -23,7 +22,6 @@ These work system-wide even when OmWhisper is not the focused window.
 | Polish last text | `Cmd+Shift+P` | `Ctrl+Shift+P` |
 
 ---
-layout: default
 
 ## Push-to-Talk Keys (macOS only)
 

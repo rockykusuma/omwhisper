@@ -3,7 +3,6 @@ layout: default
 title: Troubleshooting
 nav_order: 5
 ---
-layout: default
 
 # Troubleshooting
 
@@ -26,7 +25,6 @@ layout: default
 If the issue persists after an update, the new binary may need to be re-granted. This is a one-time step per installation.
 
 ---
-layout: default
 
 ## Microphone Not Detected
 
@@ -50,7 +48,6 @@ layout: default
 If Silero VAD is already enabled, try increasing **VAD Sensitivity** slightly.
 
 ---
-layout: default
 
 ## Hotkey Not Working
 
@@ -77,7 +74,6 @@ layout: default
 OmWhisper always falls back to pasting the raw transcription if AI polish fails.
 
 ---
-layout: default
 
 ## App Doesn't Open / No Menu Bar Icon
 
@@ -108,7 +104,6 @@ If you're seeing unexpected behaviour and want to dig deeper:
 You can also copy debug info from **Settings → About → Copy Debug Info** and share it when reporting a bug.
 
 ---
-layout: default
 
 ## Still Stuck?
 

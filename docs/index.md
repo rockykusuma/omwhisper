@@ -3,7 +3,6 @@ layout: default
 title: Getting Started
 nav_order: 1
 ---
-layout: default
 
 # Getting Started with OmWhisper
 
@@ -30,7 +29,6 @@ layout: default
 3. Launch OmWhisper from the Start menu — it will appear in the system tray
 
 ---
-layout: default
 
 ## First Run
 
@@ -58,7 +56,6 @@ layout: default
 3. Press again to **stop** — transcription is copied to your clipboard and pasted into the focused app automatically
 
 ---
-layout: default
 
 ## Permissions (macOS)
 
