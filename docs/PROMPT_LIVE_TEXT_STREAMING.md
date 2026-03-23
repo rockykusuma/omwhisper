@@ -19,6 +19,7 @@ OmWhisper already emits `transcription-update` events in real-time as each VAD c
 4. `App.tsx` collects segments in `segmentsRef` for paste — **leave this untouched**
 
 ---
+layout: default
 
 ## Task 1: Add live text state and listener to OverlayWindow
 
@@ -75,6 +76,7 @@ useEffect(() => {
 ```
 
 ---
+layout: default
 
 ## Task 2: Add `LiveTextBubble` component
 
@@ -151,6 +153,7 @@ function LiveTextBubble({ text }: { text: string }) {
 ```
 
 ---
+layout: default
 
 ## Task 3: Render LiveTextBubble in the OverlayWindow JSX
 
@@ -215,6 +218,7 @@ return (
 ```
 
 ---
+layout: default
 
 ## Task 4: Increase overlay window height (if needed)
 
@@ -223,6 +227,7 @@ return (
 Find the window config with `"label": "overlay"`. If the text bubble gets clipped during testing, increase the `height` value to around 200–250. Test first before changing — the current height may already accommodate the bubble.
 
 ---
+layout: default
 
 ## What NOT to change
 

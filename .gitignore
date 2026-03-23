@@ -53,6 +53,7 @@ skills-lock.json
 
 # Internal / private docs (not for public repo)
 SETUP.md
+dev-notes/
 
 # Misc
 *.dmg

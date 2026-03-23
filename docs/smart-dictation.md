@@ -1,7 +1,9 @@
 ---
+layout: default
 title: Smart Dictation
 nav_order: 4
 ---
+layout: default
 
 # Smart Dictation
 
@@ -10,6 +12,7 @@ Smart Dictation takes your raw voice transcription and polishes it through an LL
 **Shortcut:** `Cmd+Shift+B` (macOS) · `Ctrl+Shift+B` (Windows)
 
 ---
+layout: default
 
 ## How It Works
 
@@ -22,6 +25,7 @@ Smart Dictation takes your raw voice transcription and polishes it through an LL
 The overlay shows a ✦ indicator during AI processing.
 
 ---
+layout: default
 
 ## AI Backends
 
@@ -59,6 +63,7 @@ Connect to OpenAI, Groq, or any OpenAI-compatible API.
 Your API key is stored in your system keychain — never in plain text.
 
 ---
+layout: default
 
 ## Polish Styles
 
@@ -78,6 +83,7 @@ Six built-in styles ship with OmWhisper:
 Create your own in **Settings → AI → Polish Styles → Add Style**. Write any system prompt — OmWhisper will apply it to every Smart Dictation run when that style is active.
 
 ---
+layout: default
 
 ## Tips
 

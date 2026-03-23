@@ -1,11 +1,14 @@
 ---
+layout: default
 title: Troubleshooting
 nav_order: 5
 ---
+layout: default
 
 # Troubleshooting
 
 ---
+layout: default
 
 ## Auto-Paste Not Working (macOS)
 
@@ -23,6 +26,7 @@ nav_order: 5
 If the issue persists after an update, the new binary may need to be re-granted. This is a one-time step per installation.
 
 ---
+layout: default
 
 ## Microphone Not Detected
 
@@ -35,6 +39,7 @@ If the issue persists after an update, the new binary may need to be re-granted.
 4. If using an external mic, plug it in before launching OmWhisper
 
 ---
+layout: default
 
 ## Whisper Hallucinations (Random Words on Silence)
 
@@ -45,6 +50,7 @@ If the issue persists after an update, the new binary may need to be re-granted.
 If Silero VAD is already enabled, try increasing **VAD Sensitivity** slightly.
 
 ---
+layout: default
 
 ## Hotkey Not Working
 
@@ -56,6 +62,7 @@ If Silero VAD is already enabled, try increasing **VAD Sensitivity** slightly.
 - On macOS: some apps capture global shortcuts inside their own window. Try clicking elsewhere first, then using the hotkey
 
 ---
+layout: default
 
 ## Smart Dictation Shows "AI Error"
 
@@ -70,6 +77,7 @@ If Silero VAD is already enabled, try increasing **VAD Sensitivity** slightly.
 OmWhisper always falls back to pasting the raw transcription if AI polish fails.
 
 ---
+layout: default
 
 ## App Doesn't Open / No Menu Bar Icon
 
@@ -81,6 +89,7 @@ OmWhisper always falls back to pasting the raw transcription if AI polish fails.
 3. On macOS with notch displays, the icon may be hidden — try reducing menu bar items
 
 ---
+layout: default
 
 ## Viewing Logs
 
@@ -99,6 +108,7 @@ If you're seeing unexpected behaviour and want to dig deeper:
 You can also copy debug info from **Settings → About → Copy Debug Info** and share it when reporting a bug.
 
 ---
+layout: default
 
 ## Still Stuck?
 

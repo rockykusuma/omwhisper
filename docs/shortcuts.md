@@ -1,13 +1,16 @@
 ---
+layout: default
 title: Keyboard Shortcuts
 nav_order: 2
 ---
+layout: default
 
 # Keyboard Shortcuts
 
 All hotkeys can be customised in **Settings → General**.
 
 ---
+layout: default
 
 ## Global Hotkeys
 
@@ -20,6 +23,7 @@ These work system-wide even when OmWhisper is not the focused window.
 | Polish last text | `Cmd+Shift+P` | `Ctrl+Shift+P` |
 
 ---
+layout: default
 
 ## Push-to-Talk Keys (macOS only)
 
@@ -33,6 +37,7 @@ In Push-to-Talk mode, you can use a single key instead of a chord:
 Configure in **Settings → General → Recording Mode → Push to Talk**.
 
 ---
+layout: default
 
 ## In-App
 
