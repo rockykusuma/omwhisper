@@ -683,6 +683,20 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                 <SettingRow label="Translate to English" description="Convert any language to English on paste">
                   <Toggle value={settings.translate_to_english} onChange={(v) => update({ translate_to_english: v })} label="Translate to English" />
                 </SettingRow>
+                {settings.translate_to_english && settings.language !== "en" && (
+                  <div className="px-1 pb-3 space-y-1.5">
+                    {settings.transcription_engine !== "whisper" && (
+                      <p className="text-[11px] leading-relaxed" style={{ color: "rgba(251,191,36,0.7)" }}>
+                        ⚠ Translation requires Whisper engine. It will be used automatically when translating, even if Apple Speech is selected above.
+                      </p>
+                    )}
+                    {settings.active_model.endsWith(".en") && (
+                      <p className="text-[11px] leading-relaxed" style={{ color: "rgba(251,191,36,0.7)" }}>
+                        ⚠ Your active model ({settings.active_model}) is English-only and cannot translate. Switch to a multilingual model (e.g. medium, small) in AI Models.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <FileTranscriptionSection activeModel={settings.active_model} />
