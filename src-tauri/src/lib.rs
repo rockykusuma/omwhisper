@@ -640,25 +640,6 @@ pub fn run() {
                 }
             })?;
 
-            // --- Global Shortcut: Cmd+Shift+O (Show Window) ---
-            let show_window_sc = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyO);
-            app.global_shortcut().on_shortcut(show_window_sc, move |app, _shortcut, event| {
-                if event.state != ShortcutState::Pressed { return; }
-                if let Some(win) = app.get_webview_window("main") {
-                    let visible = win.is_visible().unwrap_or(false);
-                    let focused = win.is_focused().unwrap_or(false);
-                    if visible && focused {
-                        let _ = win.hide();
-                    } else {
-                        #[cfg(target_os = "macos")]
-                        activate_app_macos();
-                        center_on_primary_monitor(&win);
-                        let _ = win.show();
-                        let _ = win.set_focus();
-                    }
-                }
-            })?;
-
             // --- Global Shortcut: Polish Selected Text (default Cmd+Shift+P) ---
             if let Some(polish_sc) = parse_hotkey(&initial_settings.polish_text_hotkey) {
                 if let Err(e) = app.global_shortcut().on_shortcut(polish_sc, move |app, _shortcut, event| {
