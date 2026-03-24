@@ -157,7 +157,7 @@ impl Default for Settings {
         Settings {
             hotkey: "CmdOrCtrl+Shift+V".to_string(),
             active_model: "tiny.en".to_string(),
-            language: "en".to_string(),
+            language: "auto".to_string(),
             auto_launch: false,
             auto_paste: true,
             show_overlay: true,
@@ -279,7 +279,7 @@ mod tests {
 
     #[test]
     fn default_language_is_en() {
-        assert_eq!(Settings::default().language, "en");
+        assert_eq!(Settings::default().language, "auto");
     }
 
     #[test]
