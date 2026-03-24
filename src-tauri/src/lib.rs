@@ -267,10 +267,22 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            tauri_plugin_autostart::MacosLauncher::AppleScript,
             None,
         ))
         .setup(move |app| {
+            // Remove stale LaunchAgent plist left by the old LaunchAgent approach.
+            // Now using AppleScript (Login Items) which is the correct macOS mechanism.
+            #[cfg(target_os = "macos")]
+            if let Some(agents_dir) = dirs::home_dir().map(|h| h.join("Library/LaunchAgents/OmWhisper.plist")) {
+                if agents_dir.exists() {
+                    let _ = std::fs::remove_file(&agents_dir);
+                    let _ = std::process::Command::new("launchctl")
+                        .args(["unload", agents_dir.to_str().unwrap_or("")])
+                        .output();
+                }
+            }
+
             // Sync autostart with the persisted setting on every launch.
             {
                 use tauri_plugin_autostart::ManagerExt;
