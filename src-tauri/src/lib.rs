@@ -23,7 +23,7 @@ const SENTRY_DSN: &str = match option_env!("SENTRY_DSN") {
 use commands::{
     activate_license, capture_focused_app, check_accessibility_permission, cmd_clear_history,
     cmd_delete_transcription, cmd_export_history, complete_onboarding, deactivate_license,
-    delete_model, download_model, get_app_version, get_audio_devices, get_available_models,
+    cancel_model_download, delete_model, download_model, get_app_version, get_audio_devices, get_available_models,
     get_debug_info, get_history, get_license_info, get_license_status, get_models,
     get_models_disk_usage, get_settings, get_usage_today, hide_overlay, is_first_launch,
     is_running_from_dmg, open_accessibility_settings, paste_transcription, check_microphone_permission, request_microphone_permission, get_microphone_auth_status, open_microphone_settings,
@@ -38,7 +38,7 @@ use commands::{
     get_platform,
     get_transcription_engine,
     install_update,
-    SharedState, TranscriptionState, WhisperEngineCache,
+    SharedState, TranscriptionState, WhisperEngineCache, DownloadCancelTokens,
 };
 #[cfg(target_os = "macos")]
 use commands::{load_llm_engine, unload_llm_engine};
@@ -235,6 +235,7 @@ pub fn run() {
 
     let shared_state: SharedState = Arc::new(Mutex::new(TranscriptionState::new()));
     let engine_cache: WhisperEngineCache = Arc::new(Mutex::new(None));
+    let download_cancel_tokens: DownloadCancelTokens = Arc::new(Mutex::new(std::collections::HashMap::new()));
 
     // Separate managed state for LlmEngine — must NOT be inside SharedState
     // because inference blocks the calling thread for several seconds — holding the shared mutex during inference would deadlock the shortcut handlers.
@@ -243,6 +244,7 @@ pub fn run() {
         let b = tauri::Builder::default()
             .manage(shared_state.clone())
             .manage(engine_cache)
+            .manage(download_cancel_tokens)
             .manage(std::sync::Arc::new(std::sync::Mutex::new(
                 Option::<crate::ai::llm::LlmEngine>::None,
             )));
@@ -253,7 +255,8 @@ pub fn run() {
     let builder = {
         let b = tauri::Builder::default()
             .manage(shared_state.clone())
-            .manage(engine_cache);
+            .manage(engine_cache)
+            .manage(download_cancel_tokens);
         b
     };
 
@@ -806,6 +809,7 @@ pub fn run() {
             get_available_models,
             get_models,
             download_model,
+            cancel_model_download,
             delete_model,
             get_models_disk_usage,
             get_settings,

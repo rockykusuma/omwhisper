@@ -46,6 +46,9 @@ pub type SharedState = Arc<Mutex<TranscriptionState>>;
 /// invalidated when the user switches models.
 pub type WhisperEngineCache = Arc<Mutex<Option<(crate::engine::TranscriptionEngine, std::path::PathBuf)>>>;
 
+/// Tracks active model download cancellation tokens keyed by model name.
+pub type DownloadCancelTokens = Arc<Mutex<std::collections::HashMap<String, Arc<AtomicBool>>>>;
+
 /// Resolve a possibly-relative model path.
 /// In dev the binary is at src-tauri/target/debug/omwhisper — walk up 4 levels
 /// to reach the project root, then join the relative path.
@@ -340,14 +343,28 @@ pub async fn get_models() -> Result<Vec<ModelInfo>, String> {
 }
 
 #[tauri::command]
-pub async fn download_model(name: String, app: tauri::AppHandle) -> Result<(), String> {
+pub async fn download_model(
+    name: String,
+    app: tauri::AppHandle,
+    cancel_tokens: tauri::State<'_, DownloadCancelTokens>,
+) -> Result<(), String> {
     use tauri::Emitter;
+
+    // Create a fresh cancel token for this download and store it.
+    let cancel_flag = Arc::new(AtomicBool::new(false));
+    {
+        let mut map = cancel_tokens.lock().unwrap();
+        map.insert(name.clone(), Arc::clone(&cancel_flag));
+    }
+
     let name_clone = name.clone();
     let app_clone = app.clone();
+    let cancel_tokens_clone = Arc::clone(&cancel_tokens);
 
     tokio::spawn(async move {
         let name_for_cb = name_clone.clone();
         let app_for_cb = app_clone.clone();
+        let flag_for_cb = Arc::clone(&cancel_flag);
 
         let result = models::download_model(&name_clone, move |progress| {
             let _ = app_for_cb.emit(
@@ -359,8 +376,11 @@ pub async fn download_model(name: String, app: tauri::AppHandle) -> Result<(), S
                     error: None,
                 },
             );
-        })
+        }, Arc::clone(&flag_for_cb))
         .await;
+
+        // Remove token regardless of outcome.
+        cancel_tokens_clone.lock().unwrap().remove(&name_clone);
 
         match result {
             Ok(_) => {
@@ -375,20 +395,35 @@ pub async fn download_model(name: String, app: tauri::AppHandle) -> Result<(), S
                 );
             }
             Err(e) => {
-                sentry_anyhow::capture_anyhow(&e);
+                let is_cancelled = e.to_string().contains("cancelled");
+                if !is_cancelled {
+                    sentry_anyhow::capture_anyhow(&e);
+                }
                 let _ = app_clone.emit(
                     "download-progress",
                     DownloadProgress {
                         name: name_clone,
                         progress: 0.0,
                         done: true,
-                        error: Some(e.to_string()),
+                        error: if is_cancelled { None } else { Some(e.to_string()) },
                     },
                 );
             }
         }
     });
 
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn cancel_model_download(
+    name: String,
+    cancel_tokens: tauri::State<'_, DownloadCancelTokens>,
+) -> Result<(), String> {
+    let map = cancel_tokens.lock().unwrap();
+    if let Some(flag) = map.get(&name) {
+        flag.store(true, Ordering::Relaxed);
+    }
     Ok(())
 }
 

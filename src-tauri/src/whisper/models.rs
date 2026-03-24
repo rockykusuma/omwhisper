@@ -3,6 +3,7 @@ use dirs::data_local_dir;
 use futures_util::StreamExt;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
+use std::sync::{atomic::{AtomicBool, Ordering}, Arc};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
@@ -163,7 +164,8 @@ pub fn list_models() -> Vec<ModelInfo> {
 }
 
 /// Download a model with progress reporting via callback.
-pub async fn download_model<F>(name: &str, on_progress: F) -> Result<PathBuf>
+/// Pass a cancel flag (`Arc<AtomicBool>`) — set it to `true` to abort the download.
+pub async fn download_model<F>(name: &str, on_progress: F, cancel: Arc<AtomicBool>) -> Result<PathBuf>
 where
     F: Fn(f64) + Send + 'static,
 {
@@ -208,6 +210,13 @@ where
     let mut stream = response.bytes_stream();
 
     while let Some(chunk) = stream.next().await {
+        // Check for cancellation before processing each chunk.
+        if cancel.load(Ordering::Relaxed) {
+            drop(file);
+            fs::remove_file(&tmp_path).await.ok();
+            anyhow::bail!("download cancelled");
+        }
+
         let chunk = chunk.context("download stream error")?;
         hasher.update(&chunk);
         file.write_all(&chunk).await.context("failed to write chunk")?;
