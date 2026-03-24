@@ -190,7 +190,7 @@ impl Default for Settings {
             overlay_placement: "top-center".to_string(),
             overlay_style: "micro".to_string(),
             custom_polish_styles: Vec::new(),
-            translate_to_english: false,
+            translate_to_english: true,
             llm_model_name: "qwen2.5-0.5b-instruct-q4_k_m.gguf".to_string(),
             llm_nudge_shown: false,
             apply_polish_to_regular: false,
@@ -404,7 +404,7 @@ mod tests {
     #[test]
     fn default_bool_flags_false() {
         let s = Settings::default();
-        assert!(!s.translate_to_english);
+        assert!(s.translate_to_english);
         assert!(!s.llm_nudge_shown);
         assert!(!s.apply_polish_to_regular);
     }
