@@ -23,7 +23,7 @@ const SENTRY_DSN: &str = match option_env!("SENTRY_DSN") {
 use commands::{
     activate_license, capture_focused_app, check_accessibility_permission, cmd_clear_history,
     cmd_delete_transcription, cmd_export_history, complete_onboarding, deactivate_license,
-    delete_model, download_model, get_app_version, get_audio_devices, get_available_models,
+    cancel_model_download, delete_model, download_model, get_app_version, get_audio_devices, get_available_models,
     get_debug_info, get_history, get_license_info, get_license_status, get_models,
     get_models_disk_usage, get_settings, get_usage_today, hide_overlay, is_first_launch,
     is_running_from_dmg, open_accessibility_settings, paste_transcription, check_microphone_permission, request_microphone_permission, get_microphone_auth_status, open_microphone_settings,
@@ -38,7 +38,7 @@ use commands::{
     get_platform,
     get_transcription_engine,
     install_update,
-    SharedState, TranscriptionState, WhisperEngineCache,
+    SharedState, TranscriptionState, WhisperEngineCache, DownloadCancelTokens,
 };
 #[cfg(target_os = "macos")]
 use commands::{load_llm_engine, unload_llm_engine};
@@ -235,6 +235,7 @@ pub fn run() {
 
     let shared_state: SharedState = Arc::new(Mutex::new(TranscriptionState::new()));
     let engine_cache: WhisperEngineCache = Arc::new(Mutex::new(None));
+    let download_cancel_tokens: DownloadCancelTokens = Arc::new(Mutex::new(std::collections::HashMap::new()));
 
     // Separate managed state for LlmEngine — must NOT be inside SharedState
     // because inference blocks the calling thread for several seconds — holding the shared mutex during inference would deadlock the shortcut handlers.
@@ -243,6 +244,7 @@ pub fn run() {
         let b = tauri::Builder::default()
             .manage(shared_state.clone())
             .manage(engine_cache)
+            .manage(download_cancel_tokens)
             .manage(std::sync::Arc::new(std::sync::Mutex::new(
                 Option::<crate::ai::llm::LlmEngine>::None,
             )));
@@ -253,7 +255,8 @@ pub fn run() {
     let builder = {
         let b = tauri::Builder::default()
             .manage(shared_state.clone())
-            .manage(engine_cache);
+            .manage(engine_cache)
+            .manage(download_cancel_tokens);
         b
     };
 
@@ -264,10 +267,22 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            tauri_plugin_autostart::MacosLauncher::AppleScript,
             None,
         ))
         .setup(move |app| {
+            // Remove stale LaunchAgent plist left by the old LaunchAgent approach.
+            // Now using AppleScript (Login Items) which is the correct macOS mechanism.
+            #[cfg(target_os = "macos")]
+            if let Some(agents_dir) = dirs::home_dir().map(|h| h.join("Library/LaunchAgents/OmWhisper.plist")) {
+                if agents_dir.exists() {
+                    let _ = std::fs::remove_file(&agents_dir);
+                    let _ = std::process::Command::new("launchctl")
+                        .args(["unload", agents_dir.to_str().unwrap_or("")])
+                        .output();
+                }
+            }
+
             // Sync autostart with the persisted setting on every launch.
             {
                 use tauri_plugin_autostart::ManagerExt;
@@ -637,25 +652,6 @@ pub fn run() {
                 }
             })?;
 
-            // --- Global Shortcut: Cmd+Shift+O (Show Window) ---
-            let show_window_sc = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyO);
-            app.global_shortcut().on_shortcut(show_window_sc, move |app, _shortcut, event| {
-                if event.state != ShortcutState::Pressed { return; }
-                if let Some(win) = app.get_webview_window("main") {
-                    let visible = win.is_visible().unwrap_or(false);
-                    let focused = win.is_focused().unwrap_or(false);
-                    if visible && focused {
-                        let _ = win.hide();
-                    } else {
-                        #[cfg(target_os = "macos")]
-                        activate_app_macos();
-                        center_on_primary_monitor(&win);
-                        let _ = win.show();
-                        let _ = win.set_focus();
-                    }
-                }
-            })?;
-
             // --- Global Shortcut: Polish Selected Text (default Cmd+Shift+P) ---
             if let Some(polish_sc) = parse_hotkey(&initial_settings.polish_text_hotkey) {
                 if let Err(e) = app.global_shortcut().on_shortcut(polish_sc, move |app, _shortcut, event| {
@@ -806,6 +802,7 @@ pub fn run() {
             get_available_models,
             get_models,
             download_model,
+            cancel_model_download,
             delete_model,
             get_models_disk_usage,
             get_settings,

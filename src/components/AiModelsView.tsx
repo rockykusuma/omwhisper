@@ -107,6 +107,11 @@ function WhisperTab({ activeModel, onModelChange }: { activeModel: string; onMod
     await invoke("download_model", { name });
   }
 
+  async function handleCancelDownload(name: string) {
+    await invoke("cancel_model_download", { name });
+    setDownloading((prev) => { const next = { ...prev }; delete next[name]; return next; });
+  }
+
   async function handleDelete(name: string) {
     const downloadedCount = models.filter(m => m.is_downloaded).length;
     if (downloadedCount <= 1) return; // always keep at least one model
@@ -254,11 +259,34 @@ function WhisperTab({ activeModel, onModelChange }: { activeModel: string; onMod
                             )}
                           </>
                         ) : isDownloading ? (
-                          <div className="text-right min-w-[64px]">
-                            <p className="text-[11px] font-mono mb-1" style={{ color: "var(--accent)" }}>{Math.round(progress * 100)}%</p>
-                            <div className="h-1 rounded-full overflow-hidden" style={{ width: 64, background: "color-mix(in srgb, var(--t1) 8%, transparent)" }}>
-                              <div className="h-full rounded-full transition-all duration-200" style={{ width: `${progress * 100}%`, background: "var(--accent)" }} />
+                          <div className="flex items-center gap-2">
+                            <div className="text-right min-w-[52px]">
+                              <p className="text-[11px] font-mono mb-1" style={{ color: "var(--accent)" }}>{Math.round(progress * 100)}%</p>
+                              <div className="h-1 rounded-full overflow-hidden" style={{ width: 52, background: "color-mix(in srgb, var(--t1) 8%, transparent)" }}>
+                                <div className="h-full rounded-full transition-all duration-200" style={{ width: `${progress * 100}%`, background: "var(--accent)" }} />
+                              </div>
                             </div>
+                            <button
+                              onClick={() => handleCancelDownload(model.name)}
+                              className="text-[11px] px-2 py-1 rounded-lg cursor-pointer transition-all duration-150 font-medium"
+                              style={{
+                                color: "var(--t3)",
+                                background: "var(--bg)",
+                                boxShadow: "var(--nm-raised-sm)",
+                                border: "1px solid transparent",
+                              }}
+                              onMouseEnter={e => {
+                                (e.currentTarget as HTMLButtonElement).style.color = "#f87171";
+                                (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(248,113,113,0.3)";
+                              }}
+                              onMouseLeave={e => {
+                                (e.currentTarget as HTMLButtonElement).style.color = "var(--t3)";
+                                (e.currentTarget as HTMLButtonElement).style.borderColor = "transparent";
+                              }}
+                              title="Cancel download"
+                            >
+                              Cancel
+                            </button>
                           </div>
                         ) : (
                           <button
