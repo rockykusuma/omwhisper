@@ -134,7 +134,12 @@ pub async fn start_transcription(
     let sound_enabled = settings.sound_enabled;
     let sound_volume = settings.sound_volume;
     let translate_to_english = settings.translate_to_english;
-    let engine_preference = settings.transcription_engine.clone();
+    // Force Whisper when translate is enabled — Apple Speech has no translation capability.
+    let engine_preference = if translate_to_english && settings.language != "en" {
+        "whisper".to_string()
+    } else {
+        settings.transcription_engine.clone()
+    };
 
     if sound_enabled {
         crate::sounds::play(crate::sounds::Sound::Start, sound_volume);
