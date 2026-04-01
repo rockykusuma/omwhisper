@@ -37,6 +37,7 @@ jobs:
       - name: Build Tauri app
         run: npx @tauri-apps/cli build
         env:
+          RUSTFLAGS: "-C target-feature=+crt-static"
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
