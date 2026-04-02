@@ -1,11 +1,11 @@
 {
-  "version": "0.1.0-beta.6",
-  "notes": "Silero VAD on macOS, WhisperEngine caching, Live Text Streaming, docs site.",
-  "pub_date": "2026-03-23T00:00:00Z",
+  "version": "0.1.0-beta.7",
+  "notes": "Windows MSVCP140.dll fix, cancel model download, auto-detect language, auto-switch to Whisper engine for translation.",
+  "pub_date": "2026-04-02T00:00:00Z",
   "platforms": {
     "darwin-aarch64": {
-      "url": "https://github.com/rockykusuma/omwhisper/releases/download/v0.1.0-beta.6/OmWhisper_0.1.0-beta.6_arm64.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRRFBIVkVXQW84bEM4bGE0dURySUJQdnRLclhGVHJWSG1CTThtOUdGc1o3WGRWejFHdjBJODVTeVdJV0JNL1pSSGk4RkdlSlZHYy9ZUUVKMFUzRXRCSkZxTFNLUUZ2eUE4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc0MjU2MDg4CWZpbGU6T21XaGlzcGVyXzAuMS4wLWJldGEuNl9hcm02NC5hcHAudGFyLmd6CkVNS1o1MlhVYlpPeEQ0QkU0VjVGNVpRVEowdVJiakFuTDFQZTFzbnhaWTZkVnJ2NFgrZ0xJWEZlY0hWaEQxT2xqSjBmTnBGYUIvQVhMS3luZFF0QkNRPT0K"
+      "url": "https://github.com/rockykusuma/omwhisper/releases/download/v0.1.0-beta.7/OmWhisper_0.1.0-beta.7_arm64.app.tar.gz",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRRFBIVkVXQW84bEVzVkpnTGcyZFB6K2xCa2wzbTJyZExmaXlZY3JCd25TUytNQno2SE5pWTRjRWVJcGczaGl6bHEyMU1mN0NVZm14K3dDdjhPOU9lN0tEZlN3UjRNUGdNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc1MTA1ODE5CWZpbGU6T21XaGlzcGVyXzAuMS4wLWJldGEuN19hcm02NC5hcHAudGFyLmd6ClFnaHo0SXBHSkpyckNFZWo0Q2o3eEhna0o2TXBvdkVLVjRXV0ZxNGEvL2tBQS9KT3lZa203SzRSS29nV3hpcU04dCtTWlZUQVYvbWg5NkJsU2ZsZEJ3PT0K"
     }
   }
 }
