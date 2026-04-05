@@ -9,7 +9,7 @@
     },
     "windows-x86_64": {
       "url": "https://github.com/rockykusuma/omwhisper/releases/download/v0.1.0-beta.8/OmWhisper_0.1.0-beta.8_x64-setup.exe",
-      "signature": ""
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRRFBIVkVXQW84bFBFbFBpODNQbzdsYm9OTWtvSlp0WlpWeWluRGd1WXIxSzA5SHd4V09NOEJBc21JT25iOW9DNkQ5a25iK1puR2x5WGpEOVFBZmpiV25sTmVOdFQ5VHdFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc1NDE3NTE2CWZpbGU6T21XaGlzcGVyXzAuMS4wLWJldGEuOF94NjQtc2V0dXAuZXhlCnFQdGMxaWZ0MHlJUVVaRmtMN1dUTkNSeG5WbStYSDB5dEVyZHJ1MW91UVNNU3V3Um1YbExjS2ZCSTUyZkF3bTNpVWpmeWx0UXFrQnNFaDRsL0VpbUJRPT0K"
     }
   }
 }
