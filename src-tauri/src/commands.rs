@@ -1286,9 +1286,16 @@ pub async fn polish_text_cmd(
         return Err("On-Device LLM is not available on this platform".to_string());
     }
 
-    // ollama / cloud path — unchanged
+    // ollama / cloud path
     let system_prompt = crate::styles::system_prompt_for(&style, &settings.translate_target_language);
-    let request = crate::ai::PolishRequest { text, system_prompt };
+    // For smart_correct, wrap in Input:/Output: format to match the few-shot examples
+    // in the system prompt — this forces the model to continue the pattern instead of answering.
+    let user_text = if style == "smart_correct" {
+        format!("Input: {}\nOutput:", text)
+    } else {
+        text
+    };
+    let request = crate::ai::PolishRequest { text: user_text, system_prompt };
     let result = crate::ai::polish(request, &settings)
         .await
         .map(|r| r.text)
@@ -1434,7 +1441,7 @@ pub async fn test_ai_connection(backend: String) -> Result<String, String> {
             else { Err("Ollama is not running. Make sure it is installed and started.".to_string()) }
         }
         "cloud" => {
-            let api_key = crate::ai::load_cloud_api_key()
+            let api_key = settings.cloud_api_key.clone()
                 .ok_or("No API key configured. Add your API key first.".to_string())?;
             crate::ai::cloud::test_connection(
                 &settings.ai_cloud_model,
@@ -1451,18 +1458,19 @@ pub async fn test_ai_connection(backend: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn save_cloud_api_key(key: String) -> Result<(), String> {
-    crate::ai::save_cloud_api_key(&key).map_err(|e| e.to_string())
+pub async fn save_cloud_api_key(key: String) -> Result<(), String> {
+    crate::ai::save_cloud_api_key(&key).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn get_cloud_api_key_status() -> bool {
-    crate::ai::load_cloud_api_key().is_some()
+pub async fn get_cloud_api_key_status() -> bool {
+    let settings = crate::settings::load_settings().await;
+    settings.cloud_api_key.is_some()
 }
 
 #[tauri::command]
-pub fn delete_cloud_api_key_cmd() -> Result<(), String> {
-    crate::ai::delete_cloud_api_key().map_err(|e| e.to_string())
+pub async fn delete_cloud_api_key_cmd() -> Result<(), String> {
+    crate::ai::delete_cloud_api_key().await.map_err(|e| e.to_string())
 }
 
 // ─── Model Recommendation ────────────────────────────────────────────────────

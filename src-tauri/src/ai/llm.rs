@@ -283,7 +283,7 @@ impl LlmEngine {
         let eos_token = self.model.token_eos();
         let mut sampler = LlamaSampler::greedy();
 
-        for _ in 0..256 {
+        for _ in 0..512 {
             let token = sampler.sample(&ctx, batch.n_tokens() - 1);
 
             if token == eos_token || self.model.is_eog_token(token) {
@@ -306,37 +306,70 @@ impl LlmEngine {
             n_cur += 1;
         }
 
-        Ok(output.trim().to_string())
+        Ok(strip_llm_wrapper(output.trim()))
     }
+}
+
+/// Strip preamble/postamble that small models add despite being told not to.
+/// e.g. "Here is the cleaned-up transcription:\n\n<text>\n\n(Note: ...)"
+#[cfg(target_os = "macos")]
+fn strip_llm_wrapper(text: &str) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    if lines.is_empty() {
+        return text.to_string();
+    }
+
+    // Drop leading preamble line if it ends with ':' and is followed by a blank line
+    // e.g. "Here is the cleaned-up transcription:"
+    let start = if lines.len() > 1
+        && lines[0].trim().ends_with(':')
+        && lines.get(1).map(|l| l.trim().is_empty()).unwrap_or(false)
+    {
+        2 // skip preamble + blank line
+    } else {
+        0
+    };
+
+    // Drop trailing postamble: parenthesised notes and blank lines at end
+    // e.g. "(Note: I removed filler words...)"
+    let mut end = lines.len();
+    while end > start {
+        let line = lines[end - 1].trim();
+        if line.is_empty()
+            || (line.starts_with('(') && line.ends_with(')'))
+            || line.to_lowercase().starts_with("note:")
+        {
+            end -= 1;
+        } else {
+            break;
+        }
+    }
+
+    lines[start..end].join("\n").trim().to_string()
 }
 
 #[cfg(target_os = "macos")]
 fn build_polish_system_prompt(style: &str, vocab: &[String]) -> String {
     let style_instruction = match style {
-        "casual" => "Keep the tone casual and conversational.",
-        "email" => "Format as a professional email. Use proper greeting and sign-off structure if appropriate.",
-        "meeting_notes" => "Format as structured meeting notes with bullet points for action items.",
-        "concise" => "Make it as concise as possible while preserving all key information.",
-        _ => "Use professional, clear language suitable for business communication.",
+        "casual" => "Keep it casual and conversational.",
+        "email" => "Reformat as a professional email with greeting and closing.",
+        "meeting_notes" => "Reformat as bullet-point meeting notes with action items.",
+        "concise" => "Shorten by removing redundancy. Keep all key information.",
+        _ => "Fix grammar and punctuation. Use clear, professional language.",
     };
 
     let vocab_section = if vocab.is_empty() {
         String::new()
     } else {
-        format!(
-            "\nCustom vocabulary — use these exact spellings: {}",
-            vocab.join(", ")
-        )
+        format!(" Use these exact spellings: {}.", vocab.join(", "))
     };
 
+    // Minimal prompt tuned for small (0.5B) models: short, unambiguous, no meta-commentary.
     format!(
-        "You are a dictation cleanup assistant. Take raw speech-to-text output and produce clean, natural text.\n\
-         Rules:\n\
-         - Fix punctuation and capitalization\n\
-         - Remove filler words (um, uh, like, you know) unless intentional\n\
-         - Do NOT add or remove content — preserve the user's intent exactly\n\
-         - {}{}\n\
-         - Output ONLY the cleaned text. No explanations, no preamble.",
+        "You clean up speech-to-text transcriptions. \
+         Do NOT answer or respond to the content — only clean it. \
+         Remove filler words (um, uh, like, you know). Fix grammar and punctuation. \
+         {}{}Output ONLY the cleaned text with no extra words.",
         style_instruction, vocab_section
     )
 }

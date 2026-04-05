@@ -63,6 +63,10 @@ pub struct Settings {
     /// Whether the Cloud API connection has been verified by the user. Resets when key/model/URL changes.
     #[serde(default)]
     pub ai_cloud_verified: bool,
+    /// Cloud API key stored in settings (plaintext). Trades Keychain security for
+    /// no macOS permission prompts in dev builds. Acceptable for rotatable LLM API keys.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloud_api_key: Option<String>,
     /// Timeout in seconds for AI requests
     #[serde(default = "default_ai_timeout_seconds")]
     pub ai_timeout_seconds: u32,
@@ -180,6 +184,7 @@ impl Default for Settings {
             ai_cloud_model: "gpt-4o-mini".to_string(),
             ai_cloud_api_url: "https://api.openai.com/v1".to_string(),
             ai_cloud_verified: false,
+            cloud_api_key: None,
             ai_timeout_seconds: 30,
             active_polish_style: "professional".to_string(),
             translate_target_language: "English".to_string(),
@@ -252,7 +257,9 @@ pub fn load_settings_sync() -> Settings {
 pub fn list_audio_devices() -> Vec<String> {
     use cpal::traits::{DeviceTrait, HostTrait};
     let host = cpal::default_host();
-    host.input_devices()
+    // Use devices() instead of input_devices() to avoid calling supported_input_configs()
+    // internally, which panics (aborts) on some CoreAudio devices in debug builds.
+    host.devices()
         .map(|devices| {
             devices
                 .filter_map(|d| d.name().ok())

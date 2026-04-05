@@ -253,9 +253,9 @@ function App() {
             const settings = await invoke<{ apply_polish_to_regular: boolean }>("get_settings");
             if (settings.apply_polish_to_regular) {
               try {
-                const polished = await invoke<string>("polish_text_cmd", { text: rawText, style: "cleanup", forceBuiltin: true });
+                const polished = await invoke<string>("polish_text_cmd", { text: rawText, style: "smart_correct", forceBuiltin: null });
                 await invoke("paste_transcription", { text: polished });
-                invoke("save_transcription", { text: polished, durationSeconds, modelUsed, source: "regular_polished", rawText, polishStyle: "cleanup" })
+                invoke("save_transcription", { text: polished, durationSeconds, modelUsed, source: "regular_polished", rawText, polishStyle: "smart_correct" })
                   .catch((e) => logger.error("save_transcription failed:", e));
               } catch {
                 showToast("AI not ready — pasting raw text");

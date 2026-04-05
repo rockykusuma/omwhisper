@@ -395,14 +395,19 @@ function SmartDictationTab() {
     setApiKeySet(true);
     setApiKeyInput("");
     setCloudTestError(null);
-    await update({ ai_cloud_verified: false });
+    // Reload settings so the cloud_api_key is in React state before update() spreads it
+    const fresh = await invoke<AppSettings>("get_settings");
+    setSettings(fresh);
+    await invoke("update_settings", { newSettings: { ...fresh, ai_cloud_verified: false } });
   }
 
   async function handleDeleteApiKey() {
     await invoke("delete_cloud_api_key_cmd").catch(() => {});
     setApiKeySet(false);
     setCloudTestError(null);
-    await update({ ai_cloud_verified: false });
+    const fresh = await invoke<AppSettings>("get_settings");
+    setSettings(fresh);
+    await invoke("update_settings", { newSettings: { ...fresh, ai_cloud_verified: false } });
   }
 
   async function handleTestConnection(backend: string) {
@@ -690,7 +695,7 @@ function SmartDictationTab() {
               )}
 
               {/* API Key */}
-              <SettingRow label="API Key" description={apiKeySet ? "Key stored in macOS Keychain" : "Paste your API key"}>
+              <SettingRow label="API Key" description={apiKeySet ? "Key saved" : "Paste your API key"}>
                 {apiKeySet ? (
                   <div className="flex items-center gap-2">
                     <span className="text-emerald-400 text-xs font-mono">●●●●●●●●</span>
