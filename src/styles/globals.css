@@ -59,6 +59,10 @@ input, textarea, [contenteditable] {
   --accent-grad-to:   #25b87e;
 
   --border: rgba(255, 255, 255, 0.08);
+
+  --warning:        rgba(251, 191, 36, 0.70);
+  --warning-muted:  rgba(251, 191, 36, 0.50);
+  --warning-border: rgba(251, 191, 36, 0.15);
 }
 
 /* ── Surface tokens ──────────────────────────────────────────────────── */
@@ -89,6 +93,10 @@ input, textarea, [contenteditable] {
   --accent-grad-to:   #059669;
 
   --border: rgba(0, 0, 0, 0.08);
+
+  --warning:        #92400e;
+  --warning-muted:  #a16207;
+  --warning-border: rgba(146, 64, 14, 0.20);
 }
 
 /* ── Surface tokens (light) ─────────────────────────────────────────── */

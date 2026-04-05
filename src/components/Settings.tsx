@@ -703,12 +703,12 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                 {settings.translate_to_english && settings.language !== "en" && (
                   <div className="px-1 pb-3 space-y-1.5">
                     {settings.transcription_engine !== "whisper" && (
-                      <p className="text-[11px] leading-relaxed" style={{ color: "rgba(251,191,36,0.7)" }}>
+                      <p className="text-[11px] leading-relaxed" style={{ color: "var(--warning)" }}>
                         ⚠ Translation requires Whisper engine. It will be used automatically when translating, even if Apple Speech is selected above.
                       </p>
                     )}
                     {settings.active_model.endsWith(".en") && (
-                      <p className="text-[11px] leading-relaxed" style={{ color: "rgba(251,191,36,0.7)" }}>
+                      <p className="text-[11px] leading-relaxed" style={{ color: "var(--warning)" }}>
                         ⚠ Your active model ({settings.active_model}) is English-only and cannot translate. Switch to a multilingual model (e.g. medium, small) in AI Models.
                       </p>
                     )}
@@ -748,9 +748,9 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
               <>
                 <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Push to Talk</h3>
                 <div className="card px-5 mb-6">
-                  <div className="flex items-start gap-2 py-3 border-b" style={{ borderColor: "rgba(251,191,36,0.15)" }}>
-                    <span className="text-[11px]" style={{ color: "rgba(251,191,36,0.7)" }}>⚠</span>
-                    <p className="text-[10px] leading-relaxed" style={{ color: "rgba(251,191,36,0.6)" }}>
+                  <div className="flex items-start gap-2 py-3 border-b" style={{ borderColor: "var(--warning-border)" }}>
+                    <span className="text-[11px]" style={{ color: "var(--warning)" }}>⚠</span>
+                    <p className="text-[10px] leading-relaxed" style={{ color: "var(--warning-muted)" }}>
                       Push to Talk is experimental — you may experience crashes or unresponsive keys. Requires Accessibility permission and an app restart to take effect.
                     </p>
                   </div>
