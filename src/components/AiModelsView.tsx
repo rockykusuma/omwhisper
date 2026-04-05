@@ -326,6 +326,7 @@ function WhisperTab({ activeModel, onModelChange }: { activeModel: string; onMod
 
 // ── Smart Dictation sub-tab ───────────────────────────────────────────────────
 function SmartDictationTab() {
+  const isWindows = navigator.platform.startsWith("Win");
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
   const [builtInStyles, setBuiltInStyles] = useState<BuiltInStyle[]>([]);
@@ -936,7 +937,6 @@ interface AiModelsViewProps {
 // ── Main component ────────────────────────────────────────────────────────────
 export default function AiModelsView({ activeModel, onModelChange, initialTab }: AiModelsViewProps) {
   const [activeTab, setActiveTab] = useState<"whisper" | "smart-dictation">(initialTab ?? "whisper");
-  const isWindows = navigator.platform.startsWith("Win");
 
   return (
     <div className="w-full max-w-2xl mx-auto px-8 py-6">
