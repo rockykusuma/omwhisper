@@ -763,7 +763,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                   </SettingRow>
                   {settings.recording_mode === "push_to_talk" && (
                     <>
-                      <SettingRow label="Push to Talk Key" description="Hold this key to record, release to stop. Restart app to apply.">
+                      <SettingRow label="Push to Talk Key" description="Hold this key to record, release to stop">
                         <select
                           value={["Fn","CapsLock","Right Option","Right Control"].includes(settings.push_to_talk_hotkey ?? "") ? settings.push_to_talk_hotkey : "Fn"}
                           onChange={(e) => update({ push_to_talk_hotkey: e.target.value })}
