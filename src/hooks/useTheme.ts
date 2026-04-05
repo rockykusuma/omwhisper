@@ -1,45 +1,54 @@
-import { useCallback, useState } from "react";
-import { STORAGE_KEYS } from "../utils/storageKeys";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
-export type Theme = "charcoal";
+export type ThemePreference = "dark" | "light" | "system";
+export type ResolvedTheme = "charcoal" | "light";
 
-export interface ThemeMeta {
-  id: Theme;
-  label: string;
-  bg: string;       // swatch background
-  accent: string;   // swatch accent dot
-  dark: boolean;
+function resolveTheme(pref: ThemePreference): ResolvedTheme {
+  if (pref === "light") return "light";
+  if (pref === "dark") return "charcoal";
+  // "system"
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "charcoal"
+    : "light";
 }
 
-export const THEMES: ThemeMeta[] = [
-  { id: "charcoal", label: "Charcoal", bg: "#1e2229", accent: "#34d399", dark: true },
-];
+function applyResolved(resolved: ResolvedTheme): void {
+  document.documentElement.setAttribute("data-theme", resolved);
+}
 
-const STORAGE_KEY = STORAGE_KEYS.THEME;
+let currentPref: ThemePreference = "dark";
 
-export function applyTheme(t: Theme): void {
-  document.documentElement.setAttribute("data-theme", t);
-  const isLight = !THEMES.find((th) => th.id === t)?.dark;
-  document.documentElement.classList.toggle("theme-light", isLight);
-  localStorage.setItem(STORAGE_KEY, t);
+export function applyThemePreference(pref: ThemePreference): void {
+  currentPref = pref;
+  applyResolved(resolveTheme(pref));
 }
 
 export function initTheme(): void {
-  const saved = localStorage.getItem(STORAGE_KEY) as Theme | null;
-  const valid = THEMES.find((t) => t.id === saved);
-  applyTheme(valid ? saved! : "charcoal");
-}
+  // Start with dark, then async-load from settings
+  applyResolved("charcoal");
 
-export function useTheme() {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) as Theme | null;
-    return THEMES.find((t) => t.id === saved) ? saved! : "charcoal";
+  invoke<{ theme: string }>("get_settings")
+    .then((s) => {
+      const pref = (["dark", "light", "system"].includes(s.theme) ? s.theme : "dark") as ThemePreference;
+      applyThemePreference(pref);
+    })
+    .catch(() => {});
+
+  // Listen for settings changes (e.g. from tray menu)
+  listen("settings-changed", () => {
+    invoke<{ theme: string }>("get_settings")
+      .then((s) => {
+        const pref = (["dark", "light", "system"].includes(s.theme) ? s.theme : "dark") as ThemePreference;
+        applyThemePreference(pref);
+      })
+      .catch(() => {});
   });
 
-  const setTheme = useCallback((t: Theme) => {
-    setThemeState(t);
-    applyTheme(t);
-  }, []);
-
-  return { theme, setTheme };
+  // Listen for system preference changes
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (currentPref === "system") {
+      applyResolved(resolveTheme("system"));
+    }
+  });
 }
