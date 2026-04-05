@@ -57,9 +57,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: OmWhisper-Windows-Updater
-          path: |
-            src-tauri/target/release/bundle/nsis/*.nsis.zip
-            src-tauri/target/release/bundle/nsis/*.nsis.zip.sig
+          path: src-tauri/target/release/bundle/nsis/*.exe.sig
           if-no-files-found: warn
 
       - name: Upload to GitHub Release
@@ -68,6 +66,5 @@ jobs:
         with:
           files: |
             src-tauri/target/release/bundle/nsis/*.exe
-            src-tauri/target/release/bundle/nsis/*.nsis.zip
-            src-tauri/target/release/bundle/nsis/*.nsis.zip.sig
+            src-tauri/target/release/bundle/nsis/*.exe.sig
           fail_on_unmatched_files: false

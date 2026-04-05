@@ -8,7 +8,7 @@
       "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRRFBIVkVXQW84bEE2V1EzTUdoZ1RxZ1pUN3E3enl6VGk2aUUreG42djExMlFJYUxDU1NzTEt3S3cwUFZmVTFYSC8yVUNPRTdiZm5mdEtZblhka0h5L1MxNDZYNU1HWWdjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc1NDEyMDA4CWZpbGU6T21XaGlzcGVyXzAuMS4wLWJldGEuOF9hcm02NC5hcHAudGFyLmd6CnNSUHI0RlRIbEIxNy92ZithVzV5RTgwSDBkRUJkQTNJVWxIZi9hNU05M0ZYRC9wcFRsQ0R6S1JZSXZPWWh1dUhHQmVVbGVNQ05OeTBVQjQweHc4N0J3PT0K"
     },
     "windows-x86_64": {
-      "url": "https://github.com/rockykusuma/omwhisper/releases/download/v0.1.0-beta.8/OmWhisper_0.1.0-beta.8_x64-setup.nsis.zip",
+      "url": "https://github.com/rockykusuma/omwhisper/releases/download/v0.1.0-beta.8/OmWhisper_0.1.0-beta.8_x64-setup.exe",
       "signature": ""
     }
   }
