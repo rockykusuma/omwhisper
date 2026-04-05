@@ -1,5 +1,9 @@
 use anyhow::Result;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
+
+static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(Client::new);
 
 #[derive(Serialize)]
 struct ChatRequest<'a> {
@@ -37,7 +41,7 @@ struct ModelEntry {
 /// Returns true if Ollama is reachable at the given base URL.
 pub async fn check_status(base_url: &str) -> bool {
     let url = format!("{}/api/tags", base_url.trim_end_matches('/'));
-    reqwest::Client::new()
+    HTTP_CLIENT
         .get(&url)
         .timeout(std::time::Duration::from_secs(3))
         .send()
@@ -49,7 +53,7 @@ pub async fn check_status(base_url: &str) -> bool {
 /// Returns the list of installed model names from Ollama.
 pub async fn list_models(base_url: &str) -> Vec<String> {
     let url = format!("{}/api/tags", base_url.trim_end_matches('/'));
-    let Ok(resp) = reqwest::Client::new()
+    let Ok(resp) = HTTP_CLIENT
         .get(&url)
         .timeout(std::time::Duration::from_secs(5))
         .send()
@@ -81,7 +85,7 @@ pub async fn polish_text(
         ],
     };
 
-    let resp = reqwest::Client::new()
+    let resp = HTTP_CLIENT
         .post(&url)
         .json(&body)
         .timeout(std::time::Duration::from_secs(timeout_seconds as u64))
