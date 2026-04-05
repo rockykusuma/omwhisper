@@ -339,7 +339,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                     description={
                       <span>
                         Show partial transcription below the overlay during recording.{" "}
-                        <span className="text-amber-400/80">May reduce accuracy for long uninterrupted speech.</span>
+                        <span style={{ color: "var(--warning)" }}>May reduce accuracy for long uninterrupted speech.</span>
                       </span>
                     }
                   >

@@ -512,8 +512,8 @@ function SmartDictationTab() {
                 <span
                   className="text-[9px] px-1.5 py-0.5 rounded font-medium"
                   style={{
-                    background: badge === "Running" || badge === "Connected" ? "rgba(52,211,153,0.1)" : "rgba(251,191,36,0.1)",
-                    color:      badge === "Running" || badge === "Connected" ? "rgba(52,211,153,0.8)"  : "rgba(251,191,36,0.8)",
+                    background: badge === "Running" || badge === "Connected" ? "var(--accent-bg)" : "var(--warning-border)",
+                    color:      badge === "Running" || badge === "Connected" ? "var(--accent)"  : "var(--warning)",
                   }}
                 >
                   {badge}
@@ -545,10 +545,10 @@ function SmartDictationTab() {
               <button onClick={refreshOllamaStatus} disabled={ollamaChecking} className="btn-ghost text-xs py-1 px-3 flex-shrink-0">Refresh</button>
             </div>
           ) : (
-            <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid var(--border)", background: "rgba(251,191,36,0.05)" }}>
-              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: "#fbbf24", boxShadow: "0 0 6px rgba(251,191,36,0.5)" }} />
+            <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid var(--border)", background: "var(--warning-border)" }}>
+              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: "var(--warning)", boxShadow: "0 0 6px var(--warning-muted)" }} />
               <div className="flex-1 text-xs">
-                <span className="font-semibold" style={{ color: "#fbbf24" }}>Ollama not detected</span>
+                <span className="font-semibold" style={{ color: "var(--warning)" }}>Ollama not detected</span>
                 <span className="ml-2" style={{ color: "var(--t3)" }}>Install and start Ollama to continue</span>
               </div>
               <button onClick={refreshOllamaStatus} disabled={ollamaChecking} className="btn-ghost text-xs py-1 px-3 flex-shrink-0">Refresh</button>
@@ -643,9 +643,9 @@ function SmartDictationTab() {
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid var(--border)", background: "rgba(251,191,36,0.05)" }}>
-                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: "#fbbf24", boxShadow: "0 0 6px rgba(251,191,36,0.5)" }} />
-                <span className="text-xs" style={{ color: "#fbbf24" }}>Not verified — enter your API key and test the connection</span>
+              <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid var(--border)", background: "var(--warning-border)" }}>
+                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: "var(--warning)", boxShadow: "0 0 6px var(--warning-muted)" }} />
+                <span className="text-xs" style={{ color: "var(--warning)" }}>Not verified — enter your API key and test the connection</span>
               </div>
             )}
 
