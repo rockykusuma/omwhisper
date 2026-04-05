@@ -1303,7 +1303,7 @@ pub async fn polish_text_cmd(
     if result.is_ok() {
         crate::analytics::track(settings.analytics_enabled, "ai_polish_used", serde_json::json!({
             "backend": &settings.ai_backend,
-            "style": &settings.active_polish_style,
+            "style": &style,
         }));
     }
     result

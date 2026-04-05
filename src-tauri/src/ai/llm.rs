@@ -1,10 +1,14 @@
 use anyhow::{Context, Result};
 use dirs::data_local_dir;
 use futures_util::StreamExt;
+use reqwest::Client;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
+
+static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(Client::new);
 
 // ─── Model catalog ─────────────────────────────────────────────────────────────
 
@@ -110,8 +114,7 @@ where
         fs::create_dir_all(parent).await.context("failed to create llm models directory")?;
     }
 
-    let client = reqwest::Client::new();
-    let response = client
+    let response = HTTP_CLIENT
         .get(&url)
         .send()
         .await
@@ -248,9 +251,14 @@ impl LlmEngine {
     /// Polish raw transcription text using the LLM.
     pub fn polish(&self, raw: &str, style: &str, vocab: &[String]) -> anyhow::Result<String> {
         let system_prompt = build_polish_system_prompt(style, vocab);
+        let user_content = if style == "smart_correct" {
+            format!("Input: {}\nOutput:", raw)
+        } else {
+            raw.to_string()
+        };
         let prompt = format!(
             "<|im_start|>system\n{}<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
-            system_prompt, raw
+            system_prompt, user_content
         );
 
         let ctx_params = LlamaContextParams::default()
@@ -312,18 +320,28 @@ impl LlmEngine {
 
 #[cfg(target_os = "macos")]
 fn build_polish_system_prompt(style: &str, vocab: &[String]) -> String {
+    let vocab_section = if vocab.is_empty() {
+        String::new()
+    } else {
+        format!(" Use these exact spellings: {}.", vocab.join(", "))
+    };
+
     let style_instruction = match style {
+        "smart_correct" => return format!(
+            "You clean up speech transcriptions. Output ONLY the cleaned text.\n\n\
+             Input: um so like what is the name of that bank\n\
+             Output: What is the name of that bank?\n\n\
+             Input: I was thinking we should uh go to the store you know\n\
+             Output: I was thinking we should go to the store.\n\n\
+             Input: wait no I meant Tuesday not Monday period\n\
+             Output: I meant Tuesday, not Monday.\n\n\
+             Rules: fix grammar, remove filler words, never add content.{}", vocab_section
+        ),
         "casual" => "Keep it casual and conversational.",
         "email" => "Reformat as a professional email with greeting and closing.",
         "meeting_notes" => "Reformat as bullet-point meeting notes with action items.",
         "concise" => "Shorten by removing redundancy. Keep all key information.",
         _ => "Fix grammar and punctuation. Use clear, professional language.",
-    };
-
-    let vocab_section = if vocab.is_empty() {
-        String::new()
-    } else {
-        format!(" Use these exact spellings: {}.", vocab.join(", "))
     };
 
     // Minimal prompt tuned for small (0.5B) models: short, unambiguous, no meta-commentary.

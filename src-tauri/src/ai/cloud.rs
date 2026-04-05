@@ -1,5 +1,9 @@
 use anyhow::Result;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
+
+static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(Client::new);
 
 #[derive(Serialize)]
 struct ChatRequest<'a> {
@@ -48,7 +52,7 @@ pub async fn polish_text(
         temperature: 0.3,
     };
 
-    let resp = reqwest::Client::new()
+    let resp = HTTP_CLIENT
         .post(&url)
         .header("Authorization", format!("Bearer {}", api_key))
         .json(&body)
