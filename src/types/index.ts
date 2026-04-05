@@ -70,6 +70,8 @@ export interface AppSettings {
   analytics_enabled: boolean;
   crash_reporting_enabled: boolean;
   live_text_streaming: boolean;
+  theme: string;
+  cloud_api_key: string | null;
 }
 
 // ─── AI ────────────────────────────────────────────────────────────────────────
