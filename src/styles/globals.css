@@ -76,10 +76,10 @@ input, textarea, [contenteditable] {
   --shadow-dark:  rgba(0, 0, 0, 0.07);
   --shadow-light: rgba(255, 255, 255, 0.80);
 
-  --t1: rgba(0, 0, 0, 0.87);
-  --t2: rgba(0, 0, 0, 0.60);
-  --t3: rgba(0, 0, 0, 0.40);
-  --t4: rgba(0, 0, 0, 0.20);
+  --t1: #1A1A1A;
+  --t2: rgba(0, 0, 0, 0.72);
+  --t3: rgba(0, 0, 0, 0.50);
+  --t4: rgba(0, 0, 0, 0.30);
 
   --accent:           #059669;
   --accent-glow:      rgba(5, 150, 105, 0.25);

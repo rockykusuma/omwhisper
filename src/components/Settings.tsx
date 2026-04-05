@@ -160,7 +160,7 @@ function SettingRow({
   return (
     <div className="flex items-center justify-between gap-4 py-3 last:border-0" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
       <div>
-        <p className="text-sm" style={{ color: "var(--t1)" }}>{label}</p>
+        <p className="text-sm font-medium" style={{ color: "var(--t1)" }}>{label}</p>
         {description && <p className="text-xs mt-0.5" style={{ color: "var(--t2)" }}>{description}</p>}
       </div>
       <div className="shrink-0">{children}</div>
