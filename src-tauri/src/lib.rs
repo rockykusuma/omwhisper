@@ -612,18 +612,46 @@ pub fn run() {
                 let ptt_handle_listener = ptt_handle.clone();
                 let shared_state_listener = shared_state.clone();
                 let app_handle_listener = app.handle().clone();
+                // Debounce: settings-changed may fire multiple times in quick succession.
+                // Use a shared key tracker to only restart when the key actually changed.
+                let last_ptt_key: Arc<Mutex<String>> = Arc::new(Mutex::new(
+                    if initial_settings.recording_mode == "push_to_talk" {
+                        initial_settings.push_to_talk_hotkey.clone()
+                    } else {
+                        String::new()
+                    }
+                ));
+                let last_ptt_key_listener = last_ptt_key.clone();
+
                 app.listen("settings-changed", move |_| {
                     let settings = crate::settings::load_settings_sync();
+                    let new_key = if settings.recording_mode == "push_to_talk" {
+                        settings.push_to_talk_hotkey.clone()
+                    } else {
+                        String::new() // empty = PTT disabled
+                    };
 
-                    // Stop any existing tap
+                    // Skip if nothing actually changed
+                    let mut last = last_ptt_key_listener.lock().unwrap_or_else(|e| e.into_inner());
+                    if *last == new_key {
+                        return;
+                    }
+                    tracing::info!("PTT key changed: '{}' → '{}'", *last, new_key);
+                    *last = new_key.clone();
+                    drop(last);
+
+                    // Stop existing tap
                     if let Some(old) = ptt_handle_listener.lock().unwrap_or_else(|e| e.into_inner()).take() {
                         old.stop();
                     }
 
-                    // Respawn if PTT is still enabled
-                    if settings.recording_mode == "push_to_talk" {
+                    // Small delay to let the OS release the old event tap resources
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+
+                    // Spawn new tap if PTT is enabled
+                    if !new_key.is_empty() {
                         let handle = spawn_ptt_for_key(
-                            &settings.push_to_talk_hotkey,
+                            &new_key,
                             &shared_state_listener,
                             &app_handle_listener,
                         );

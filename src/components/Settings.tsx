@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { emit, listen } from "@tauri-apps/api/event";
+import { listen } from "@tauri-apps/api/event";
 import {
   Sliders, Mic, FileText, Info, ShieldCheck, ShieldAlert, Keyboard, Brain, Activity, Zap, Sparkles, Cpu, ExternalLink
 } from "lucide-react";
@@ -212,7 +212,6 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
     const updated = { ...settings, ...patch };
     setSettings(updated);
     await invoke("update_settings", { newSettings: updated });
-    emit("settings-changed", {}).catch(() => {});
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
   }
