@@ -1,11 +1,14 @@
-// Push-to-talk via the Fn key using a raw CGEventTap (macOS only).
+// Push-to-talk via the Fn/Globe key using a raw CGEventTap (macOS only).
 //
 // Uses CGEventTap instead of tauri_plugin_global_shortcut because the plugin
 // does not support bare modifier keys — CGEventTap gives reliable press/release.
 //
-// Tap level: kCGHIDEventTap (hardware level, before system processes Globe/Fn).
-// kCGSessionEventTap misses Fn because macOS intercepts it for Dictation/Globe
-// at the session level before our callback would ever see it.
+// Strategy:
+//   - kCGSessionEventTap + kCGEventTapOptionListenOnly: requires Accessibility only (no Input
+//     Monitoring). Passive observer — cannot suppress events, which is fine for PTT.
+//   - Listens for both kCGEventFlagsChanged (Fn-as-modifier) AND kCGEventKeyDown/Up (Globe
+//     standalone press on Apple Silicon), since the Globe key generates different event types
+//     depending on macOS version and how it's configured.
 #![allow(non_upper_case_globals, non_snake_case)]
 
 use std::os::raw::{c_int, c_void};
@@ -36,18 +39,25 @@ impl PttTapHandle {
 }
 
 // CGEventTapLocation
-const kCGHIDEventTap: c_int = 0;        // hardware level — before system processes Fn/Globe
+const kCGSessionEventTap: c_int = 1;    // session level — requires Accessibility only
 // CGEventTapPlacement
 const kCGHeadInsertEventTap: c_int = 0;
 // CGEventTapOptions
-const kCGEventTapOptionDefault: c_int = 0;
+const kCGEventTapOptionListenOnly: c_int = 1; // passive: observe only, no Input Monitoring needed
 // CGEventType values
+const kCGEventKeyDown: u32 = 10;
+const kCGEventKeyUp: u32 = 11;
 const kCGEventFlagsChanged: u32 = 12;
-// System disables the tap — sent instead of a real event type
+// System disables the tap
 const kCGEventTapDisabledByTimeout: u32 = 0xFFFFFFFE;
 const kCGEventTapDisabledByUserInput: u32 = 0xFFFFFFFF;
-// CGEventFlags — Fn key
+// CGEventFlags — Fn key as modifier
 const kCGEventFlagMaskSecondaryFn: u64 = 0x00800000;
+// CGEventField: kCGKeyboardEventKeycode
+const kCGKeyboardEventKeycode: u32 = 8;
+// Globe/Fn key keycodes (vary by hardware/macOS version)
+const KEYCODE_FN_INTEL: i64 = 63;   // kVK_Function on Intel Macs
+const KEYCODE_GLOBE: i64 = 179;     // Globe key on Apple Silicon
 
 type CGEventRef = *const c_void;
 type CFMachPortRef = *mut c_void;
@@ -65,6 +75,7 @@ extern "C" {
         user_info: *mut c_void,
     ) -> CFMachPortRef;
     fn CGEventGetFlags(event: CGEventRef) -> u64;
+    fn CGEventGetIntegerValueField(event: CGEventRef, field: u32) -> i64;
     fn CGEventTapEnable(tap: CFMachPortRef, enable: bool);
 }
 
@@ -82,11 +93,11 @@ extern "C" {
     static kCFRunLoopCommonModes: *const c_void;
 }
 
-// ─── Fn key ────────────────────────────────────────────────────────────────
+// ─── Fn/Globe key ──────────────────────────────────────────────────────────
 
 struct FnTapState {
     fn_down: AtomicBool,
-    ever_fired: Arc<AtomicBool>,  // shared with watchdog to detect Input Monitoring permission
+    ever_fired: Arc<AtomicBool>,
     on_press: Box<dyn Fn() + Send + Sync>,
     on_release: Box<dyn Fn() + Send + Sync>,
 }
@@ -104,53 +115,81 @@ unsafe extern "C" fn fn_tap_callback(
             return event;
         }
         kCGEventTapDisabledByUserInput => {
-            // macOS kills the tap when Input Monitoring permission is missing.
-            // Re-enable keeps it alive but events won't arrive until permission is granted.
-            tracing::warn!("fn-key tap: disabled by system — grant Input Monitoring permission in System Settings > Privacy & Security");
+            tracing::warn!("fn-key tap: disabled by system — check Accessibility permission");
             CGEventTapEnable(proxy as CFMachPortRef, true);
             return event;
         }
         _ => {}
     }
 
-    if event_type == kCGEventFlagsChanged && !user_info.is_null() {
-        let flags = CGEventGetFlags(event);
-        let fn_now = (flags & kCGEventFlagMaskSecondaryFn) != 0;
-        let state = &*(user_info as *const FnTapState);
-        state.ever_fired.store(true, Ordering::Relaxed);
-        let was_down = state.fn_down.swap(fn_now, Ordering::SeqCst);
-        if fn_now && !was_down {
-            tracing::info!("fn-key tap: Fn pressed");
-            (state.on_press)();
-        } else if !fn_now && was_down {
-            tracing::info!("fn-key tap: Fn released");
-            (state.on_release)();
-        }
+    if user_info.is_null() {
+        return event;
     }
+
+    let state = &*(user_info as *const FnTapState);
+    state.ever_fired.store(true, Ordering::Relaxed);
+
+    match event_type {
+        // Path 1: Fn used as modifier — detected via flags bit (Intel and Apple Silicon)
+        kCGEventFlagsChanged => {
+            let flags = CGEventGetFlags(event);
+            let fn_now = (flags & kCGEventFlagMaskSecondaryFn) != 0;
+            let was_down = state.fn_down.swap(fn_now, Ordering::SeqCst);
+            if fn_now && !was_down {
+                tracing::info!("fn-key tap: Fn pressed (flags)");
+                (state.on_press)();
+            } else if !fn_now && was_down {
+                tracing::info!("fn-key tap: Fn released (flags)");
+                (state.on_release)();
+            }
+        }
+        // Path 2: Globe key standalone press — generates KeyDown/Up on Apple Silicon
+        kCGEventKeyDown | kCGEventKeyUp => {
+            let keycode = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
+            if keycode == KEYCODE_FN_INTEL || keycode == KEYCODE_GLOBE {
+                let is_down = event_type == kCGEventKeyDown;
+                let was_down = state.fn_down.swap(is_down, Ordering::SeqCst);
+                if is_down && !was_down {
+                    tracing::info!("fn-key tap: Globe/Fn pressed (keydown, keycode={})", keycode);
+                    (state.on_press)();
+                } else if !is_down && was_down {
+                    tracing::info!("fn-key tap: Globe/Fn released (keyup, keycode={})", keycode);
+                    (state.on_release)();
+                }
+            }
+        }
+        _ => {}
+    }
+
     event
 }
 
-/// Spawns a CGEventTap for the Fn key.
+/// Spawns a CGEventTap for the Fn/Globe key.
 pub fn spawn_fn_key_tap(
     on_press: impl Fn() + Send + Sync + 'static,
     on_release: impl Fn() + Send + Sync + 'static,
 ) -> PttTapHandle {
     let ever_fired = Arc::new(AtomicBool::new(false));
 
-    // Watchdog: if no events arrive within 6 seconds, Input Monitoring is likely missing.
+    // Watchdog: if no events arrive within 8s, Accessibility permission is likely missing.
     let ever_fired_watch = ever_fired.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_secs(6));
+        std::thread::sleep(std::time::Duration::from_secs(8));
         if !ever_fired_watch.load(Ordering::Relaxed) {
             tracing::warn!(
-                "fn-key tap: no events received after 6s — grant Input Monitoring permission \
-                 in System Settings → Privacy & Security → Input Monitoring"
+                "fn-key tap: no events received after 8s — grant Accessibility permission \
+                 in System Settings → Privacy & Security → Accessibility"
             );
         }
     });
 
+    // Event mask: FlagsChanged (Fn modifier) + KeyDown/Up (Globe standalone)
+    let event_mask = (1u64 << kCGEventFlagsChanged)
+        | (1u64 << kCGEventKeyDown)
+        | (1u64 << kCGEventKeyUp);
+
     spawn_tap(
-        1u64 << kCGEventFlagsChanged,
+        event_mask,
         fn_tap_callback,
         move || Box::into_raw(Box::new(FnTapState {
             fn_down: AtomicBool::new(false),
@@ -166,10 +205,6 @@ pub fn spawn_fn_key_tap(
 
 type TapCallbackFn = unsafe extern "C" fn(*const c_void, u32, CGEventRef, *mut c_void) -> CGEventRef;
 
-/// Spawns a background thread with a CGEventTap at hardware level (kCGHIDEventTap).
-/// `make_state` is called inside the thread and returns the raw state pointer,
-/// so raw pointers are never sent across thread boundaries.
-/// Returns a handle that can stop the run loop from any thread.
 fn spawn_tap<F>(
     event_mask: u64,
     callback: TapCallbackFn,
@@ -183,19 +218,23 @@ where
     let run_loop_writer = run_loop_slot.clone();
 
     std::thread::spawn(move || unsafe {
-        let state_ptr = make_state(); // raw pointer created inside the thread
+        let state_ptr = make_state();
 
         let tap = CGEventTapCreate(
-            kCGHIDEventTap,          // hardware level — captures Fn before system Globe/Dictation handling
+            kCGSessionEventTap,
             kCGHeadInsertEventTap,
-            kCGEventTapOptionDefault,
+            kCGEventTapOptionListenOnly, // passive — Accessibility only, no Input Monitoring
             event_mask,
             callback,
             state_ptr,
         );
 
         if tap.is_null() {
-            tracing::warn!("{}-key tap: CGEventTapCreate failed — grant Accessibility permission in System Settings > Privacy & Security", label);
+            tracing::warn!(
+                "{}-key tap: CGEventTapCreate failed — grant Accessibility permission \
+                 in System Settings → Privacy & Security → Accessibility",
+                label
+            );
             return;
         }
 
@@ -209,10 +248,9 @@ where
         CFRunLoopAddSource(rl, source, kCFRunLoopCommonModes);
         CGEventTapEnable(tap, true);
 
-        // Store the run loop ref so PttTapHandle::stop() can terminate it.
         *run_loop_writer.lock().unwrap_or_else(|e| e.into_inner()) = Some(SendableRunLoop(rl));
 
-        tracing::info!("{}-key tap: CGEventTap running (HID level)", label);
+        tracing::info!("{}-key tap: CGEventTap running (session, listen-only)", label);
         CFRunLoopRun();
         tracing::info!("{}-key tap: run loop stopped", label);
     });
