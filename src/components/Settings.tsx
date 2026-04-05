@@ -751,7 +751,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                   <div className="flex items-start gap-2 py-3 border-b" style={{ borderColor: "var(--warning-border)" }}>
                     <span className="text-[11px]" style={{ color: "var(--warning)" }}>⚠</span>
                     <p className="text-[10px] leading-relaxed" style={{ color: "var(--warning-muted)" }}>
-                      Push to Talk is experimental — you may experience crashes or unresponsive keys. Requires Accessibility permission and an app restart to take effect.
+                      Push to Talk is experimental — you may experience crashes or unresponsive keys. Requires Accessibility permission.
                     </p>
                   </div>
                   <SettingRow label="Push to Talk Mode" description="Hold a key to record, release when done">
