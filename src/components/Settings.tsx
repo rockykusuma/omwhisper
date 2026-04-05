@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import {
   Sliders, Mic, FileText, Info, ShieldCheck, ShieldAlert, Keyboard, Brain, Activity, Zap, Sparkles, Cpu, ExternalLink
 } from "lucide-react";
+import { applyThemePreference, type ThemePreference } from "../hooks/useTheme";
 import { logger } from "../utils/logger";
 import { STORAGE_KEYS } from "../utils/storageKeys";
 import type { AppSettings, StorageInfo } from "../types";
@@ -261,6 +262,22 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
           <div>
             <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">General</h3>
             <div className="card px-5">
+              <SettingRow label="Theme" description="App appearance">
+                <select
+                  value={settings.theme ?? "dark"}
+                  onChange={(e) => {
+                    const pref = e.target.value as ThemePreference;
+                    applyThemePreference(pref);
+                    update({ theme: pref });
+                  }}
+                  className="text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
+                  style={{ background: "var(--bg)", color: "var(--t1)", boxShadow: "var(--nm-pressed-sm)" }}
+                >
+                  <option value="dark">Dark</option>
+                  <option value="light">Light</option>
+                  <option value="system">System</option>
+                </select>
+              </SettingRow>
               <SettingRow label="Launch at Login" description="Start OmWhisper when you log in">
                 <Toggle value={settings.auto_launch} onChange={(v) => update({ auto_launch: v })} label="Launch at login" />
               </SettingRow>
