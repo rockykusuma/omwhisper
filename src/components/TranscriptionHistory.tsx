@@ -24,6 +24,7 @@ function formatDuration(secs: number): string {
 }
 
 export default function TranscriptionHistory() {
+  const isWindows = navigator.platform.startsWith("Win");
   const [entries, setEntries] = useState<TranscriptionEntry[]>([]);
   const [query, setQuery] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -225,7 +226,7 @@ export default function TranscriptionHistory() {
             </p>
             {!query && (
               <p className="text-xs text-center max-w-xs leading-relaxed" style={{ color: "var(--t3)" }}>
-                Start a recording with ⌘⇧V and your transcriptions will appear here
+                Start a recording with {isWindows ? "Alt+Shift+V" : "⌘⇧V"} and your transcriptions will appear here
               </p>
             )}
           </div>

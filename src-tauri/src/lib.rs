@@ -581,6 +581,8 @@ pub fn run() {
                 #[cfg(not(target_os = "windows"))]
                 let ptt_hotkey_resolved = ptt_hotkey.clone();
                 if let Some(ptt_sc) = parse_hotkey(&ptt_hotkey_resolved) {
+                    // Unregister first in case a previous instance left it registered
+                    let _ = app.global_shortcut().unregister(ptt_sc);
                     let state_ptt = shared_state.clone();
                     if let Err(e) = app.global_shortcut().on_shortcut(ptt_sc, move |app, _shortcut, event| {
                         let is_recording = state_ptt.lock().unwrap_or_else(|e| e.into_inner()).capture.is_some();
@@ -678,9 +680,19 @@ pub fn run() {
             // Windows: Alt+Shift+B (Win+Shift+B may conflict with system shortcuts)
             // macOS: Cmd+Shift+B
             #[cfg(target_os = "windows")]
-            let shortcut_sd = Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyB);
+            let shortcut_sd = {
+                let hotkey = &initial_settings.smart_dictation_hotkey;
+                if hotkey.contains("CmdOrCtrl") || hotkey.contains("Super") {
+                    let remapped = hotkey.replace("CmdOrCtrl", "Alt").replace("Super", "Alt");
+                    parse_hotkey(&remapped)
+                } else {
+                    parse_hotkey(hotkey)
+                }
+                .unwrap_or_else(|| Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyB))
+            };
             #[cfg(not(target_os = "windows"))]
-            let shortcut_sd = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyB);
+            let shortcut_sd = parse_hotkey(&initial_settings.smart_dictation_hotkey)
+                .unwrap_or_else(|| Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyB));
             let state_for_sd = shared_state.clone();
             let _ = app.global_shortcut().unregister(shortcut_sd);
             if let Err(e) = app.global_shortcut().on_shortcut(shortcut_sd, move |app, _shortcut, event| {

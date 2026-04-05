@@ -274,7 +274,7 @@ export default function Onboarding({ onComplete }: Props) {
           background: "var(--bg)",
           boxShadow: "var(--nm-raised-sm)",
         }}>
-          {platform === "windows" ? "Ctrl Shift V" : "⌘ Shift V"}
+          {platform === "windows" ? "Alt+Shift+V" : "⌘ Shift V"}
         </span>
       </div>
 

@@ -826,7 +826,7 @@ function SmartDictationTab() {
       <h3 className="text-t3 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Smart Dictation</h3>
       <div className="card px-5 mb-5">
         <SettingRow label="Shortcut" description="Hotkey for Smart Dictation">
-          <div className="px-3 py-1.5 rounded-lg text-xs font-mono" style={{ background: "var(--border)", color: "var(--t2)" }}>⌘⇧B</div>
+          <div className="px-3 py-1.5 rounded-lg text-xs font-mono" style={{ background: "var(--border)", color: "var(--t2)" }}>{isWindows ? "Alt+Shift+B" : "⌘⇧B"}</div>
         </SettingRow>
         <SettingRow label="Default Style" description="Polish style applied on stop">
           <select
@@ -936,6 +936,7 @@ interface AiModelsViewProps {
 // ── Main component ────────────────────────────────────────────────────────────
 export default function AiModelsView({ activeModel, onModelChange, initialTab }: AiModelsViewProps) {
   const [activeTab, setActiveTab] = useState<"whisper" | "smart-dictation">(initialTab ?? "whisper");
+  const isWindows = navigator.platform.startsWith("Win");
 
   return (
     <div className="w-full max-w-2xl mx-auto px-8 py-6">
