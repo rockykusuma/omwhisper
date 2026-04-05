@@ -173,8 +173,12 @@ fn strip_inline_commentary(line: &str) -> Option<&str> {
 // ─── Cloud API Key helpers ────────────────────────────────────────────────────
 
 pub async fn save_cloud_api_key(key: &str) -> anyhow::Result<()> {
+    let trimmed = key.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!("API key cannot be empty");
+    }
     let mut settings = crate::settings::load_settings().await;
-    settings.cloud_api_key = Some(key.to_string());
+    settings.cloud_api_key = Some(trimmed.to_string());
     crate::settings::save_settings(&settings).await
 }
 
