@@ -762,27 +762,9 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                     />
                   </SettingRow>
                   {settings.recording_mode === "push_to_talk" && (
-                    <>
-                      <SettingRow label="Push to Talk Key" description="Hold this key to record, release to stop">
-                        <select
-                          value={["Fn","CapsLock","Right Option","Right Control"].includes(settings.push_to_talk_hotkey ?? "") ? settings.push_to_talk_hotkey : "Fn"}
-                          onChange={(e) => update({ push_to_talk_hotkey: e.target.value })}
-                          className="text-xs rounded-xl px-3 py-1.5 cursor-pointer"
-                          style={{
-                            background: "var(--bg)",
-                            color: "var(--t1)",
-                            border: "1px solid color-mix(in srgb, var(--accent) 20%, transparent)",
-                            boxShadow: "var(--nm-pressed-sm)",
-                            outline: "none",
-                          }}
-                        >
-                          <option value="Fn">Fn</option>
-                          <option value="CapsLock">CapsLock ⇪</option>
-                          <option value="Right Option">Right Option ⌥</option>
-                          <option value="Right Control">Right Control ⌃</option>
-                        </select>
-                      </SettingRow>
-                    </>
+                    <SettingRow label="Push to Talk Key" description="Hold this key to record, release to stop">
+                      <span className="text-xs font-mono px-3 py-1.5 rounded-xl" style={{ background: "var(--bg)", color: "var(--t2)", boxShadow: "var(--nm-pressed-sm)" }}>Fn</span>
+                    </SettingRow>
                   )}
                 </div>
               </>

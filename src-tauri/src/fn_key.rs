@@ -1,11 +1,7 @@
-// Single-key push-to-talk via raw CGEventTap (macOS only).
+// Push-to-talk via the Fn key using a raw CGEventTap (macOS only).
 //
-// Supports: Fn, CapsLock, Right Option, Right Control, F13, F14, F15
-//
-// Uses CGEventTap instead of tauri_plugin_global_shortcut because:
-// - The plugin only supports modifier+key combos, not bare modifier keys
-// - Key-up events for bare modifiers are unreliable through the plugin
-// - CGEventTap gives us reliable press/release for all key types
+// Uses CGEventTap instead of tauri_plugin_global_shortcut because the plugin
+// does not support bare modifier keys — CGEventTap gives reliable press/release.
 #![allow(non_upper_case_globals, non_snake_case)]
 
 use std::os::raw::{c_int, c_void};
@@ -43,16 +39,8 @@ const kCGHeadInsertEventTap: c_int = 0;
 const kCGEventTapOptionDefault: c_int = 0;
 // CGEventType values
 const kCGEventFlagsChanged: u32 = 12;
-// CGEventField: kCGKeyboardEventKeycode
-const kCGKeyboardEventKeycode: u32 = 8;
-// CGEventFlags
-const kCGEventFlagMaskSecondaryFn: u64 = 0x00800000; // Fn key
-pub const kCGEventFlagMaskAlternate: u64 = 0x00080000; // Option key
-pub const kCGEventFlagMaskControl: u64 = 0x00040000;   // Control key
-// HID keycodes for single-key PTT candidates
-pub const KEYCODE_RIGHT_OPTION: u64 = 61;
-pub const KEYCODE_RIGHT_CONTROL: u64 = 60;
-pub const KEYCODE_CAPS_LOCK: u64 = 57;
+// CGEventFlags — Fn key
+const kCGEventFlagMaskSecondaryFn: u64 = 0x00800000;
 
 type CGEventRef = *const c_void;
 type CFMachPortRef = *mut c_void;
@@ -70,7 +58,6 @@ extern "C" {
         user_info: *mut c_void,
     ) -> CFMachPortRef;
     fn CGEventGetFlags(event: CGEventRef) -> u64;
-    fn CGEventGetIntegerValueField(event: CGEventRef, field: u32) -> i64;
     fn CGEventTapEnable(tap: CFMachPortRef, enable: bool);
 }
 
@@ -130,113 +117,6 @@ pub fn spawn_fn_key_tap(
             on_release: Box::new(on_release),
         })) as *mut c_void,
         "fn",
-    )
-}
-
-// ─── Modifier keys (Right Option, Right Control) ────────────────────────────
-
-struct ModifierTapState {
-    target_keycode: u64,
-    flag_mask: u64,
-    on_press: Box<dyn Fn() + Send + Sync>,
-    on_release: Box<dyn Fn() + Send + Sync>,
-}
-
-unsafe extern "C" fn modifier_tap_callback(
-    _proxy: *const c_void,
-    event_type: u32,
-    event: CGEventRef,
-    user_info: *mut c_void,
-) -> CGEventRef {
-    if event_type == kCGEventFlagsChanged && !user_info.is_null() {
-        let keycode = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) as u64;
-        let state = &*(user_info as *const ModifierTapState);
-        if keycode == state.target_keycode {
-            let flags = CGEventGetFlags(event);
-            if (flags & state.flag_mask) != 0 {
-                (state.on_press)();
-            } else {
-                (state.on_release)();
-            }
-        }
-    }
-    event
-}
-
-/// Spawns a CGEventTap for a bare modifier key (Right Option or Right Control).
-/// `target_keycode`: HID keycode (61 = Right Option, 60 = Right Control).
-/// `flag_mask`: CGEventFlags bit that is set while the key is held.
-pub fn spawn_modifier_key_tap(
-    target_keycode: u64,
-    flag_mask: u64,
-    on_press: impl Fn() + Send + Sync + 'static,
-    on_release: impl Fn() + Send + Sync + 'static,
-) -> PttTapHandle {
-    let label = if target_keycode == KEYCODE_RIGHT_OPTION { "right-option" } else { "right-control" };
-    spawn_tap(
-        1u64 << kCGEventFlagsChanged,
-        modifier_tap_callback,
-        move || Box::into_raw(Box::new(ModifierTapState {
-            target_keycode,
-            flag_mask,
-            on_press: Box::new(on_press),
-            on_release: Box::new(on_release),
-        })) as *mut c_void,
-        label,
-    )
-}
-
-// ─── CapsLock ───────────────────────────────────────────────────────────────
-
-struct CapsLockTapState {
-    // kCGEventFlagsChanged fires twice for CapsLock: once on physical press,
-    // once on physical release. The AlphaShift flag tracks lock *state* (toggle),
-    // not physical press, so we use an AtomicBool to track physical down/up.
-    key_down: AtomicBool,
-    on_press: Box<dyn Fn() + Send + Sync>,
-    on_release: Box<dyn Fn() + Send + Sync>,
-}
-
-unsafe extern "C" fn capslock_tap_callback(
-    _proxy: *const c_void,
-    event_type: u32,
-    event: CGEventRef,
-    user_info: *mut c_void,
-) -> CGEventRef {
-    if event_type == kCGEventFlagsChanged && !user_info.is_null() {
-        let keycode = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) as u64;
-        if keycode == KEYCODE_CAPS_LOCK {
-            let state = &*(user_info as *const CapsLockTapState);
-            let was_down = state.key_down.load(Ordering::SeqCst);
-            state.key_down.store(!was_down, Ordering::SeqCst);
-            if !was_down {
-                (state.on_press)();
-            } else {
-                (state.on_release)();
-            }
-        }
-    }
-    event
-}
-
-/// Spawns a CGEventTap for the CapsLock key used as a PTT button.
-/// Treats physical press/release as start/stop — does not affect the CapsLock toggle state.
-pub fn spawn_capslock_tap(
-    on_press: impl Fn() + Send + Sync + 'static,
-    on_release: impl Fn() + Send + Sync + 'static,
-) -> PttTapHandle {
-    // kCGEventFlagsChanged fires on any modifier change; we filter by KEYCODE_CAPS_LOCK
-    // inside the callback rather than using the AlphaShift flag (which tracks lock state,
-    // not physical press/release).
-    spawn_tap(
-        1u64 << kCGEventFlagsChanged,
-        capslock_tap_callback,
-        move || Box::into_raw(Box::new(CapsLockTapState {
-            key_down: AtomicBool::new(false),
-            on_press: Box::new(on_press),
-            on_release: Box::new(on_release),
-        })) as *mut c_void,
-        "capslock",
     )
 }
 

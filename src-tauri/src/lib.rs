@@ -53,20 +53,18 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 #[cfg(target_os = "macos")]
 type PttHandle = Arc<Mutex<Option<crate::fn_key::PttTapHandle>>>;
 
-/// Spawn a CGEventTap for the given PTT key, returning the handle.
-/// Returns None if the key isn't a single-key PTT candidate or PTT mode is off.
+/// Spawn a CGEventTap for the Fn key (the only supported PTT key).
+/// Returns None if PTT mode is off or key isn't "Fn".
 #[cfg(target_os = "macos")]
 fn spawn_ptt_for_key(
     key: &str,
     shared_state: &Arc<Mutex<TranscriptionState>>,
     app: &tauri::AppHandle,
 ) -> Option<crate::fn_key::PttTapHandle> {
-    const SINGLE_PTT_KEYS: &[&str] = &["Fn", "CapsLock", "Right Option", "Right Control"];
-    if !SINGLE_PTT_KEYS.contains(&key) {
+    if key != "Fn" {
         return None;
     }
 
-    // Build press/release callbacks
     let app_press = app.clone();
     let app_release = app.clone();
     let state_press = shared_state.clone();
@@ -82,23 +80,8 @@ fn spawn_ptt_for_key(
         let _ = app_release.emit("hotkey-stop-recording", ());
     };
 
-    let handle = match key {
-        "Fn" => crate::fn_key::spawn_fn_key_tap(on_press, on_release),
-        "CapsLock" => crate::fn_key::spawn_capslock_tap(on_press, on_release),
-        "Right Option" => crate::fn_key::spawn_modifier_key_tap(
-            crate::fn_key::KEYCODE_RIGHT_OPTION,
-            crate::fn_key::kCGEventFlagMaskAlternate,
-            on_press, on_release,
-        ),
-        "Right Control" => crate::fn_key::spawn_modifier_key_tap(
-            crate::fn_key::KEYCODE_RIGHT_CONTROL,
-            crate::fn_key::kCGEventFlagMaskControl,
-            on_press, on_release,
-        ),
-        _ => return None,
-    };
-    tracing::info!("PTT tap spawned for key: {}", key);
-    Some(handle)
+    tracing::info!("PTT tap spawned for key: Fn");
+    Some(crate::fn_key::spawn_fn_key_tap(on_press, on_release))
 }
 
 /// Build the tray menu reflecting current settings (mic checkmark + style checkmark).
