@@ -59,7 +59,7 @@ pub async fn polish(
 }
 
 /// Strip preamble/postamble that LLMs add despite being told not to.
-fn strip_llm_wrapper(text: &str) -> String {
+pub(crate) fn strip_llm_wrapper(text: &str) -> String {
     // Strip "Output:" prefix if model echoed the pattern format
     let text = text.strip_prefix("Output:").unwrap_or(text).trim();
 
@@ -106,40 +106,64 @@ fn strip_llm_wrapper(text: &str) -> String {
 }
 
 /// Check if a line is LLM meta-commentary (not actual transcription content).
+///
+/// Uses two guards to reduce false positives on real dictation:
+/// 1. Parenthesized lines `(...)` are always meta-commentary (very specific pattern).
+/// 2. All other patterns require the line to be short (< 150 chars) — real transcription
+///    paragraphs are typically longer, while LLM meta-commentary is 1-2 short sentences.
 fn is_meta_commentary(line: &str) -> bool {
+    // Parenthesized commentary — always strip regardless of length
+    if line.starts_with('(') && line.ends_with(')') {
+        return true;
+    }
+
+    // For all other patterns, only match short lines (likely meta-commentary, not content)
+    if line.len() >= 150 {
+        return false;
+    }
+
     let lower = line.to_lowercase();
-    (line.starts_with('(') && line.ends_with(')'))
-        || lower.starts_with("note:")
-        || lower.starts_with("i removed")
-        || lower.starts_with("i corrected")
-        || lower.starts_with("i cleaned")
-        || lower.starts_with("i made some")
-        || lower.starts_with("i adjusted")
-        || lower.starts_with("let me know")
-        || lower.starts_with("here is")
-        || lower.starts_with("here's")
+    lower.starts_with("note:")
+        || lower.starts_with("i removed some")
+        || lower.starts_with("i removed filler")
+        || lower.starts_with("i removed the filler")
+        || lower.starts_with("i corrected the")
+        || lower.starts_with("i corrected some")
+        || lower.starts_with("i corrected grammar")
+        || lower.starts_with("i cleaned up")
+        || lower.starts_with("i made some adjustments")
+        || lower.starts_with("i made some changes")
+        || lower.starts_with("i made some minor")
+        || lower.starts_with("i adjusted the")
+        || lower.starts_with("let me know if you'd like")
+        || lower.starts_with("let me know if you need any")
+        || (lower.starts_with("here is") && line.trim_end().ends_with(':'))
+        || (lower.starts_with("here's") && line.trim_end().ends_with(':'))
 }
 
 /// If the last line has meta-commentary appended after a sentence boundary, return
 /// the line truncated to just the content. Returns None if no inline commentary found.
+///
+/// Only strips when the trailing portion is short (< 100 chars) to avoid false positives
+/// on real content that happens to follow a sentence boundary.
 fn strip_inline_commentary(line: &str) -> Option<&str> {
     // Look for sentence-ending punctuation followed by commentary
     for (i, _) in line.match_indices(". ") {
         let after = line[i + 2..].trim_start();
-        if is_meta_commentary(after) {
+        if after.len() < 100 && is_meta_commentary(after) {
             return Some(line[..=i].trim());
         }
     }
     // Also check after "!" and "?"
     for (i, _) in line.match_indices("! ") {
         let after = line[i + 2..].trim_start();
-        if is_meta_commentary(after) {
+        if after.len() < 100 && is_meta_commentary(after) {
             return Some(line[..=i].trim());
         }
     }
     for (i, _) in line.match_indices("? ") {
         let after = line[i + 2..].trim_start();
-        if is_meta_commentary(after) {
+        if after.len() < 100 && is_meta_commentary(after) {
             return Some(line[..=i].trim());
         }
     }

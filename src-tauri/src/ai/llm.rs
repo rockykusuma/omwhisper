@@ -306,46 +306,8 @@ impl LlmEngine {
             n_cur += 1;
         }
 
-        Ok(strip_llm_wrapper(output.trim()))
+        Ok(super::strip_llm_wrapper(output.trim()))
     }
-}
-
-/// Strip preamble/postamble that small models add despite being told not to.
-/// e.g. "Here is the cleaned-up transcription:\n\n<text>\n\n(Note: ...)"
-#[cfg(target_os = "macos")]
-fn strip_llm_wrapper(text: &str) -> String {
-    let lines: Vec<&str> = text.lines().collect();
-    if lines.is_empty() {
-        return text.to_string();
-    }
-
-    // Drop leading preamble line if it ends with ':' and is followed by a blank line
-    // e.g. "Here is the cleaned-up transcription:"
-    let start = if lines.len() > 1
-        && lines[0].trim().ends_with(':')
-        && lines.get(1).map(|l| l.trim().is_empty()).unwrap_or(false)
-    {
-        2 // skip preamble + blank line
-    } else {
-        0
-    };
-
-    // Drop trailing postamble: parenthesised notes and blank lines at end
-    // e.g. "(Note: I removed filler words...)"
-    let mut end = lines.len();
-    while end > start {
-        let line = lines[end - 1].trim();
-        if line.is_empty()
-            || (line.starts_with('(') && line.ends_with(')'))
-            || line.to_lowercase().starts_with("note:")
-        {
-            end -= 1;
-        } else {
-            break;
-        }
-    }
-
-    lines[start..end].join("\n").trim().to_string()
 }
 
 #[cfg(target_os = "macos")]

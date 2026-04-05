@@ -259,9 +259,11 @@ pub fn list_audio_devices() -> Vec<String> {
     let host = cpal::default_host();
     // Use devices() instead of input_devices() to avoid calling supported_input_configs()
     // internally, which panics (aborts) on some CoreAudio devices in debug builds.
+    // Filter to input-capable devices via default_input_config() which is safe.
     host.devices()
         .map(|devices| {
             devices
+                .filter(|d| d.default_input_config().is_ok())
                 .filter_map(|d| d.name().ok())
                 .collect()
         })
