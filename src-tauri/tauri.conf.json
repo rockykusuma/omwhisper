@@ -49,6 +49,7 @@
   "bundle": {
     "active": true,
     "targets": ["dmg", "app", "nsis"],
+    "createUpdaterArtifacts": true,
     "resources": {
       "resources/sounds/*": "sounds/",
       "../models/ggml-tiny.en.bin": "models/ggml-tiny.en.bin"
