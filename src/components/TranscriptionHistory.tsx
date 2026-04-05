@@ -144,23 +144,23 @@ export default function TranscriptionHistory() {
     <div className="w-full max-w-2xl mx-auto px-8 py-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-white/90">History</h2>
+        <h2 className="text-xl font-bold" style={{ color: "var(--t1)" }}>History</h2>
 
         {/* Export + Clear */}
         <div className="flex items-center gap-2">
           {!selecting && (
             <button
               onClick={() => setSelecting(true)}
-              className="text-white/50 hover:text-white/70 transition-colors text-xs px-3 py-1.5 rounded-lg cursor-pointer font-sans"
-              style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
+              className="transition-colors text-xs px-3 py-1.5 rounded-lg cursor-pointer font-sans"
+              style={{ color: "var(--t3)", background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
             >
               Select
             </button>
           )}
           <div className="relative group">
             <button
-              className="text-white/50 hover:text-white/70 transition-colors text-xs px-3 py-1.5 rounded-lg cursor-pointer font-sans"
-              style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
+              className="transition-colors text-xs px-3 py-1.5 rounded-lg cursor-pointer font-sans"
+              style={{ color: "var(--t3)", background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
             >
               Export ▾
             </button>
@@ -172,7 +172,8 @@ export default function TranscriptionHistory() {
                 <button
                   key={fmt}
                   onClick={() => handleExport(fmt)}
-                  className="px-4 py-2 text-xs text-white/55 hover:text-white/80 text-left cursor-pointer font-sans transition-colors"
+                  className="px-4 py-2 text-xs text-left cursor-pointer font-sans transition-colors"
+                  style={{ color: "var(--t3)" }}
                 >
                   {fmt.toUpperCase()}
                 </button>
@@ -196,13 +197,18 @@ export default function TranscriptionHistory() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search transcriptions…"
-          className="w-full rounded-xl px-4 py-2.5 text-white/75 text-sm placeholder:text-white/25 outline-none font-sans"
-          style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+          className="w-full rounded-xl px-4 py-2.5 text-sm outline-none font-sans"
+          style={{
+            color: "var(--t2)",
+            background: "var(--bg)",
+            boxShadow: "var(--nm-pressed-sm)",
+          }}
         />
         {query && (
           <button
             onClick={() => setQuery("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/50 hover:text-white/60 cursor-pointer text-xs"
+            className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-xs"
+            style={{ color: "var(--t3)" }}
           >
             ✕
           </button>
@@ -213,12 +219,12 @@ export default function TranscriptionHistory() {
       <div className="space-y-2 overflow-y-auto pr-1 max-h-[calc(100vh-200px)]">
         {entries.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3 opacity-50 select-none">
-            <span className="text-5xl text-white/10">🕐</span>
-            <p className="text-white/40 text-sm">
+            <span className="text-5xl" style={{ color: "var(--t4)" }}>🕐</span>
+            <p className="text-sm" style={{ color: "var(--t4)" }}>
               {query ? "No results found" : "No transcriptions yet"}
             </p>
             {!query && (
-              <p className="text-white/50 text-xs text-center max-w-xs leading-relaxed">
+              <p className="text-xs text-center max-w-xs leading-relaxed" style={{ color: "var(--t3)" }}>
                 Start a recording with ⌘⇧V and your transcriptions will appear here
               </p>
             )}
@@ -260,12 +266,14 @@ export default function TranscriptionHistory() {
                   )}
                   <div className="flex-1 min-w-0">
                     <p
-                      className="text-white/75 text-sm leading-relaxed font-sans"
+                      className="text-sm leading-relaxed font-sans"
+                      style={{ color: "var(--t2)" }}
                     >
                       {isExpanded ? entry.text : preview}
                     </p>
                     <div
-                      className="flex items-center gap-3 mt-2 text-white/40 text-xs font-mono"
+                      className="flex items-center gap-3 mt-2 text-xs font-mono"
+                      style={{ color: "var(--t4)" }}
                     >
                       <span>{formatDate(entry.created_at)}</span>
                       <span>·</span>
@@ -276,7 +284,7 @@ export default function TranscriptionHistory() {
                       <span className="text-emerald-500/40">{entry.model_used}</span>
                     </div>
                   </div>
-                  <span className="text-white/35 text-xs mt-0.5 shrink-0">
+                  <span className="text-xs mt-0.5 shrink-0" style={{ color: "var(--t4)" }}>
                     {isExpanded ? "▲" : "▼"}
                   </span>
                 </div>
@@ -285,7 +293,7 @@ export default function TranscriptionHistory() {
                 {isExpanded && (
                   <div
                     className="px-4 pb-3 flex items-center gap-2 pt-3"
-                    style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}
+                    style={{ borderTop: "1px solid var(--border)" }}
                   >
                     <button
                       onClick={() => handleCopy(entry.text)}
@@ -312,7 +320,8 @@ export default function TranscriptionHistory() {
         {hasMore && !query && (
           <button
             onClick={() => loadHistory(offset, "")}
-            className="w-full text-center text-white/50 hover:text-white/60 text-xs py-3 transition-colors cursor-pointer font-sans"
+            className="w-full text-center text-xs py-3 transition-colors cursor-pointer font-sans"
+            style={{ color: "var(--t3)" }}
           >
             Load more
           </button>
@@ -355,17 +364,17 @@ export default function TranscriptionHistory() {
       {showConfirmClear && (
         <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/50">
           <div className="rounded-2xl p-6 max-w-xs w-full mx-4" style={{ background: "var(--bg)", boxShadow: "var(--nm-raised), 0 0 50px rgba(0,0,0,0.5)" }}>
-            <h3 className="text-white/90 font-semibold mb-2 font-sans">
+            <h3 className="font-semibold mb-2 font-sans" style={{ color: "var(--t1)" }}>
               Clear all history?
             </h3>
-            <p className="text-white/40 text-sm mb-5 font-sans">
+            <p className="text-sm mb-5 font-sans" style={{ color: "var(--t4)" }}>
               This will permanently delete all transcription history. This can't be undone.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowConfirmClear(false)}
-                className="flex-1 py-2 rounded-xl text-white/55 hover:text-white/75 text-sm transition-colors cursor-pointer font-sans"
-                style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
+                className="flex-1 py-2 rounded-xl text-sm transition-colors cursor-pointer font-sans"
+                style={{ color: "var(--t3)", background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
               >
                 Cancel
               </button>

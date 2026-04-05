@@ -89,8 +89,8 @@ export default function Vocabulary() {
     <div className="w-full max-w-2xl mx-auto px-8 py-6 space-y-8">
       {/* Header */}
       <div>
-        <h2 className="text-xl font-bold text-white/90">Vocabulary</h2>
-        <p className="text-white/50 text-xs mt-1 font-mono">
+        <h2 className="text-xl font-bold" style={{ color: "var(--t1)" }}>Vocabulary</h2>
+        <p className="text-xs mt-1 font-mono" style={{ color: "var(--t2)" }}>
           Teach Whisper how to spell names, brands, and jargon
         </p>
       </div>
@@ -100,7 +100,7 @@ export default function Vocabulary() {
         <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-3 font-mono">
           Custom Words
         </h3>
-        <p className="text-white/40 text-xs mb-3 leading-relaxed">
+        <p className="text-xs mb-3 leading-relaxed" style={{ color: "var(--t3)" }}>
           Add proper names, acronyms, or technical terms. Whisper will prefer these exact spellings.
         </p>
         <div className="card p-4 space-y-3">
@@ -112,7 +112,7 @@ export default function Vocabulary() {
               onChange={(e) => setNewWord(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAddWord()}
               placeholder="e.g. OmWhisper, Rakesh, CUDA…"
-              className="flex-1 rounded-xl px-3 py-2 text-white/75 text-sm placeholder:text-white/25 outline-none font-mono" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+              className="flex-1 rounded-xl px-3 py-2 text-sm outline-none font-mono" style={{ color: "var(--t2)", background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
               aria-label="Add custom word"
             />
             <button
@@ -140,7 +140,7 @@ export default function Vocabulary() {
                         if (e.key === "Escape") setEditingWord(null);
                       }}
                       onBlur={() => setEditingWord(null)}
-                      className="bg-transparent outline-none text-white/75 text-xs font-mono w-24"
+                      className="bg-transparent outline-none text-xs font-mono w-24" style={{ color: "var(--t2)" }}
                       aria-label={`Edit ${word}`}
                     />
                   </span>
@@ -148,14 +148,14 @@ export default function Vocabulary() {
                   <span
                     key={word}
                     onClick={() => { setEditingWord(word); setEditingWordInput(word); }}
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-full text-white/65 text-xs font-mono cursor-pointer transition-opacity"
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono cursor-pointer transition-opacity" style={{ color: "var(--t2)" }}
                     style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
                     title="Click to edit"
                   >
                     {word}
                     <button
                       onClick={(e) => { e.stopPropagation(); handleRemoveWord(word); }}
-                      className="text-white/50 hover:text-red-400 transition-colors cursor-pointer"
+                      className="hover:text-red-400 transition-colors cursor-pointer" style={{ color: "var(--t3)" }}
                       aria-label={`Remove ${word}`}
                     >
                       <X size={11} />
@@ -165,7 +165,7 @@ export default function Vocabulary() {
               )}
             </div>
           ) : (
-            <p className="text-white/50 text-xs font-mono">No custom words yet</p>
+            <p className="text-xs font-mono" style={{ color: "var(--t3)" }}>No custom words yet</p>
           )}
         </div>
       </div>
@@ -175,7 +175,7 @@ export default function Vocabulary() {
         <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-3 font-mono">
           Auto-Replacements
         </h3>
-        <p className="text-white/40 text-xs mb-3 leading-relaxed">
+        <p className="text-xs mb-3 leading-relaxed" style={{ color: "var(--t3)" }}>
           Replace words automatically after transcription. Case-insensitive, whole-word matching.
         </p>
         <div className="card p-4 space-y-3">
@@ -186,17 +186,17 @@ export default function Vocabulary() {
               value={newFrom}
               onChange={(e) => setNewFrom(e.target.value)}
               placeholder="Replace…"
-              className="flex-1 rounded-xl px-3 py-2 text-white/75 text-sm placeholder:text-white/25 outline-none font-mono" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+              className="flex-1 rounded-xl px-3 py-2 text-sm outline-none font-mono" style={{ color: "var(--t2)", background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
               aria-label="Word to replace"
             />
-            <span className="text-white/35 text-sm shrink-0">→</span>
+            <span className="text-sm shrink-0" style={{ color: "var(--t4)" }}>→</span>
             <input
               type="text"
               value={newTo}
               onChange={(e) => setNewTo(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAddReplacement()}
               placeholder="With…"
-              className="flex-1 rounded-xl px-3 py-2 text-white/75 text-sm placeholder:text-white/25 outline-none font-mono" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+              className="flex-1 rounded-xl px-3 py-2 text-sm outline-none font-mono" style={{ color: "var(--t2)", background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
               aria-label="Replacement word"
             />
             <button
@@ -223,10 +223,10 @@ export default function Vocabulary() {
                         if (e.key === "Enter") handleSaveReplacementEdit(from, editingFromInput, editingToInput);
                         if (e.key === "Escape") setEditingReplacement(null);
                       }}
-                      className="bg-transparent outline-none text-white/60 text-xs font-mono flex-1"
+                      className="bg-transparent outline-none text-xs font-mono flex-1" style={{ color: "var(--t2)" }}
                       aria-label="Edit source word"
                     />
-                    <span className="text-white/35 text-xs shrink-0">→</span>
+                    <span className="text-xs shrink-0" style={{ color: "var(--t4)" }}>→</span>
                     <input
                       type="text"
                       value={editingToInput}
@@ -248,12 +248,12 @@ export default function Vocabulary() {
                     onClick={() => { setEditingReplacement(from); setEditingFromInput(from); setEditingToInput(to); }}
                     title="Click to edit"
                   >
-                    <span className="text-white/50 text-xs font-mono flex-1">{from}</span>
-                    <span className="text-white/35 text-xs">→</span>
+                    <span className="text-xs font-mono flex-1" style={{ color: "var(--t3)" }}>{from}</span>
+                    <span className="text-xs" style={{ color: "var(--t4)" }}>→</span>
                     <span className="text-emerald-400/70 text-xs font-mono flex-1">{to}</span>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleRemoveReplacement(from); }}
-                      className="text-white/35 hover:text-red-400 transition-colors cursor-pointer ml-1"
+                      className="hover:text-red-400 transition-colors cursor-pointer ml-1" style={{ color: "var(--t4)" }}
                       aria-label={`Remove replacement for ${from}`}
                     >
                       <X size={12} />
@@ -263,13 +263,13 @@ export default function Vocabulary() {
               )}
             </div>
           ) : (
-            <p className="text-white/50 text-xs font-mono">No replacements yet</p>
+            <p className="text-xs font-mono" style={{ color: "var(--t3)" }}>No replacements yet</p>
           )}
         </div>
       </div>
 
       {/* Examples hint */}
-      <div className="text-white/50 text-xs leading-relaxed font-mono space-y-0.5">
+      <div className="text-xs leading-relaxed font-mono space-y-0.5" style={{ color: "var(--t3)" }}>
         <p>Examples: "okay" → "OK" · "gonna" → "going to" · "OmWhisper" as custom word</p>
       </div>
 

@@ -94,6 +94,9 @@ pub struct Settings {
     /// Overlay visual style: "micro" (compact bars-only pill) | "waveform" (larger bars + Listening label)
     #[serde(default = "default_overlay_style")]
     pub overlay_style: String,
+    /// UI theme: "dark" | "light" | "system"
+    #[serde(default = "default_theme")]
+    pub theme: String,
     /// User-created custom polish styles.
     #[serde(default)]
     pub custom_polish_styles: Vec<crate::styles::CustomStyle>,
@@ -151,6 +154,7 @@ fn default_sound_volume() -> f32 { 0.2 }
 fn default_llm_model_name() -> String { "qwen2.5-0.5b-instruct-q4_k_m.gguf".to_string() }
 fn default_vad_engine() -> String { "rms".to_string() }
 fn default_transcription_engine() -> String { "whisper".to_string() }
+fn default_theme() -> String { "dark".to_string() }
 
 fn default_log_level() -> String {
     "normal".to_string()
@@ -194,6 +198,7 @@ impl Default for Settings {
             ptt_key: "custom".to_string(),
             overlay_placement: "top-center".to_string(),
             overlay_style: "micro".to_string(),
+            theme: "dark".to_string(),
             custom_polish_styles: Vec::new(),
             translate_to_english: true,
             llm_model_name: "qwen2.5-0.5b-instruct-q4_k_m.gguf".to_string(),

@@ -18,8 +18,11 @@ function WaveformMeter({ level }: { level: number }) {
         return (
           <div
             key={i}
-            className={`w-[3px] rounded-full transition-all duration-75 ${active ? "bg-emerald-400" : "bg-white/[0.08]"}`}
-            style={{ height: `${active ? Math.max(30, Math.sin((i / bars) * Math.PI) * 100) : 20}%` }}
+            className={`w-[3px] rounded-full transition-all duration-75 ${active ? "bg-emerald-400" : ""}`}
+            style={active
+              ? { height: `${Math.max(30, Math.sin((i / bars) * Math.PI) * 100)}%` }
+              : { height: "20%", background: "var(--t4)" }
+            }
           />
         );
       })}
@@ -310,7 +313,7 @@ export default function HomeView({
                 <p className={`text-[11px] font-mono ${isSmartDictation ? "text-violet-400/55" : "text-emerald-400/55"}`}>
                   {isSmartDictation ? "Smart Dictation…" : "Listening…"}
                 </p>
-                <p className="text-white/25 text-[11px] font-mono tabular-nums">
+                <p className="text-[11px] font-mono tabular-nums" style={{ color: "var(--t4)" }}>
                   {formatElapsed(recordingDuration)}
                 </p>
               </div>

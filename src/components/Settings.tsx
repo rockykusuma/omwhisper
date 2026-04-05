@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import {
   Sliders, Mic, FileText, Info, ShieldCheck, ShieldAlert, Keyboard, Brain, Activity, Zap, Sparkles, Cpu, ExternalLink
 } from "lucide-react";
+import { applyThemePreference, type ThemePreference } from "../hooks/useTheme";
 import { logger } from "../utils/logger";
 import { STORAGE_KEYS } from "../utils/storageKeys";
 import type { AppSettings, StorageInfo } from "../types";
@@ -159,8 +160,8 @@ function SettingRow({
   return (
     <div className="flex items-center justify-between gap-4 py-3 last:border-0" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
       <div>
-        <p className="text-white/80 text-sm">{label}</p>
-        {description && <p className="text-white/50 text-xs mt-0.5">{description}</p>}
+        <p className="text-sm font-medium" style={{ color: "var(--t1)" }}>{label}</p>
+        {description && <p className="text-xs mt-0.5" style={{ color: "var(--t2)" }}>{description}</p>}
       </div>
       <div className="shrink-0">{children}</div>
     </div>
@@ -217,7 +218,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
 
   if (!settings) {
     return (
-      <div className="flex items-center justify-center h-64 text-white/35 text-sm">
+      <div className="flex items-center justify-center h-64 text-sm" style={{ color: "var(--t4)" }}>
         Loading…
       </div>
     );
@@ -261,6 +262,22 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
           <div>
             <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">General</h3>
             <div className="card px-5">
+              <SettingRow label="Theme" description="App appearance">
+                <select
+                  value={settings.theme ?? "dark"}
+                  onChange={(e) => {
+                    const pref = e.target.value as ThemePreference;
+                    applyThemePreference(pref);
+                    update({ theme: pref });
+                  }}
+                  className="text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
+                  style={{ background: "var(--bg)", color: "var(--t1)", boxShadow: "var(--nm-pressed-sm)" }}
+                >
+                  <option value="dark">Dark</option>
+                  <option value="light">Light</option>
+                  <option value="system">System</option>
+                </select>
+              </SettingRow>
               <SettingRow label="Launch at Login" description="Start OmWhisper when you log in">
                 <Toggle value={settings.auto_launch} onChange={(v) => update({ auto_launch: v })} label="Launch at login" />
               </SettingRow>
@@ -275,7 +292,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                   <select
                     value={settings.clipboard_restore_delay_ms}
                     onChange={(e) => update({ clipboard_restore_delay_ms: parseInt(e.target.value) })}
-                    className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                    className="text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", color: "var(--t2)", boxShadow: "var(--nm-pressed-sm)" }}
                     aria-label="Clipboard restore delay"
                   >
                     <option value={1000}>1 second</option>
@@ -293,8 +310,8 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                     <select
                       value={settings.overlay_placement ?? "top-center"}
                       onChange={(e) => update({ overlay_placement: e.target.value })}
-                      className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
-                      style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                      className="text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
+                      style={{ background: "var(--bg)", color: "var(--t2)", boxShadow: "var(--nm-pressed-sm)" }}
                       aria-label="Overlay position"
                     >
                       <option value="top-center">Top Center</option>
@@ -309,8 +326,8 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                     <select
                       value={settings.overlay_style ?? "micro"}
                       onChange={(e) => update({ overlay_style: e.target.value })}
-                      className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
-                      style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                      className="text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
+                      style={{ background: "var(--bg)", color: "var(--t2)", boxShadow: "var(--nm-pressed-sm)" }}
                       aria-label="Overlay style"
                     >
                       <option value="micro">Micro — compact bars</option>
@@ -322,7 +339,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                     description={
                       <span>
                         Show partial transcription below the overlay during recording.{" "}
-                        <span className="text-amber-400/80">May reduce accuracy for long uninterrupted speech.</span>
+                        <span style={{ color: "var(--warning)" }}>May reduce accuracy for long uninterrupted speech.</span>
                       </span>
                     }
                   >
@@ -342,7 +359,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                 <select
                   value={settings.auto_delete_after_days ?? ""}
                   onChange={(e) => update({ auto_delete_after_days: e.target.value ? parseInt(e.target.value) : null })}
-                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                  className="text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", color: "var(--t2)", boxShadow: "var(--nm-pressed-sm)" }}
                   aria-label="Auto-delete after days"
                 >
                   <option value="">Never</option>
@@ -355,8 +372,8 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
               </SettingRow>
               {storageInfo && (
                 <div className="py-3 flex items-center justify-between">
-                  <p className="text-white/50 text-xs">{storageInfo.record_count} transcription{storageInfo.record_count !== 1 ? "s" : ""} stored</p>
-                  <p className="text-white/35 text-xs font-mono">{(storageInfo.db_size_bytes / 1024).toFixed(1)} KB</p>
+                  <p className="text-xs" style={{ color: "var(--t2)" }}>{storageInfo.record_count} transcription{storageInfo.record_count !== 1 ? "s" : ""} stored</p>
+                  <p className="text-xs font-mono" style={{ color: "var(--t3)" }}>{(storageInfo.db_size_bytes / 1024).toFixed(1)} KB</p>
                 </div>
               )}
             </div>
@@ -479,7 +496,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                   value={settings.audio_input_device ?? ""}
                   onChange={(e) => update({ audio_input_device: e.target.value || null })}
                   disabled={micAuthStatus === "denied"}
-                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none max-w-[160px]" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)", opacity: micAuthStatus === "denied" ? 0.4 : 1 }}
+                  className="text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none max-w-[160px]" style={{ background: "var(--bg)", color: "var(--t2)", boxShadow: "var(--nm-pressed-sm)", opacity: micAuthStatus === "denied" ? 0.4 : 1 }}
                   aria-label="Microphone device"
                 >
                   <option value="">Default</option>
@@ -489,8 +506,8 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                 </select>
               </SettingRow>
               <div className="py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
-                <p className="text-white/80 text-sm mb-1">VAD Engine</p>
-                <p className="text-white/50 text-xs mb-3">Algorithm used to detect when you're speaking</p>
+                <p className="text-sm mb-1" style={{ color: "var(--t1)" }}>VAD Engine</p>
+                <p className="text-xs mb-3" style={{ color: "var(--t2)" }}>Algorithm used to detect when you're speaking</p>
                 <div className="flex gap-2">
                   {([
                     { id: "silero", Icon: Brain,    label: "Silero",  sub: "Neural AI · more accurate" },
@@ -575,8 +592,8 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
               <div className="card px-5">
                 <div className="flex items-center justify-between gap-4 py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
                   <div>
-                    <p className="text-white/80 text-sm">Active Model</p>
-                    <p className="text-white/50 text-xs mt-0.5">Whisper model used for transcription</p>
+                    <p className="text-sm" style={{ color: "var(--t1)" }}>Active Model</p>
+                    <p className="text-xs mt-0.5" style={{ color: "var(--t2)" }}>Whisper model used for transcription</p>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <span className="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-mono">
@@ -595,8 +612,8 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                 </div>
                 {platform === "macos" && (
                   <div className="py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
-                    <p className="text-white/80 text-sm mb-1">Engine</p>
-                    <p className="text-white/50 text-xs mb-3">Choose how your voice is transcribed</p>
+                    <p className="text-sm mb-1" style={{ color: "var(--t1)" }}>Engine</p>
+                    <p className="text-xs mb-3" style={{ color: "var(--t2)" }}>Choose how your voice is transcribed</p>
                     <div className="flex gap-2">
                       {([
                         { id: "auto",    Icon: Zap,       label: "Auto",          sub: "Apple Speech if available" },
@@ -667,7 +684,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                   <select
                     value={settings.language}
                     onChange={(e) => update({ language: e.target.value })}
-                    className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                    className="text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none" style={{ background: "var(--bg)", color: "var(--t2)", boxShadow: "var(--nm-pressed-sm)" }}
                     aria-label="Transcription language"
                   >
                     <option value="en">English</option>
@@ -686,12 +703,12 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                 {settings.translate_to_english && settings.language !== "en" && (
                   <div className="px-1 pb-3 space-y-1.5">
                     {settings.transcription_engine !== "whisper" && (
-                      <p className="text-[11px] leading-relaxed" style={{ color: "rgba(251,191,36,0.7)" }}>
+                      <p className="text-[11px] leading-relaxed" style={{ color: "var(--warning)" }}>
                         ⚠ Translation requires Whisper engine. It will be used automatically when translating, even if Apple Speech is selected above.
                       </p>
                     )}
                     {settings.active_model.endsWith(".en") && (
-                      <p className="text-[11px] leading-relaxed" style={{ color: "rgba(251,191,36,0.7)" }}>
+                      <p className="text-[11px] leading-relaxed" style={{ color: "var(--warning)" }}>
                         ⚠ Your active model ({settings.active_model}) is English-only and cannot translate. Switch to a multilingual model (e.g. medium, small) in AI Models.
                       </p>
                     )}
@@ -731,9 +748,9 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
               <>
                 <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Push to Talk</h3>
                 <div className="card px-5 mb-6">
-                  <div className="flex items-start gap-2 py-3 border-b" style={{ borderColor: "rgba(251,191,36,0.15)" }}>
-                    <span className="text-[11px]" style={{ color: "rgba(251,191,36,0.7)" }}>⚠</span>
-                    <p className="text-[10px] leading-relaxed" style={{ color: "rgba(251,191,36,0.6)" }}>
+                  <div className="flex items-start gap-2 py-3 border-b" style={{ borderColor: "var(--warning-border)" }}>
+                    <span className="text-[11px]" style={{ color: "var(--warning)" }}>⚠</span>
+                    <p className="text-[10px] leading-relaxed" style={{ color: "var(--warning-muted)" }}>
                       Push to Talk is experimental — you may experience crashes or unresponsive keys. Requires Accessibility permission and an app restart to take effect.
                     </p>
                   </div>
@@ -1038,18 +1055,18 @@ function AboutSection({ settings, update }: { settings: Settings; update: (patch
             </SettingRow>
           </div>
           <SettingRow label="Version">
-            <span className="text-white/50 text-xs font-mono">{version}</span>
+            <span className="text-xs font-mono" style={{ color: "var(--t2)" }}>{version}</span>
           </SettingRow>
           <div className="py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
-            <p className="text-white/80 text-sm mb-1">Model Storage</p>
-            <p className="text-white/50 text-xs font-mono break-all">~/Library/Application Support/com.omwhisper.app</p>
+            <p className="text-sm mb-1" style={{ color: "var(--t1)" }}>Model Storage</p>
+            <p className="text-xs font-mono break-all" style={{ color: "var(--t2)" }}>~/Library/Application Support/com.omwhisper.app</p>
           </div>
           <SettingRow label="Log Level" description="Increase for troubleshooting">
             <select
               value={settings.log_level ?? "normal"}
               onChange={(e) => update({ log_level: e.target.value })}
-              className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
-              style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+              className="text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
+              style={{ background: "var(--bg)", color: "var(--t2)", boxShadow: "var(--nm-pressed-sm)" }}
               aria-label="Log level"
             >
               <option value="normal">Normal</option>
@@ -1084,7 +1101,7 @@ function AboutSection({ settings, update }: { settings: Settings; update: (patch
             </button>
           </SettingRow>
           <div className="py-4 text-center">
-            <p className="text-white/35 text-xs">Made with ॐ by Rakesh Kusuma</p>
+            <p className="text-xs" style={{ color: "var(--t4)" }}>Made with ॐ by Rakesh Kusuma</p>
           </div>
         </div>
       </div>

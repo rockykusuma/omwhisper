@@ -14,7 +14,7 @@ function StepDots({ current, total }: { current: number; total: number }) {
           borderRadius: 99,
           transition: "all 0.3s",
           width: i === current ? 20 : 5,
-          background: i === current ? "#34d399" : "rgba(255,255,255,0.15)",
+          background: i === current ? "#34d399" : "var(--border)",
           boxShadow: i === current ? "0 0 8px rgba(52,211,153,0.5)" : "none",
         }} />
       ))}
@@ -34,23 +34,23 @@ function PermissionRow({
     <div style={{
       display: "flex", alignItems: "center", justifyContent: "space-between",
       padding: "13px 16px", borderRadius: 14, width: "100%",
-      background: "#090e0c",
-      boxShadow: "inset -3px -3px 7px rgba(255,255,255,0.03), inset 3px 3px 7px rgba(0,0,0,0.5)",
+      background: "var(--surface)",
+      boxShadow: "var(--nm-pressed-sm)",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{
           width: 36, height: 36, borderRadius: 10,
           display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
-          background: "#0c1410",
-          boxShadow: "-3px -3px 6px rgba(255,255,255,0.04), 3px 3px 6px rgba(0,0,0,0.5)",
+          background: "var(--bg)",
+          boxShadow: "var(--nm-raised-sm)",
         }}>{icon}</div>
         <div>
-          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", fontWeight: 500, fontFamily: "'DM Sans', sans-serif" }}>
+          <p style={{ fontSize: 13, color: "var(--t1)", fontWeight: 500, fontFamily: "'DM Sans', sans-serif" }}>
             {label}
           </p>
           <p style={{
             fontSize: 11, marginTop: 2, fontFamily: "'DM Mono', monospace",
-            color: granted === null ? "rgba(255,255,255,0.3)" : granted ? "#34d399" : "#f87171",
+            color: granted === null ? "var(--t4)" : granted ? "#34d399" : "#f87171",
           }}>
             {granted === null ? "Checking…" : granted ? "✓ Granted" : "✗ Not granted"}
           </p>
@@ -60,8 +60,8 @@ function PermissionRow({
         <button onClick={onOpen} style={{
           fontSize: 12, padding: "6px 14px", borderRadius: 8,
           border: "none", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontWeight: 500,
-          color: "rgba(255,255,255,0.55)", background: "#0c1410",
-          boxShadow: "-2px -2px 5px rgba(255,255,255,0.04), 2px 2px 5px rgba(0,0,0,0.5)",
+          color: "var(--t2)", background: "var(--bg)",
+          boxShadow: "var(--nm-raised-sm)",
         }}>Fix →</button>
       )}
     </div>
@@ -79,7 +79,7 @@ const neuBtn: React.CSSProperties = {
   cursor: "pointer",
   fontFamily: "'DM Sans', sans-serif",
   letterSpacing: "0.01em",
-  boxShadow: "-3px -3px 8px rgba(255,255,255,0.06), 3px 3px 8px rgba(0,0,0,0.55), 0 0 24px rgba(52,211,153,0.25)",
+  boxShadow: "var(--nm-raised), 0 0 24px rgba(52,211,153,0.25)",
   transition: "all 0.2s ease",
 };
 
@@ -138,7 +138,7 @@ export default function Onboarding({ onComplete }: Props) {
         width: 148, height: 148, borderRadius: "50%",
         display: "flex", alignItems: "center", justifyContent: "center",
         marginBottom: 32,
-        background: "#0c1410",
+        background: "var(--surface)",
         animation: "onb-breathe-glow 3.5s ease-in-out infinite",
       }}>
         <img
@@ -159,13 +159,13 @@ export default function Onboarding({ onComplete }: Props) {
       }}>OmWhisper</h1>
 
       <p style={{
-        fontSize: 14, color: "rgba(255,255,255,0.42)", lineHeight: 1.6,
+        fontSize: 14, color: "var(--t3)", lineHeight: 1.6,
         marginBottom: 5, fontFamily: "'DM Sans', sans-serif",
         animation: "onb-fade-up 0.6s ease-out 0.22s both",
       }}>Real-time, on-device speech transcription.</p>
 
       <p style={{
-        fontSize: 12, color: "rgba(255,255,255,0.22)", marginBottom: 36,
+        fontSize: 12, color: "var(--t4)", marginBottom: 36,
         fontFamily: "'DM Sans', sans-serif",
         animation: "onb-fade-up 0.6s ease-out 0.34s both",
       }}>Your voice. Your device. Your privacy.</p>
@@ -173,8 +173,8 @@ export default function Onboarding({ onComplete }: Props) {
       <div style={{ animation: "onb-fade-up 0.6s ease-out 0.46s both" }}>
         <button
           style={neuBtn}
-          onMouseEnter={e => (e.currentTarget.style.boxShadow = "-3px -3px 8px rgba(255,255,255,0.06), 3px 3px 8px rgba(0,0,0,0.55), 0 0 40px rgba(52,211,153,0.42)")}
-          onMouseLeave={e => (e.currentTarget.style.boxShadow = "-3px -3px 8px rgba(255,255,255,0.06), 3px 3px 8px rgba(0,0,0,0.55), 0 0 24px rgba(52,211,153,0.25)")}
+          onMouseEnter={e => (e.currentTarget.style.boxShadow = "var(--nm-raised), 0 0 40px rgba(52,211,153,0.42)")}
+          onMouseLeave={e => (e.currentTarget.style.boxShadow = "var(--nm-raised), 0 0 24px rgba(52,211,153,0.25)")}
           onClick={() => setStep(1)}
         >Get Started</button>
       </div>
@@ -190,14 +190,14 @@ export default function Onboarding({ onComplete }: Props) {
         width: 68, height: 68, borderRadius: "50%",
         display: "flex", alignItems: "center", justifyContent: "center",
         fontSize: 26, marginBottom: 18,
-        background: "#0c1410",
-        boxShadow: "-5px -5px 12px rgba(255,255,255,0.04), 5px 5px 12px rgba(0,0,0,0.55)",
+        background: "var(--surface)",
+        boxShadow: "var(--nm-raised-sm)",
       }}>🔐</div>
 
-      <h2 style={{ fontSize: 21, fontWeight: 700, color: "rgba(255,255,255,0.88)", marginBottom: 7, fontFamily: "'DM Sans', sans-serif" }}>
+      <h2 style={{ fontSize: 21, fontWeight: 700, color: "var(--t1)", marginBottom: 7, fontFamily: "'DM Sans', sans-serif" }}>
         Permissions
       </h2>
-      <p style={{ fontSize: 13, color: "rgba(255,255,255,0.38)", lineHeight: 1.5, marginBottom: 26, fontFamily: "'DM Sans', sans-serif" }}>
+      <p style={{ fontSize: 13, color: "var(--t3)", lineHeight: 1.5, marginBottom: 26, fontFamily: "'DM Sans', sans-serif" }}>
         OmWhisper needs two permissions to work properly.
       </p>
 
@@ -228,7 +228,7 @@ export default function Onboarding({ onComplete }: Props) {
       {!bothGranted && (micGranted !== null || accessibilityGranted !== null) && (
         <button onClick={() => setStep(2)} style={{
           background: "none", border: "none", cursor: "pointer",
-          fontSize: 12, color: "rgba(255,255,255,0.22)", fontFamily: "'DM Sans', sans-serif",
+          fontSize: 12, color: "var(--t4)", fontFamily: "'DM Sans', sans-serif",
           marginTop: bothGranted ? 8 : 0,
         }}>Continue anyway →</button>
       )}
@@ -242,8 +242,8 @@ export default function Onboarding({ onComplete }: Props) {
         width: 104, height: 104, borderRadius: "50%",
         display: "flex", alignItems: "center", justifyContent: "center",
         marginBottom: 22,
-        background: "#0c1410",
-        boxShadow: "-6px -6px 15px rgba(255,255,255,0.04), 6px 6px 15px rgba(0,0,0,0.6), 0 0 28px rgba(52,211,153,0.09)",
+        background: "var(--surface)",
+        boxShadow: "var(--nm-raised-sm), 0 0 28px rgba(52,211,153,0.09)",
       }}>
         <img
           src="/app-icon.png"
@@ -252,10 +252,10 @@ export default function Onboarding({ onComplete }: Props) {
         />
       </div>
 
-      <h2 style={{ fontSize: 21, fontWeight: 700, color: "rgba(255,255,255,0.88)", marginBottom: 7, fontFamily: "'DM Sans', sans-serif" }}>
+      <h2 style={{ fontSize: 21, fontWeight: 700, color: "var(--t1)", marginBottom: 7, fontFamily: "'DM Sans', sans-serif" }}>
         You're All Set!
       </h2>
-      <p style={{ fontSize: 13, color: "rgba(255,255,255,0.38)", lineHeight: 1.5, marginBottom: 22, fontFamily: "'DM Sans', sans-serif" }}>
+      <p style={{ fontSize: 13, color: "var(--t3)", lineHeight: 1.5, marginBottom: 22, fontFamily: "'DM Sans', sans-serif" }}>
         {platform === "windows" ? "OmWhisper lives in your system tray." : "OmWhisper lives in your menu bar."}{" "}
         Use the global hotkey to transcribe from anywhere.
       </p>
@@ -264,31 +264,31 @@ export default function Onboarding({ onComplete }: Props) {
       <div style={{
         width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "14px 18px", borderRadius: 14, marginBottom: 16,
-        background: "#090e0c",
-        boxShadow: "inset -3px -3px 7px rgba(255,255,255,0.03), inset 3px 3px 7px rgba(0,0,0,0.5)",
+        background: "var(--surface)",
+        boxShadow: "var(--nm-pressed-sm)",
       }}>
-        <span style={{ fontSize: 13, color: "rgba(255,255,255,0.48)", fontFamily: "'DM Sans', sans-serif" }}>Global Hotkey</span>
+        <span style={{ fontSize: 13, color: "var(--t3)", fontFamily: "'DM Sans', sans-serif" }}>Global Hotkey</span>
         <span style={{
-          fontFamily: "'DM Mono', monospace", fontSize: 13, color: "rgba(255,255,255,0.72)",
+          fontFamily: "'DM Mono', monospace", fontSize: 13, color: "var(--t1)",
           padding: "5px 12px", borderRadius: 8,
-          background: "#0c1410",
-          boxShadow: "-2px -2px 5px rgba(255,255,255,0.04), 2px 2px 5px rgba(0,0,0,0.5)",
+          background: "var(--bg)",
+          boxShadow: "var(--nm-raised-sm)",
         }}>
           {platform === "windows" ? "Ctrl Shift V" : "⌘ Shift V"}
         </span>
       </div>
 
-      <p style={{ fontSize: 12, color: "rgba(255,255,255,0.24)", marginBottom: 6, fontFamily: "'DM Sans', sans-serif" }}>
+      <p style={{ fontSize: 12, color: "var(--t4)", marginBottom: 6, fontFamily: "'DM Sans', sans-serif" }}>
         tiny.en is ready · Explore AI Models to upgrade anytime
       </p>
-      <p style={{ fontSize: 11, color: "rgba(255,255,255,0.16)", marginBottom: 26, fontFamily: "'DM Sans', sans-serif" }}>
+      <p style={{ fontSize: 11, color: "var(--t4)", marginBottom: 26, fontFamily: "'DM Sans', sans-serif" }}>
         If the hotkey conflicts with another app, change it in Settings → Shortcuts.
       </p>
 
       <button
         style={neuBtn}
-        onMouseEnter={e => (e.currentTarget.style.boxShadow = "-3px -3px 8px rgba(255,255,255,0.06), 3px 3px 8px rgba(0,0,0,0.55), 0 0 40px rgba(52,211,153,0.42)")}
-        onMouseLeave={e => (e.currentTarget.style.boxShadow = "-3px -3px 8px rgba(255,255,255,0.06), 3px 3px 8px rgba(0,0,0,0.55), 0 0 24px rgba(52,211,153,0.25)")}
+        onMouseEnter={e => (e.currentTarget.style.boxShadow = "var(--nm-raised), 0 0 40px rgba(52,211,153,0.42)")}
+        onMouseLeave={e => (e.currentTarget.style.boxShadow = "var(--nm-raised), 0 0 24px rgba(52,211,153,0.25)")}
         onClick={handleFinish}
       >Start Using OmWhisper</button>
     </div>
@@ -300,7 +300,7 @@ export default function Onboarding({ onComplete }: Props) {
     <div style={{
       minHeight: "100vh", display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center",
-      background: "linear-gradient(165deg, #0a0f0d 0%, #0d1a14 40%, #0a0f0d 100%)",
+      background: "var(--bg)",
       position: "relative",
     }}>
       {/* Top ambient glow */}

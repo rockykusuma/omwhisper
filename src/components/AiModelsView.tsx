@@ -47,8 +47,8 @@ function SettingRow({ label, description, children }: { label: string; descripti
   return (
     <div className="flex items-center justify-between gap-4 py-3 last:border-0" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
       <div>
-        <p className="text-white/80 text-sm">{label}</p>
-        {description && <p className="text-white/50 text-xs mt-0.5">{description}</p>}
+        <p className="text-sm font-medium" style={{ color: "var(--t1)" }}>{label}</p>
+        {description && <p className="text-xs mt-0.5" style={{ color: "var(--t3)" }}>{description}</p>}
       </div>
       <div className="shrink-0">{children}</div>
     </div>
@@ -451,7 +451,7 @@ function SmartDictationTab() {
   }
 
   if (!settings) {
-    return <div className="flex items-center justify-center h-64 text-white/35 text-sm">Loading…</div>;
+    return <div className="flex items-center justify-center h-64 text-sm" style={{ color: "var(--t4)" }}>Loading…</div>;
   }
 
   // Effective backend: treat built_in as disabled (built_in is removed)
@@ -489,31 +489,31 @@ function SmartDictationTab() {
               onClick={() => update({ ai_backend: value, ...(value === "disabled" ? { apply_polish_to_regular: false } : {}) })}
               className="relative flex flex-col items-start gap-1.5 rounded-xl p-3 text-left transition-all duration-150 cursor-pointer"
               style={{
-                border: isSelected ? "1px solid rgba(139,92,246,0.5)" : "1px solid rgba(255,255,255,0.07)",
-                background: isSelected ? "rgba(139,92,246,0.07)" : "rgba(255,255,255,0.02)",
+                border: isSelected ? "1px solid rgba(139,92,246,0.5)" : "1px solid var(--border)",
+                background: isSelected ? "rgba(139,92,246,0.07)" : "var(--surface)",
               }}
             >
               {/* radio dot */}
               <div
                 className="absolute top-3 right-3 w-3.5 h-3.5 rounded-full flex items-center justify-center"
                 style={{
-                  border: isSelected ? "1.5px solid rgb(139,92,246)" : "1.5px solid rgba(255,255,255,0.2)",
+                  border: isSelected ? "1.5px solid rgb(139,92,246)" : "1.5px solid var(--t3)",
                   background: isSelected ? "rgb(139,92,246)" : "transparent",
                 }}
               >
-                {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                {isSelected && <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--bg)" }} />}
               </div>
               <span className="text-base leading-none">{icon}</span>
-              <span className="text-xs font-semibold pr-5" style={{ color: isSelected ? "rgb(167,139,250)" : "rgba(255,255,255,0.8)" }}>
+              <span className="text-xs font-semibold pr-5" style={{ color: isSelected ? "rgb(167,139,250)" : "var(--t1)" }}>
                 {name}
               </span>
-              <span className="text-[10px]" style={{ color: "rgba(255,255,255,0.35)" }}>{description}</span>
+              <span className="text-[10px]" style={{ color: "var(--t4)" }}>{description}</span>
               {badge && (
                 <span
                   className="text-[9px] px-1.5 py-0.5 rounded font-medium"
                   style={{
-                    background: badge === "Running" || badge === "Connected" ? "rgba(52,211,153,0.1)" : "rgba(251,191,36,0.1)",
-                    color:      badge === "Running" || badge === "Connected" ? "rgba(52,211,153,0.8)"  : "rgba(251,191,36,0.8)",
+                    background: badge === "Running" || badge === "Connected" ? "var(--accent-bg)" : "var(--warning-border)",
+                    color:      badge === "Running" || badge === "Connected" ? "var(--accent)"  : "var(--warning)",
                   }}
                 >
                   {badge}
@@ -529,27 +529,27 @@ function SmartDictationTab() {
         <div className="card mb-5 overflow-hidden">
           {/* Status banner */}
           {ollamaChecking ? (
-            <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.02)" }}>
-              <div className="w-2.5 h-2.5 rounded-full bg-white/20 animate-pulse flex-shrink-0" />
-              <span className="text-xs text-white/50">Checking Ollama…</span>
+            <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
+              <div className="w-2.5 h-2.5 rounded-full animate-pulse flex-shrink-0" style={{ background: "var(--t4)" }} />
+              <span className="text-xs" style={{ color: "var(--t3)" }}>Checking Ollama…</span>
             </div>
           ) : ollamaStatus?.running ? (
-            <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(52,211,153,0.05)" }}>
+            <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid var(--border)", background: "rgba(52,211,153,0.05)" }}>
               <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: "#34d399", boxShadow: "0 0 6px rgba(52,211,153,0.5)" }} />
               <div className="flex-1 min-w-0 text-xs">
                 <span className="font-semibold" style={{ color: "#34d399" }}>Connected</span>
-                <span className="text-white/40 ml-2 font-mono">
+                <span className="ml-2 font-mono" style={{ color: "var(--t3)" }}>
                   {settings.ai_ollama_model} · {settings.ai_ollama_url} · {ollamaStatus.models.length} models
                 </span>
               </div>
               <button onClick={refreshOllamaStatus} disabled={ollamaChecking} className="btn-ghost text-xs py-1 px-3 flex-shrink-0">Refresh</button>
             </div>
           ) : (
-            <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(251,191,36,0.05)" }}>
-              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: "#fbbf24", boxShadow: "0 0 6px rgba(251,191,36,0.5)" }} />
+            <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid var(--border)", background: "var(--warning-border)" }}>
+              <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: "var(--warning)", boxShadow: "0 0 6px var(--warning-muted)" }} />
               <div className="flex-1 text-xs">
-                <span className="font-semibold" style={{ color: "#fbbf24" }}>Ollama not detected</span>
-                <span className="text-white/40 ml-2">Install and start Ollama to continue</span>
+                <span className="font-semibold" style={{ color: "var(--warning)" }}>Ollama not detected</span>
+                <span className="ml-2" style={{ color: "var(--t3)" }}>Install and start Ollama to continue</span>
               </div>
               <button onClick={refreshOllamaStatus} disabled={ollamaChecking} className="btn-ghost text-xs py-1 px-3 flex-shrink-0">Refresh</button>
             </div>
@@ -562,8 +562,8 @@ function SmartDictationTab() {
                 <select
                   value={settings.ai_ollama_model}
                   onChange={(e) => update({ ai_ollama_model: e.target.value })}
-                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none max-w-[160px]"
-                  style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                  className="text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none max-w-[160px]"
+                  style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)", color: "var(--t2)" }}
                 >
                   {ollamaStatus.models.map((m) => (
                     <option key={m} value={m}>{m}</option>
@@ -576,8 +576,8 @@ function SmartDictationTab() {
                   value={settings.ai_ollama_url}
                   onChange={(e) => update({ ai_ollama_url: e.target.value })}
                   placeholder="http://localhost:11434"
-                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 outline-none max-w-[200px]"
-                  style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                  className="text-xs rounded-lg px-3 py-1.5 outline-none max-w-[200px]"
+                  style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)", color: "var(--t2)" }}
                 />
               </SettingRow>
             </div>
@@ -586,7 +586,7 @@ function SmartDictationTab() {
           {/* Setup guide — only when not running */}
           {!ollamaChecking && ollamaStatus !== null && !ollamaStatus.running && (
             <div className="px-5 py-4 space-y-2 text-xs leading-relaxed">
-              <p className="text-white/50">1. Download from{" "}
+              <p style={{ color: "var(--t3)" }}>1. Download from{" "}
                 <span
                   onClick={() => invoke("open_external_url", { url: "https://ollama.com" })}
                   className="text-violet-400 underline cursor-pointer hover:text-violet-300 transition-colors"
@@ -594,18 +594,19 @@ function SmartDictationTab() {
                   ollama.com
                 </span>
               </p>
-              <p className="text-white/50 flex items-center gap-2">
+              <p className="flex items-center gap-2" style={{ color: "var(--t3)" }}>
                 <span>2. Run:</span>
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded font-mono" style={{ background: "rgba(255,255,255,0.04)" }}>
-                  <code className="text-white/70 select-text">ollama pull llama3.2</code>
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded font-mono" style={{ background: "var(--border)" }}>
+                  <code className="select-text" style={{ color: "var(--t2)" }}>ollama pull llama3.2</code>
                   <button
                     onClick={() => navigator.clipboard.writeText("ollama pull llama3.2")}
-                    className="text-white/30 hover:text-white/60 transition-colors cursor-pointer"
+                    className="transition-colors cursor-pointer"
+                    style={{ color: "var(--t4)" }}
                     title="Copy"
                   >⧉</button>
                 </span>
               </p>
-              <p className="text-white/50">3. Click <span className="text-white/70">Refresh</span> above</p>
+              <p style={{ color: "var(--t3)" }}>3. Click <span style={{ color: "var(--t2)" }}>Refresh</span> above</p>
             </div>
           )}
         </div>
@@ -626,25 +627,25 @@ function SmartDictationTab() {
           <div className="card mb-5 overflow-hidden">
             {/* Status banner */}
             {settings.ai_cloud_verified ? (
-              <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(52,211,153,0.05)" }}>
+              <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid var(--border)", background: "rgba(52,211,153,0.05)" }}>
                 <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: "#34d399", boxShadow: "0 0 6px rgba(52,211,153,0.5)" }} />
                 <div className="flex-1 text-xs">
                   <span className="font-semibold" style={{ color: "#34d399" }}>Connected</span>
-                  <span className="text-white/40 ml-2 font-mono capitalize">{activeProvider} · {settings.ai_cloud_model}</span>
+                  <span className="ml-2 font-mono capitalize" style={{ color: "var(--t3)" }}>{activeProvider} · {settings.ai_cloud_model}</span>
                 </div>
               </div>
             ) : cloudTestError ? (
-              <div className="flex items-start gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(248,113,113,0.05)" }}>
+              <div className="flex items-start gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid var(--border)", background: "rgba(248,113,113,0.05)" }}>
                 <div className="w-2.5 h-2.5 rounded-full mt-0.5 flex-shrink-0" style={{ background: "#f87171", boxShadow: "0 0 6px rgba(248,113,113,0.5)" }} />
                 <div className="flex-1 text-xs">
                   <span className="font-semibold text-red-400">Connection failed</span>
-                  <span className="text-white/40 ml-2">{cloudTestError}</span>
+                  <span className="ml-2" style={{ color: "var(--t3)" }}>{cloudTestError}</span>
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", background: "rgba(251,191,36,0.05)" }}>
-                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: "#fbbf24", boxShadow: "0 0 6px rgba(251,191,36,0.5)" }} />
-                <span className="text-xs" style={{ color: "#fbbf24" }}>Not verified — enter your API key and test the connection</span>
+              <div className="flex items-center gap-3 px-5 py-3.5" style={{ borderBottom: "1px solid var(--border)", background: "var(--warning-border)" }}>
+                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: "var(--warning)", boxShadow: "0 0 6px var(--warning-muted)" }} />
+                <span className="text-xs" style={{ color: "var(--warning)" }}>Not verified — enter your API key and test the connection</span>
               </div>
             )}
 
@@ -667,8 +668,8 @@ function SmartDictationTab() {
                     setCloudTestError(null);
                     update({ ai_cloud_api_url: p.url, ai_cloud_model: p.model, ai_cloud_verified: false });
                   }}
-                  className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
-                  style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                  className="text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
+                  style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)", color: "var(--t2)" }}
                 >
                   <option value="openai">OpenAI</option>
                   <option value="anthropic">Anthropic</option>
@@ -688,8 +689,8 @@ function SmartDictationTab() {
                     value={settings.ai_cloud_api_url}
                     onChange={(e) => { setCloudTestError(null); update({ ai_cloud_api_url: e.target.value, ai_cloud_verified: false }); }}
                     placeholder="https://your-api.example.com/v1"
-                    className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-56 font-mono"
-                    style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                    className="rounded-lg px-3 py-1.5 text-xs outline-none w-56 font-mono"
+                    style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)", color: "var(--t2)" }}
                   />
                 </SettingRow>
               )}
@@ -708,11 +709,11 @@ function SmartDictationTab() {
                       value={apiKeyInput}
                       onChange={(e) => setApiKeyInput(e.target.value)}
                       placeholder="API key…"
-                      className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-56 font-mono"
-                      style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                      className="rounded-lg px-3 py-1.5 text-xs outline-none w-56 font-mono"
+                      style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)", color: "var(--t2)" }}
                       onKeyDown={(e) => e.key === "Enter" && handleSaveApiKey()}
                     />
-                    <button onClick={() => setShowApiKey((v) => !v)} className="text-white/50 hover:text-white/60 text-xs cursor-pointer">{showApiKey ? "Hide" : "Show"}</button>
+                    <button onClick={() => setShowApiKey((v) => !v)} className="text-xs cursor-pointer" style={{ color: "var(--t3)" }}>{showApiKey ? "Hide" : "Show"}</button>
                     <button onClick={handleSaveApiKey} disabled={!apiKeyInput.trim()} className="btn-ghost text-xs py-1 px-2">Save</button>
                   </div>
                 )}
@@ -739,8 +740,8 @@ function SmartDictationTab() {
                               setCloudTestError(null);
                             }
                           }}
-                          className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none w-40 font-mono"
-                          style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                          className="text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none w-40 font-mono"
+                          style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)", color: "var(--t2)" }}
                         >
                           {presets.map((m) => (
                             <option key={m} value={m}>{m}</option>
@@ -771,8 +772,8 @@ function SmartDictationTab() {
                               }
                             }}
                             placeholder={settings.ai_cloud_model || "model-id"}
-                            className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-40 font-mono"
-                            style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                            className="rounded-lg px-3 py-1.5 text-xs outline-none w-40 font-mono"
+                            style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)", color: "var(--t2)" }}
                           />
                         )}
                       </>
@@ -794,8 +795,8 @@ function SmartDictationTab() {
                           }
                         }}
                         placeholder="model-name"
-                        className="rounded-lg px-3 py-1.5 text-white/60 text-xs outline-none w-40 font-mono"
-                        style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+                        className="rounded-lg px-3 py-1.5 text-xs outline-none w-40 font-mono"
+                        style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)", color: "var(--t2)" }}
                       />
                     );
                   })()}
@@ -813,7 +814,7 @@ function SmartDictationTab() {
                 </button>
               </div>
 
-              <p className="text-white/35 text-xs pb-3 leading-relaxed">
+              <p className="text-xs pb-3 leading-relaxed" style={{ color: "var(--t4)" }}>
                 When using Cloud API, your transcription text is sent to the provider. Audio never leaves your device.
               </p>
             </div>
@@ -825,14 +826,14 @@ function SmartDictationTab() {
       <h3 className="text-t3 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Smart Dictation</h3>
       <div className="card px-5 mb-5">
         <SettingRow label="Shortcut" description="Hotkey for Smart Dictation">
-          <div className="px-3 py-1.5 rounded-lg bg-white/[0.06] text-white/60 text-xs font-mono">⌘⇧B</div>
+          <div className="px-3 py-1.5 rounded-lg text-xs font-mono" style={{ background: "var(--border)", color: "var(--t2)" }}>⌘⇧B</div>
         </SettingRow>
         <SettingRow label="Default Style" description="Polish style applied on stop">
           <select
             value={settings.active_polish_style}
             onChange={(e) => update({ active_polish_style: e.target.value })}
-            className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
-            style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+            className="text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
+            style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)", color: "var(--t2)" }}
           >
             {builtInStyles.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             {customStyles.map((s) => <option key={s.name} value={`custom:${s.system_prompt}`}>{s.name}</option>)}
@@ -843,8 +844,8 @@ function SmartDictationTab() {
             <select
               value={settings.translate_target_language}
               onChange={(e) => update({ translate_target_language: e.target.value })}
-              className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
-              style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+              className="text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
+              style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)", color: "var(--t2)" }}
             >
               {["English","Spanish","French","German","Japanese","Chinese","Hindi","Portuguese","Korean","Arabic","Russian"].map((l) => (
                 <option key={l} value={l}>{l}</option>
@@ -856,8 +857,8 @@ function SmartDictationTab() {
           <select
             value={settings.ai_timeout_seconds}
             onChange={(e) => update({ ai_timeout_seconds: parseInt(e.target.value) })}
-            className="text-white/60 text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
-            style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+            className="text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
+            style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)", color: "var(--t2)" }}
           >
             <option value={15}>15s</option>
             <option value={30}>30s</option>
@@ -870,12 +871,12 @@ function SmartDictationTab() {
       <h3 className="text-t3 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Polish Styles</h3>
       <div className="card px-5 mb-5">
         {builtInStyles.map((s) => (
-          <div key={s.id} className="flex items-center justify-between py-2.5 border-b border-white/[0.04] last:border-0">
+          <div key={s.id} className="flex items-center justify-between py-2.5 last:border-0" style={{ borderBottom: "1px solid var(--border)" }}>
             <div>
-              <p className="text-white/70 text-xs font-medium">{s.name}</p>
-              <p className="text-white/40 text-xs">{s.description}</p>
+              <p className="text-xs font-medium" style={{ color: "var(--t2)" }}>{s.name}</p>
+              <p className="text-xs" style={{ color: "var(--t3)" }}>{s.description}</p>
             </div>
-            <span className="text-white/50 text-[10px] font-mono">built-in</span>
+            <span className="text-[10px] font-mono" style={{ color: "var(--t3)" }}>built-in</span>
           </div>
         ))}
       </div>
@@ -884,13 +885,13 @@ function SmartDictationTab() {
       <h3 className="text-t3 text-[10px] uppercase tracking-widest mt-2 mb-4 font-mono">Custom Styles</h3>
       <div className="card px-5 mb-4">
         {customStyles.length === 0 && (
-          <p className="text-white/35 text-xs py-3">No custom styles yet.</p>
+          <p className="text-xs py-3" style={{ color: "var(--t4)" }}>No custom styles yet.</p>
         )}
         {customStyles.map((s) => (
-          <div key={s.name} className="flex items-start justify-between py-2.5 border-b border-white/[0.04] last:border-0 gap-3">
+          <div key={s.name} className="flex items-start justify-between py-2.5 last:border-0 gap-3" style={{ borderBottom: "1px solid var(--border)" }}>
             <div className="min-w-0">
-              <p className="text-white/70 text-xs font-medium truncate">{s.name}</p>
-              <p className="text-white/40 text-xs truncate">{s.system_prompt.slice(0, 60)}…</p>
+              <p className="text-xs font-medium truncate" style={{ color: "var(--t2)" }}>{s.name}</p>
+              <p className="text-xs truncate" style={{ color: "var(--t3)" }}>{s.system_prompt.slice(0, 60)}…</p>
             </div>
             <button onClick={() => handleRemoveCustomStyle(s.name)} className="text-red-400/40 hover:text-red-400 text-xs shrink-0 cursor-pointer">Remove</button>
           </div>
@@ -901,16 +902,16 @@ function SmartDictationTab() {
             value={newStyleName}
             onChange={(e) => setNewStyleName(e.target.value)}
             placeholder="Style name…"
-            className="w-full rounded-lg px-3 py-2 text-white/70 text-xs outline-none"
-            style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+            className="w-full rounded-lg px-3 py-2 text-xs outline-none"
+            style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)", color: "var(--t2)" }}
           />
           <textarea
             value={newStylePrompt}
             onChange={(e) => setNewStylePrompt(e.target.value)}
             placeholder="System prompt…"
             rows={3}
-            className="w-full rounded-lg px-3 py-2 text-white/70 text-xs outline-none resize-none font-mono"
-            style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
+            className="w-full rounded-lg px-3 py-2 text-xs outline-none resize-none font-mono"
+            style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)", color: "var(--t2)" }}
           />
           <button
             onClick={handleAddCustomStyle}
