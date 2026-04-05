@@ -57,6 +57,8 @@ input, textarea, [contenteditable] {
   --accent-bg:        rgba(52, 211, 153, 0.12);
   --accent-grad-from: #3de0a8;
   --accent-grad-to:   #25b87e;
+
+  --border: rgba(255, 255, 255, 0.08);
 }
 
 /* ── Surface tokens ──────────────────────────────────────────────────── */
@@ -66,6 +68,43 @@ input, textarea, [contenteditable] {
   --surface-border: transparent;
   --surface-shadow: var(--nm-raised-sm);
   --surface-blur:   none;
+}
+
+/* ══ THEME 1 — Light (warm off-white) ═══════════════════════════════════ */
+[data-theme="light"] {
+  --bg:           #FAF8F5;
+  --shadow-dark:  rgba(0, 0, 0, 0.07);
+  --shadow-light: rgba(255, 255, 255, 0.80);
+
+  --t1: rgba(0, 0, 0, 0.87);
+  --t2: rgba(0, 0, 0, 0.60);
+  --t3: rgba(0, 0, 0, 0.40);
+  --t4: rgba(0, 0, 0, 0.20);
+
+  --accent:           #059669;
+  --accent-glow:      rgba(5, 150, 105, 0.25);
+  --accent-glow-weak: rgba(5, 150, 105, 0.12);
+  --accent-bg:        rgba(5, 150, 105, 0.08);
+  --accent-grad-from: #34d399;
+  --accent-grad-to:   #059669;
+
+  --border: rgba(0, 0, 0, 0.08);
+}
+
+/* ── Surface tokens (light) ─────────────────────────────────────────── */
+[data-theme="light"] {
+  --surface:        #FFFFFF;
+  --surface-border: rgba(0, 0, 0, 0.06);
+  --surface-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --surface-blur:   blur(12px);
+}
+
+/* ── Neumorphic overrides (light) — softer, flatter shadows ─────────── */
+[data-theme="light"] {
+  --nm-raised:     0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --nm-raised-sm:  0 1px 3px rgba(0, 0, 0, 0.05);
+  --nm-pressed:    inset 0 2px 4px rgba(0, 0, 0, 0.05);
+  --nm-pressed-sm: inset 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 /* ── Base styles ─────────────────────────────────────────────────────── */
