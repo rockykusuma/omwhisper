@@ -86,6 +86,7 @@ extern "C" {
 
 struct FnTapState {
     fn_down: AtomicBool,
+    ever_fired: Arc<AtomicBool>,  // shared with watchdog to detect Input Monitoring permission
     on_press: Box<dyn Fn() + Send + Sync>,
     on_release: Box<dyn Fn() + Send + Sync>,
 }
@@ -116,12 +117,13 @@ unsafe extern "C" fn fn_tap_callback(
         let flags = CGEventGetFlags(event);
         let fn_now = (flags & kCGEventFlagMaskSecondaryFn) != 0;
         let state = &*(user_info as *const FnTapState);
+        state.ever_fired.store(true, Ordering::Relaxed);
         let was_down = state.fn_down.swap(fn_now, Ordering::SeqCst);
         if fn_now && !was_down {
-            tracing::debug!("fn-key tap: Fn pressed");
+            tracing::info!("fn-key tap: Fn pressed");
             (state.on_press)();
         } else if !fn_now && was_down {
-            tracing::debug!("fn-key tap: Fn released");
+            tracing::info!("fn-key tap: Fn released");
             (state.on_release)();
         }
     }
@@ -133,11 +135,26 @@ pub fn spawn_fn_key_tap(
     on_press: impl Fn() + Send + Sync + 'static,
     on_release: impl Fn() + Send + Sync + 'static,
 ) -> PttTapHandle {
+    let ever_fired = Arc::new(AtomicBool::new(false));
+
+    // Watchdog: if no events arrive within 6 seconds, Input Monitoring is likely missing.
+    let ever_fired_watch = ever_fired.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(6));
+        if !ever_fired_watch.load(Ordering::Relaxed) {
+            tracing::warn!(
+                "fn-key tap: no events received after 6s — grant Input Monitoring permission \
+                 in System Settings → Privacy & Security → Input Monitoring"
+            );
+        }
+    });
+
     spawn_tap(
         1u64 << kCGEventFlagsChanged,
         fn_tap_callback,
         move || Box::into_raw(Box::new(FnTapState {
             fn_down: AtomicBool::new(false),
+            ever_fired,
             on_press: Box::new(on_press),
             on_release: Box::new(on_release),
         })) as *mut c_void,
