@@ -2,6 +2,10 @@
 //
 // Uses CGEventTap instead of tauri_plugin_global_shortcut because the plugin
 // does not support bare modifier keys — CGEventTap gives reliable press/release.
+//
+// Tap level: kCGHIDEventTap (hardware level, before system processes Globe/Fn).
+// kCGSessionEventTap misses Fn because macOS intercepts it for Dictation/Globe
+// at the session level before our callback would ever see it.
 #![allow(non_upper_case_globals, non_snake_case)]
 
 use std::os::raw::{c_int, c_void};
@@ -32,13 +36,16 @@ impl PttTapHandle {
 }
 
 // CGEventTapLocation
-const kCGSessionEventTap: c_int = 1;
+const kCGHIDEventTap: c_int = 0;        // hardware level — before system processes Fn/Globe
 // CGEventTapPlacement
 const kCGHeadInsertEventTap: c_int = 0;
 // CGEventTapOptions
 const kCGEventTapOptionDefault: c_int = 0;
 // CGEventType values
 const kCGEventFlagsChanged: u32 = 12;
+// System disables the tap — sent instead of a real event type
+const kCGEventTapDisabledByTimeout: u32 = 0xFFFFFFFE;
+const kCGEventTapDisabledByUserInput: u32 = 0xFFFFFFFF;
 // CGEventFlags — Fn key
 const kCGEventFlagMaskSecondaryFn: u64 = 0x00800000;
 
@@ -84,19 +91,37 @@ struct FnTapState {
 }
 
 unsafe extern "C" fn fn_tap_callback(
-    _proxy: *const c_void,
+    proxy: *const c_void,
     event_type: u32,
     event: CGEventRef,
     user_info: *mut c_void,
 ) -> CGEventRef {
+    match event_type {
+        kCGEventTapDisabledByTimeout => {
+            tracing::warn!("fn-key tap: disabled by timeout — re-enabling");
+            CGEventTapEnable(proxy as CFMachPortRef, true);
+            return event;
+        }
+        kCGEventTapDisabledByUserInput => {
+            // macOS kills the tap when Input Monitoring permission is missing.
+            // Re-enable keeps it alive but events won't arrive until permission is granted.
+            tracing::warn!("fn-key tap: disabled by system — grant Input Monitoring permission in System Settings > Privacy & Security");
+            CGEventTapEnable(proxy as CFMachPortRef, true);
+            return event;
+        }
+        _ => {}
+    }
+
     if event_type == kCGEventFlagsChanged && !user_info.is_null() {
         let flags = CGEventGetFlags(event);
         let fn_now = (flags & kCGEventFlagMaskSecondaryFn) != 0;
         let state = &*(user_info as *const FnTapState);
         let was_down = state.fn_down.swap(fn_now, Ordering::SeqCst);
         if fn_now && !was_down {
+            tracing::debug!("fn-key tap: Fn pressed");
             (state.on_press)();
         } else if !fn_now && was_down {
+            tracing::debug!("fn-key tap: Fn released");
             (state.on_release)();
         }
     }
@@ -124,7 +149,7 @@ pub fn spawn_fn_key_tap(
 
 type TapCallbackFn = unsafe extern "C" fn(*const c_void, u32, CGEventRef, *mut c_void) -> CGEventRef;
 
-/// Spawns a background thread with a CGEventTap.
+/// Spawns a background thread with a CGEventTap at hardware level (kCGHIDEventTap).
 /// `make_state` is called inside the thread and returns the raw state pointer,
 /// so raw pointers are never sent across thread boundaries.
 /// Returns a handle that can stop the run loop from any thread.
@@ -144,7 +169,7 @@ where
         let state_ptr = make_state(); // raw pointer created inside the thread
 
         let tap = CGEventTapCreate(
-            kCGSessionEventTap,
+            kCGHIDEventTap,          // hardware level — captures Fn before system Globe/Dictation handling
             kCGHeadInsertEventTap,
             kCGEventTapOptionDefault,
             event_mask,
@@ -153,7 +178,7 @@ where
         );
 
         if tap.is_null() {
-            tracing::warn!("{}-key tap: CGEventTapCreate failed — check Accessibility permission", label);
+            tracing::warn!("{}-key tap: CGEventTapCreate failed — grant Accessibility permission in System Settings > Privacy & Security", label);
             return;
         }
 
@@ -170,7 +195,7 @@ where
         // Store the run loop ref so PttTapHandle::stop() can terminate it.
         *run_loop_writer.lock().unwrap_or_else(|e| e.into_inner()) = Some(SendableRunLoop(rl));
 
-        tracing::info!("{}-key tap: CGEventTap running", label);
+        tracing::info!("{}-key tap: CGEventTap running (HID level)", label);
         CFRunLoopRun();
         tracing::info!("{}-key tap: run loop stopped", label);
     });
