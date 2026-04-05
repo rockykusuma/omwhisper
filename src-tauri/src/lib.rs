@@ -45,9 +45,44 @@ use commands::{load_llm_engine, unload_llm_engine};
 use std::sync::{Arc, Mutex};
 use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Emitter, Manager,
+    Emitter, Listener, Manager,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+
+/// Managed state for the active PTT CGEventTap handle (macOS only).
+#[cfg(target_os = "macos")]
+type PttHandle = Arc<Mutex<Option<crate::fn_key::PttTapHandle>>>;
+
+/// Spawn a CGEventTap for the Fn key (the only supported PTT key).
+/// Returns None if PTT mode is off or key isn't "Fn".
+#[cfg(target_os = "macos")]
+fn spawn_ptt_for_key(
+    key: &str,
+    shared_state: &Arc<Mutex<TranscriptionState>>,
+    app: &tauri::AppHandle,
+) -> Option<crate::fn_key::PttTapHandle> {
+    if key != "Fn" {
+        return None;
+    }
+
+    let app_press = app.clone();
+    let app_release = app.clone();
+    let state_press = shared_state.clone();
+    let on_press = move || {
+        let is_recording = state_press.lock().unwrap_or_else(|e| e.into_inner()).capture.is_some();
+        if !is_recording {
+            let focused = crate::paste::get_frontmost_app();
+            *crate::commands::get_previous_app().lock().unwrap_or_else(|e| e.into_inner()) = focused;
+            let _ = app_press.emit("hotkey-toggle-recording", ());
+        }
+    };
+    let on_release = move || {
+        let _ = app_release.emit("hotkey-stop-recording", ());
+    };
+
+    tracing::info!("PTT tap spawned for key: Fn");
+    Some(crate::fn_key::spawn_fn_key_tap(on_press, on_release))
+}
 
 /// Build the tray menu reflecting current settings (mic checkmark + style checkmark).
 fn build_tray_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
@@ -539,70 +574,73 @@ pub fn run() {
                 }
             }
 
-            // --- Single-key PTT via raw CGEventTap (Fn, CapsLock, Right Option, Right Control, F13–F15) ---
-            // tauri_plugin_global_shortcut handles modifier+key combos (above).
-            // These bare single keys need CGEventTap for reliable press/release detection.
+            // --- Single-key PTT via raw CGEventTap (Fn, CapsLock, Right Option, Right Control) ---
+            // Dynamically spawnable — settings changes restart the tap without app restart.
             #[cfg(target_os = "macos")]
             {
-                const SINGLE_PTT_KEYS: &[&str] = &[
-                    "Fn", "CapsLock", "Right Option", "Right Control",
-                ];
-                let ptt_key = initial_settings.push_to_talk_hotkey.clone();
-                if initial_settings.recording_mode == "push_to_talk"
-                    && SINGLE_PTT_KEYS.contains(&ptt_key.as_str())
-                {
-                    // Build shared on_press / on_release callbacks using a macro so each
-                    // arm gets its own concrete closure types (avoids Box<dyn Fn> coercion).
-                    macro_rules! ptt_callbacks {
-                        () => {{
-                            let app_press = app.handle().clone();
-                            let app_release = app.handle().clone();
-                            let state_press = shared_state.clone();
-                            let on_press = move || {
-                                let is_recording = state_press.lock().unwrap_or_else(|e| e.into_inner()).capture.is_some();
-                                if !is_recording {
-                                    let focused = crate::paste::get_frontmost_app();
-                                    *crate::commands::get_previous_app().lock().unwrap_or_else(|e| e.into_inner()) = focused;
-                                    let _ = app_press.emit("hotkey-toggle-recording", ());
-                                }
-                            };
-                            // Always emit stop on release — avoids the race where the key is
-                            // released before the 500 ms sound delay finishes setting `capture`.
-                            let on_release = move || {
-                                let _ = app_release.emit("hotkey-stop-recording", ());
-                            };
-                            (on_press, on_release)
-                        }};
+                let ptt_handle: PttHandle = Arc::new(Mutex::new(None));
+                app.manage(ptt_handle.clone());
+
+                // Spawn initial tap if PTT is enabled
+                if initial_settings.recording_mode == "push_to_talk" {
+                    let handle = spawn_ptt_for_key(
+                        &initial_settings.push_to_talk_hotkey,
+                        &shared_state,
+                        app.handle(),
+                    );
+                    *ptt_handle.lock().unwrap_or_else(|e| e.into_inner()) = handle;
+                }
+
+                // Listen for settings changes to dynamically restart the PTT tap
+                let ptt_handle_listener = ptt_handle.clone();
+                let shared_state_listener = shared_state.clone();
+                let app_handle_listener = app.handle().clone();
+                // Debounce: settings-changed may fire multiple times in quick succession.
+                // Use a shared key tracker to only restart when the key actually changed.
+                let last_ptt_key: Arc<Mutex<String>> = Arc::new(Mutex::new(
+                    if initial_settings.recording_mode == "push_to_talk" {
+                        initial_settings.push_to_talk_hotkey.clone()
+                    } else {
+                        String::new()
+                    }
+                ));
+                let last_ptt_key_listener = last_ptt_key.clone();
+
+                app.listen("settings-changed", move |_| {
+                    let settings = crate::settings::load_settings_sync();
+                    let new_key = if settings.recording_mode == "push_to_talk" {
+                        settings.push_to_talk_hotkey.clone()
+                    } else {
+                        String::new() // empty = PTT disabled
+                    };
+
+                    // Skip if nothing actually changed
+                    let mut last = last_ptt_key_listener.lock().unwrap_or_else(|e| e.into_inner());
+                    if *last == new_key {
+                        return;
+                    }
+                    tracing::info!("PTT key changed: '{}' → '{}'", *last, new_key);
+                    *last = new_key.clone();
+                    drop(last);
+
+                    // Stop existing tap
+                    if let Some(old) = ptt_handle_listener.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                        old.stop();
                     }
 
-                    match ptt_key.as_str() {
-                        "Fn" => {
-                            let (on_press, on_release) = ptt_callbacks!();
-                            crate::fn_key::spawn_fn_key_tap(on_press, on_release);
-                        }
-                        "CapsLock" => {
-                            let (on_press, on_release) = ptt_callbacks!();
-                            crate::fn_key::spawn_capslock_tap(on_press, on_release);
-                        }
-                        "Right Option" => {
-                            let (on_press, on_release) = ptt_callbacks!();
-                            crate::fn_key::spawn_modifier_key_tap(
-                                crate::fn_key::KEYCODE_RIGHT_OPTION,
-                                crate::fn_key::kCGEventFlagMaskAlternate,
-                                on_press, on_release,
-                            );
-                        }
-                        "Right Control" => {
-                            let (on_press, on_release) = ptt_callbacks!();
-                            crate::fn_key::spawn_modifier_key_tap(
-                                crate::fn_key::KEYCODE_RIGHT_CONTROL,
-                                crate::fn_key::kCGEventFlagMaskControl,
-                                on_press, on_release,
-                            );
-                        }
-                        _ => {}
+                    // Small delay to let the OS release the old event tap resources
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+
+                    // Spawn new tap if PTT is enabled
+                    if !new_key.is_empty() {
+                        let handle = spawn_ptt_for_key(
+                            &new_key,
+                            &shared_state_listener,
+                            &app_handle_listener,
+                        );
+                        *ptt_handle_listener.lock().unwrap_or_else(|e| e.into_inner()) = handle;
                     }
-                }
+                });
             }
 
             // --- Global Shortcut: Cmd+Shift+B (Smart Dictation) ---

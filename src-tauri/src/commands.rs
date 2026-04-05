@@ -141,13 +141,17 @@ pub async fn start_transcription(
         settings.transcription_engine.clone()
     };
 
-    if sound_enabled {
+    let is_ptt = settings.recording_mode == "push_to_talk";
+
+    // In PTT mode, skip chime + delay entirely for instant recording start.
+    // In toggle mode, play chime and wait for echo to clear.
+    if sound_enabled && !is_ptt {
         crate::sounds::play(crate::sounds::Sound::Start, sound_volume);
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 
-    // PTT: if the key was released during the sound delay, abort.
-    // Return a sentinel error so the frontend knows not to set isRecording=true.
+    // PTT: if the key was released during the sound delay (toggle mode) or
+    // before capture started, abort silently.
     if state.lock().unwrap_or_else(|e| e.into_inner()).start_cancelled {
         state.lock().unwrap_or_else(|e| e.into_inner()).start_cancelled = false;
         is_starting.store(false, Ordering::SeqCst);
@@ -318,7 +322,7 @@ pub async fn stop_transcription(state: tauri::State<'_, SharedState>) -> Result<
     };
 
     let settings = crate::settings::load_settings().await;
-    if settings.sound_enabled {
+    if settings.sound_enabled && settings.recording_mode != "push_to_talk" {
         crate::sounds::play(crate::sounds::Sound::Stop, settings.sound_volume);
     }
     crate::analytics::track(settings.analytics_enabled, "transcription_completed", serde_json::json!({
