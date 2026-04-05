@@ -62,13 +62,14 @@ impl WhisperEngine {
         let mut state = self.ctx.create_state().context("failed to create whisper state")?;
         state.full(params, audio).context("whisper inference failed")?;
 
-        let num_segments = state.full_n_segments().context("failed to get segment count")?;
+        let num_segments = state.full_n_segments();
         let mut segments = Vec::new();
 
         for i in 0..num_segments {
-            let text = state.full_get_segment_text(i).context("failed to get segment text")?;
-            let start_ms = state.full_get_segment_t0(i).context("failed to get t0")? * 10;
-            let end_ms = state.full_get_segment_t1(i).context("failed to get t1")? * 10;
+            let seg = state.get_segment(i).context("segment out of bounds")?;
+            let text = seg.to_str().context("failed to get segment text")?;
+            let start_ms = seg.start_timestamp() * 10;
+            let end_ms = seg.end_timestamp() * 10;
 
             let text = apply_replacements(text.trim(), word_replacements);
             segments.push(Segment {
