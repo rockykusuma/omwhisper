@@ -148,8 +148,8 @@ export default function Vocabulary() {
                   <span
                     key={word}
                     onClick={() => { setEditingWord(word); setEditingWordInput(word); }}
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono cursor-pointer transition-opacity" style={{ color: "var(--t2)" }}
-                    style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono cursor-pointer transition-opacity"
+                    style={{ color: "var(--t2)", background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
                     title="Click to edit"
                   >
                     {word}
