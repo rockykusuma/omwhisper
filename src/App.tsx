@@ -327,7 +327,7 @@ function App() {
               <span className="text-amber-400 text-xs">
                 You're running OmWhisper from the disk image. Drag it to Applications first.
               </span>
-              <button onClick={() => setRunningFromDmg(false)} className="text-white/50 hover:text-white/60 text-xs cursor-pointer ml-4 shrink-0" aria-label="Dismiss disk image warning">
+              <button onClick={() => setRunningFromDmg(false)} className="text-xs cursor-pointer ml-4 shrink-0" style={{ color: "var(--t3)" }} aria-label="Dismiss disk image warning">
                 ✕
               </button>
             </div>
@@ -352,7 +352,8 @@ function App() {
                 </button>
                 <button
                   onClick={() => setUpdateAvailable(false)}
-                  className="text-white/50 hover:text-white/60 text-xs cursor-pointer"
+                  className="text-xs cursor-pointer"
+                  style={{ color: "var(--t3)" }}
                   aria-label="Dismiss update notification"
                 >
                   ✕
@@ -378,7 +379,7 @@ function App() {
                 >
                   Explore Models →
                 </button>
-                <button onClick={() => setNoModelBanner(false)} className="text-white/40 hover:text-white/60 text-xs cursor-pointer" aria-label="Dismiss">
+                <button onClick={() => setNoModelBanner(false)} className="text-xs cursor-pointer" style={{ color: "var(--t4)" }} aria-label="Dismiss">
                   ✕
                 </button>
               </div>
