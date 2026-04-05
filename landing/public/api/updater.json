@@ -1,11 +1,11 @@
 {
-  "version": "0.1.0-beta.6",
-  "notes": "Silero VAD on macOS, WhisperEngine caching, Live Text Streaming, docs site.",
-  "pub_date": "2026-03-23T00:00:00Z",
+  "version": "0.1.0-beta.8",
+  "notes": "Push-to-Talk with Fn key, light/dark theme, Smart Correct AI polish, instant PTT recording.",
+  "pub_date": "2026-04-05T00:00:00Z",
   "platforms": {
     "darwin-aarch64": {
-      "url": "https://github.com/rockykusuma/omwhisper/releases/download/v0.1.0-beta.6/OmWhisper_0.1.0-beta.6_arm64.app.tar.gz",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRRFBIVkVXQW84bEM4bGE0dURySUJQdnRLclhGVHJWSG1CTThtOUdGc1o3WGRWejFHdjBJODVTeVdJV0JNL1pSSGk4RkdlSlZHYy9ZUUVKMFUzRXRCSkZxTFNLUUZ2eUE4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc0MjU2MDg4CWZpbGU6T21XaGlzcGVyXzAuMS4wLWJldGEuNl9hcm02NC5hcHAudGFyLmd6CkVNS1o1MlhVYlpPeEQ0QkU0VjVGNVpRVEowdVJiakFuTDFQZTFzbnhaWTZkVnJ2NFgrZ0xJWEZlY0hWaEQxT2xqSjBmTnBGYUIvQVhMS3luZFF0QkNRPT0K"
+      "url": "https://github.com/rockykusuma/omwhisper/releases/download/v0.1.0-beta.8/OmWhisper_0.1.0-beta.8_arm64.app.tar.gz",
+      "signature": ""
     }
   }
 }
