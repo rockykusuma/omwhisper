@@ -31,7 +31,7 @@ tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 tracing = "0.1"
 cpal = "0.15"
-whisper-rs = { version = "0.14" }
+whisper-rs = { version = "0.16" }
 hound = "3.5"
 reqwest = { version = "0.12", features = ["stream", "json"] }
 sha2 = "0.10"
@@ -65,6 +65,6 @@ llama-cpp-2 = { version = "0.1.138", features = ["metal"] }
 # whisper-rs base dep is in [dependencies] (CPU-only, all platforms).
 # This entry adds the Metal GPU feature on macOS only. Cargo unions both.
 # Do NOT remove the base entry from [dependencies] — that would break Windows.
-whisper-rs = { version = "0.14", features = ["metal"] }
+whisper-rs = { version = "0.16", features = ["metal"] }
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSWindow"] }

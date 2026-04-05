@@ -6,6 +6,8 @@ import type { TranscriptionSegment, AppSettings } from "../types";
 import { STORAGE_KEYS } from "../utils/storageKeys";
 import TipsSection from "./TipsSection";
 
+const isWindows = navigator.platform.startsWith("Win");
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function WaveformMeter({ level }: { level: number }) {
@@ -332,7 +334,7 @@ export default function HomeView({
               <div className="flex flex-col items-center gap-1.5">
                 <div className="flex items-center gap-0.5 px-3 py-2 rounded-xl"
                   style={{ background: "color-mix(in srgb, var(--t1) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--t1) 12%, transparent)" }}>
-                  {["⌘", "⇧", "V"].map((k) => (
+                  {(isWindows ? ["Alt", "Shift", "V"] : ["⌘", "⇧", "V"]).map((k) => (
                     <kbd key={k} className="inline-flex items-center justify-center rounded px-1.5 py-0.5 text-[11px] font-mono leading-none"
                       style={{ background: "color-mix(in srgb, var(--t1) 15%, transparent)", color: "var(--t2)", border: "1px solid color-mix(in srgb, var(--t1) 20%, transparent)" }}>
                       {k}
@@ -344,7 +346,7 @@ export default function HomeView({
               <div className="flex flex-col items-center gap-1.5">
                 <div className="flex items-center gap-0.5 px-3 py-2 rounded-xl"
                   style={{ background: "color-mix(in srgb, var(--t1) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--t1) 12%, transparent)" }}>
-                  {["⌘", "⇧", "B"].map((k) => (
+                  {(isWindows ? ["Alt", "Shift", "B"] : ["⌘", "⇧", "B"]).map((k) => (
                     <kbd key={k} className="inline-flex items-center justify-center rounded px-1.5 py-0.5 text-[11px] font-mono leading-none"
                       style={{ background: "color-mix(in srgb, var(--t1) 15%, transparent)", color: "var(--t2)", border: "1px solid color-mix(in srgb, var(--t1) 20%, transparent)" }}>
                       {k}
@@ -393,7 +395,7 @@ export default function HomeView({
             Apply AI Polish to regular recording
           </p>
           <p className="text-[11px] mt-0.5 leading-snug" style={{ color: "var(--t4)" }}>
-            ⌘⇧V recordings are polished before pasting. Falls back to raw paste if AI is unavailable.
+            {isWindows ? "Alt+Shift+V" : "⌘⇧V"} recordings are polished before pasting. Falls back to raw paste if AI is unavailable.
           </p>
           <p className="text-[10px] mt-1 leading-snug" style={{ color: "var(--t4)", opacity: 0.7 }}>
             ⚠ Adds a brief pause before pasting while AI processes your text.
@@ -437,8 +439,8 @@ export default function HomeView({
           <div className="px-4 pb-3 space-y-1">
             <p className="text-[11px]" style={{ color: "var(--t3)" }}>
               {smartDictationNudge === "not_configured"
-                ? "AI backend is not configured. Enable an AI backend to use Smart Dictation (⌘B)."
-                : "The local AI model isn't downloaded yet. Download it to start using Smart Dictation (⌘B)."}
+                ? `AI backend is not configured. Enable an AI backend to use Smart Dictation (${isWindows ? "Alt+Shift+B" : "⌘B"}).`
+                : `The local AI model isn't downloaded yet. Download it to start using Smart Dictation (${isWindows ? "Alt+Shift+B" : "⌘B"}).`}
             </p>
             <button
               onClick={() => onNavigate("models:smart-dictation")}

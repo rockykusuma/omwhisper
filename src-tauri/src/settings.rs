@@ -144,9 +144,15 @@ fn default_ai_cloud_api_url() -> String { "https://api.openai.com/v1".to_string(
 fn default_ai_timeout_seconds() -> u32 { 30 }
 fn default_active_polish_style() -> String { "professional".to_string() }
 fn default_translate_target_language() -> String { "English".to_string() }
-fn default_smart_dictation_hotkey() -> String { "CmdOrCtrl+Shift+B".to_string() }
-fn default_polish_text_hotkey() -> String { "CmdOrCtrl+Shift+P".to_string() }
-fn default_push_to_talk_hotkey() -> String { "Fn".to_string() }
+fn default_smart_dictation_hotkey() -> String {
+    if cfg!(target_os = "windows") { "Alt+Shift+B".to_string() } else { "CmdOrCtrl+Shift+B".to_string() }
+}
+fn default_polish_text_hotkey() -> String {
+    if cfg!(target_os = "windows") { "Alt+Shift+P".to_string() } else { "CmdOrCtrl+Shift+P".to_string() }
+}
+fn default_push_to_talk_hotkey() -> String {
+    if cfg!(target_os = "windows") { "Ctrl+Space".to_string() } else { "Fn".to_string() }
+}
 fn default_ptt_key() -> String { "custom".to_string() }
 
 fn default_true() -> bool { true }
@@ -163,7 +169,7 @@ fn default_log_level() -> String {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            hotkey: "CmdOrCtrl+Shift+V".to_string(),
+            hotkey: if cfg!(target_os = "windows") { "Alt+Shift+V".to_string() } else { "CmdOrCtrl+Shift+V".to_string() },
             active_model: "tiny.en".to_string(),
             language: "auto".to_string(),
             auto_launch: false,
@@ -192,9 +198,9 @@ impl Default for Settings {
             ai_timeout_seconds: 30,
             active_polish_style: "professional".to_string(),
             translate_target_language: "English".to_string(),
-            smart_dictation_hotkey: "CmdOrCtrl+Shift+B".to_string(),
-            polish_text_hotkey: "CmdOrCtrl+Shift+P".to_string(),
-            push_to_talk_hotkey: "Fn".to_string(),
+            smart_dictation_hotkey: if cfg!(target_os = "windows") { "Alt+Shift+B".to_string() } else { "CmdOrCtrl+Shift+B".to_string() },
+            polish_text_hotkey: if cfg!(target_os = "windows") { "Alt+Shift+P".to_string() } else { "CmdOrCtrl+Shift+P".to_string() },
+            push_to_talk_hotkey: if cfg!(target_os = "windows") { "Ctrl+Space".to_string() } else { "Fn".to_string() },
             ptt_key: "custom".to_string(),
             overlay_placement: "top-center".to_string(),
             overlay_style: "micro".to_string(),

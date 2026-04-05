@@ -528,10 +528,27 @@ pub fn run() {
             let initial_settings = crate::settings::load_settings_sync();
 
             // --- Toggle shortcut: press once to start, press again to stop ---
+            // Windows: Alt+Shift+V (Win+Shift+V is reserved by Windows)
+            // macOS: Cmd+Shift+V
+            #[cfg(target_os = "windows")]
+            let toggle_sc = {
+                let hotkey = &initial_settings.hotkey;
+                // If hotkey uses CmdOrCtrl (= Win key on Windows, often reserved), remap to Alt
+                if hotkey.contains("CmdOrCtrl") || hotkey.contains("Super") {
+                    let remapped = hotkey.replace("CmdOrCtrl", "Alt").replace("Super", "Alt");
+                    parse_hotkey(&remapped)
+                } else {
+                    parse_hotkey(hotkey)
+                }
+                .unwrap_or_else(|| Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyV))
+            };
+            #[cfg(not(target_os = "windows"))]
             let toggle_sc = parse_hotkey(&initial_settings.hotkey)
                 .unwrap_or_else(|| Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyV));
             let state_toggle = shared_state.clone();
-            app.global_shortcut().on_shortcut(toggle_sc, move |app, _shortcut, event| {
+            // Unregister first in case a previous instance left it registered
+            let _ = app.global_shortcut().unregister(toggle_sc);
+            if let Err(e) = app.global_shortcut().on_shortcut(toggle_sc, move |app, _shortcut, event| {
                 if event.state != ShortcutState::Pressed { return; }
                 let is_recording = state_toggle.lock().unwrap_or_else(|e| e.into_inner()).capture.is_some();
                 if is_recording {
@@ -542,14 +559,30 @@ pub fn run() {
                     *crate::commands::get_previous_app().lock().unwrap_or_else(|e| e.into_inner()) = focused;
                     let _ = app.emit("hotkey-toggle-recording", ());
                 }
-            })?;
+            }) {
+                tracing::warn!("Could not register toggle hotkey: {}", e);
+            }
 
             // --- Push-to-talk shortcut: hold to record, release to stop ---
-            // Not(windows): PTT is toggle-only on Windows; plugin shortcut not registered there.
-            // Uses not(target_os = "windows") rather than macos so Linux can use PTT if added in future.
-            #[cfg(not(target_os = "windows"))]
+            // Modifier+key combos (e.g. Ctrl+Win) work on all platforms via the plugin.
+            // Single-key PTT (Fn, CapsLock, etc.) uses CGEventTap and is macOS-only (below).
             {
-                if let Some(ptt_sc) = parse_hotkey(&initial_settings.push_to_talk_hotkey) {
+                let ptt_hotkey = &initial_settings.push_to_talk_hotkey;
+                // On Windows, default PTT to Ctrl+Space if set to a macOS-only single key
+                #[cfg(target_os = "windows")]
+                let ptt_hotkey_resolved = {
+                    const MACOS_ONLY_KEYS: &[&str] = &["Fn", "CapsLock", "Right Option", "Right Control"];
+                    if MACOS_ONLY_KEYS.contains(&ptt_hotkey.as_str()) {
+                        "Ctrl+Space".to_string()
+                    } else {
+                        ptt_hotkey.clone()
+                    }
+                };
+                #[cfg(not(target_os = "windows"))]
+                let ptt_hotkey_resolved = ptt_hotkey.clone();
+                if let Some(ptt_sc) = parse_hotkey(&ptt_hotkey_resolved) {
+                    // Unregister first in case a previous instance left it registered
+                    let _ = app.global_shortcut().unregister(ptt_sc);
                     let state_ptt = shared_state.clone();
                     if let Err(e) = app.global_shortcut().on_shortcut(ptt_sc, move |app, _shortcut, event| {
                         let is_recording = state_ptt.lock().unwrap_or_else(|e| e.into_inner()).capture.is_some();
@@ -643,10 +676,26 @@ pub fn run() {
                 });
             }
 
-            // --- Global Shortcut: Cmd+Shift+B (Smart Dictation) ---
-            let shortcut_sd = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyB);
+            // --- Global Shortcut: Smart Dictation ---
+            // Windows: Alt+Shift+B (Win+Shift+B may conflict with system shortcuts)
+            // macOS: Cmd+Shift+B
+            #[cfg(target_os = "windows")]
+            let shortcut_sd = {
+                let hotkey = &initial_settings.smart_dictation_hotkey;
+                if hotkey.contains("CmdOrCtrl") || hotkey.contains("Super") {
+                    let remapped = hotkey.replace("CmdOrCtrl", "Alt").replace("Super", "Alt");
+                    parse_hotkey(&remapped)
+                } else {
+                    parse_hotkey(hotkey)
+                }
+                .unwrap_or_else(|| Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyB))
+            };
+            #[cfg(not(target_os = "windows"))]
+            let shortcut_sd = parse_hotkey(&initial_settings.smart_dictation_hotkey)
+                .unwrap_or_else(|| Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyB));
             let state_for_sd = shared_state.clone();
-            app.global_shortcut().on_shortcut(shortcut_sd, move |app, _shortcut, event| {
+            let _ = app.global_shortcut().unregister(shortcut_sd);
+            if let Err(e) = app.global_shortcut().on_shortcut(shortcut_sd, move |app, _shortcut, event| {
                 let settings = crate::settings::load_settings_sync();
                 let is_push_to_talk = settings.recording_mode == "push_to_talk";
 
@@ -688,7 +737,9 @@ pub fn run() {
                         }
                     }
                 }
-            })?;
+            }) {
+                tracing::warn!("Could not register smart dictation hotkey: {}", e);
+            }
 
             // --- Global Shortcut: Polish Selected Text (default Cmd+Shift+P) ---
             if let Some(polish_sc) = parse_hotkey(&initial_settings.polish_text_hotkey) {

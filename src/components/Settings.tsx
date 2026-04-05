@@ -21,9 +21,18 @@ const TABS: { id: SettingsTab; icon: React.ElementType; label: string }[] = [
   { id: "about",         icon: Info,       label: "About"         },
 ];
 
+const isWindows = navigator.platform.startsWith("Win");
+
 /** Convert our internal shortcut string → human-readable symbols */
 function formatHotkey(hotkey: string): string {
   if (!hotkey) return "";
+  if (isWindows) {
+    // On Windows, remap CmdOrCtrl/Super → Alt (our Windows convention) and show text labels
+    return hotkey
+      .replace(/CmdOrCtrl|Super|Cmd/g, "Alt")
+      .split("+")
+      .join("+");
+  }
   return hotkey.split("+").map(part => {
     switch (part) {
       case "CmdOrCtrl": case "Cmd": case "Super": return "⌘";
@@ -730,7 +739,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                   onChange={(v) => update({ hotkey: v || "CmdOrCtrl+Shift+V" })}
                 />
               </SettingRow>
-              <SettingRow label="Smart Dictation" description="Record with AI polish (Cmd+Shift+B by default)">
+              <SettingRow label="Smart Dictation" description={`Record with AI polish (${isWindows ? "Alt+Shift+B" : "Cmd+Shift+B"} by default)`}>
                 <HotkeyRecorder
                   value={settings.smart_dictation_hotkey ?? "CmdOrCtrl+Shift+B"}
                   onChange={(v) => update({ smart_dictation_hotkey: v || "CmdOrCtrl+Shift+B" })}
@@ -744,16 +753,18 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
               </SettingRow>
             </div>
 
-            {platform !== "windows" && (
+            {(
               <>
                 <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Push to Talk</h3>
                 <div className="card px-5 mb-6">
-                  <div className="flex items-start gap-2 py-3 border-b" style={{ borderColor: "var(--warning-border)" }}>
-                    <span className="text-[11px]" style={{ color: "var(--warning)" }}>⚠</span>
-                    <p className="text-[10px] leading-relaxed" style={{ color: "var(--warning-muted)" }}>
-                      Push to Talk is experimental — you may experience crashes or unresponsive keys. Requires Accessibility permission.
-                    </p>
-                  </div>
+                  {platform !== "windows" && (
+                    <div className="flex items-start gap-2 py-3 border-b" style={{ borderColor: "var(--warning-border)" }}>
+                      <span className="text-[11px]" style={{ color: "var(--warning)" }}>⚠</span>
+                      <p className="text-[10px] leading-relaxed" style={{ color: "var(--warning-muted)" }}>
+                        Push to Talk is experimental — you may experience crashes or unresponsive keys. Requires Accessibility permission.
+                      </p>
+                    </div>
+                  )}
                   <SettingRow label="Push to Talk Mode" description="Hold a key to record, release when done">
                     <Toggle
                       value={settings.recording_mode === "push_to_talk"}
@@ -762,8 +773,12 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                     />
                   </SettingRow>
                   {settings.recording_mode === "push_to_talk" && (
-                    <SettingRow label="Push to Talk Key" description="Hold this key to record, release to stop">
-                      <span className="text-xs font-mono px-3 py-1.5 rounded-xl" style={{ background: "var(--bg)", color: "var(--t2)", boxShadow: "var(--nm-pressed-sm)" }}>Fn</span>
+                    <SettingRow label="Push to Talk Key" description={platform === "windows" ? "Ctrl+Space — hold to record, release to stop" : "Hold this key to record, release to stop"}>
+                      {platform === "windows" ? (
+                        <span className="text-xs font-mono px-3 py-1.5 rounded-xl" style={{ background: "var(--bg)", color: "var(--t2)", boxShadow: "var(--nm-pressed-sm)" }}>Ctrl+Space</span>
+                      ) : (
+                        <span className="text-xs font-mono px-3 py-1.5 rounded-xl" style={{ background: "var(--bg)", color: "var(--t2)", boxShadow: "var(--nm-pressed-sm)" }}>Fn</span>
+                      )}
                     </SettingRow>
                   )}
                 </div>
@@ -773,8 +788,8 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
             <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Reference</h3>
             <div className="card px-5">
               {[
-                { action: "Dictate in any app",    keys: ["⌘", "⇧", "V"], note: "Toggle recording" },
-                { action: "Smart Dictation",        keys: ["⌘", "⇧", "B"], note: "Record + AI polish" },
+                { action: "Dictate in any app",    keys: isWindows ? ["Alt", "Shift", "V"] : ["⌘", "⇧", "V"], note: "Toggle recording" },
+                { action: "Smart Dictation",        keys: isWindows ? ["Alt", "Shift", "B"] : ["⌘", "⇧", "B"], note: "Record + AI polish" },
               ].map(({ action, keys, note }) => (
                 <div key={action} className="flex items-center justify-between py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
                   <div>
