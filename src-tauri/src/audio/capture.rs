@@ -57,10 +57,16 @@ impl AudioCapture {
             let host = cpal::default_host();
 
             // Resolve the input device: try the user-selected device first, fall back to default.
+            // Use devices() + default_input_config() filter instead of input_devices() —
+            // input_devices() calls supported_input_configs() internally which panics on some
+            // CoreAudio devices (same reason list_audio_devices uses this pattern).
             let device = if let Some(ref name) = preferred_device {
-                let found = host.input_devices()
+                let found = host.devices()
                     .ok()
-                    .and_then(|mut devs| devs.find(|d| d.name().ok().as_deref() == Some(name.as_str())));
+                    .and_then(|devs| {
+                        devs.filter(|d| d.default_input_config().is_ok())
+                            .find(|d| d.name().ok().as_deref() == Some(name.as_str()))
+                    });
                 match found {
                     Some(d) => d,
                     None => {
@@ -230,6 +236,14 @@ impl AudioCapture {
             if let Some(tx) = self.speech_tx.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
                 let _ = tx.send(utterance);
             }
+        }
+
+        // Send an empty sentinel so the processing thread exits immediately without
+        // waiting for the cpal stream's Drop to complete. USB audio devices (e.g. Jabra)
+        // can make CoreAudio take several seconds to clean up, keeping the SyncSender
+        // clone inside the cpal callback alive and the channel open indefinitely.
+        if let Some(tx) = self.speech_tx.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+            let _ = tx.try_send(vec![]);
         }
 
         // Drop the sender so the speech receiver channel closes cleanly.

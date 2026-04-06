@@ -242,6 +242,12 @@ pub async fn start_transcription(
         let mut engine_slot = Some(engine);
 
         'chunks: for chunk in speech_rx {
+            // Empty vec = stop sentinel from capture.stop(). Exit immediately so
+            // transcription-complete fires without waiting for cpal stream cleanup
+            // (USB devices like Jabra can make CoreAudio take seconds to release).
+            if chunk.is_empty() {
+                break 'chunks;
+            }
             let eng = match engine_slot.take() {
                 Some(e) => e,
                 None => break,
@@ -607,7 +613,14 @@ pub fn get_previous_app() -> &'static Mutex<Option<String>> {
 #[tauri::command]
 pub async fn capture_focused_app() -> Result<Option<String>, String> {
     let app_name = paste::get_frontmost_app();
-    *previous_app().lock().unwrap_or_else(|e| e.into_inner()) = app_name.clone();
+    // Don't overwrite previous_app if OmWhisper itself is frontmost (e.g. Settings open).
+    // Keeps the real target app so paste works after changing mic/settings.
+    let is_self = app_name.as_deref()
+        .map(|n| n.eq_ignore_ascii_case("omwhisper"))
+        .unwrap_or(false);
+    if !is_self {
+        *previous_app().lock().unwrap_or_else(|e| e.into_inner()) = app_name.clone();
+    }
     Ok(app_name)
 }
 
