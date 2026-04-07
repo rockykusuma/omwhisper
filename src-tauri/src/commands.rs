@@ -388,6 +388,24 @@ pub async fn stop_transcription(state: tauri::State<'_, SharedState>) -> Result<
         "vad_engine": &settings.vad_engine,
         "duration_ms": duration_ms,
     }));
+
+    // Shut down the audio stream after 30s of inactivity so macOS stops showing
+    // the orange mic indicator. If another recording starts before the timeout,
+    // the stream will still be alive (no latency hit).
+    let state_for_timeout = state.inner().clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        let mut s = state_for_timeout.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(cap) = &s.capture {
+            if !cap.is_recording() {
+                if let Some(cap) = s.capture.take() {
+                    cap.shutdown();
+                    tracing::debug!("audio stream shut down after 30s idle — mic indicator cleared");
+                }
+            }
+        }
+    });
+
     Ok(())
 }
 

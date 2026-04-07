@@ -289,19 +289,9 @@ pub fn run() {
     let download_cancel_tokens: DownloadCancelTokens = Arc::new(Mutex::new(std::collections::HashMap::new()));
 
     // Pre-start the persistent audio stream so PTT is instant (no device enumeration on hotkey press).
-    {
-        let initial_settings = crate::settings::load_settings_sync();
-        let capture = crate::audio::capture::AudioCapture::new(initial_settings.vad_sensitivity, "silero");
-        match capture.start(initial_settings.audio_input_device.clone()) {
-            Ok(()) => {
-                shared_state.lock().unwrap_or_else(|e| e.into_inner()).capture = Some(capture);
-                tracing::info!("persistent audio stream started at launch");
-            }
-            Err(e) => {
-                tracing::warn!("failed to pre-start audio pipeline: {e} — will retry on first recording");
-            }
-        }
-    }
+    // Audio stream is started lazily on first PTT press (not at launch) to avoid
+    // holding the microphone open permanently — macOS shows the orange mic indicator
+    // whenever any process has an active audio input stream, even if it is idle.
 
     // Separate managed state for LlmEngine — must NOT be inside SharedState
     // because inference blocks the calling thread for several seconds — holding the shared mutex during inference would deadlock the shortcut handlers.
