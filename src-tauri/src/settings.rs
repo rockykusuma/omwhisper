@@ -136,7 +136,7 @@ pub struct Settings {
 }
 
 fn default_clipboard_restore_delay_ms() -> u64 { 2000 }
-fn default_recording_mode() -> String { "toggle".to_string() }
+fn default_recording_mode() -> String { "push_to_talk".to_string() }
 fn default_overlay_placement() -> String { "top-center".to_string() }
 fn default_overlay_style() -> String { "micro".to_string() }
 fn default_ai_backend() -> String { "disabled".to_string() }
@@ -195,7 +195,7 @@ impl Default for Settings {
             sound_volume: 0.2,
             restore_clipboard: true,
             clipboard_restore_delay_ms: 2000,
-            recording_mode: "toggle".to_string(),
+            recording_mode: "push_to_talk".to_string(),
             auto_delete_after_days: None,
             ai_backend: "disabled".to_string(),
             ai_ollama_model: "llama3.2".to_string(),
@@ -358,8 +358,8 @@ mod tests {
     }
 
     #[test]
-    fn default_recording_mode_is_toggle() {
-        assert_eq!(Settings::default().recording_mode, "toggle");
+    fn default_recording_mode_is_push_to_talk() {
+        assert_eq!(Settings::default().recording_mode, "push_to_talk");
     }
 
     #[test]
@@ -478,7 +478,7 @@ mod tests {
         let s: Settings = serde_json::from_str(json).unwrap();
         assert_eq!(s.hotkey, "CmdOrCtrl+Shift+Z");
         // Fields with #[serde(default)] should use defaults
-        assert_eq!(s.recording_mode, "toggle");
+        assert_eq!(s.recording_mode, "push_to_talk");
         assert_eq!(s.ai_backend, "disabled");
         assert_eq!(s.overlay_placement, "top-center");
         assert_eq!(s.vad_engine, "rms");
