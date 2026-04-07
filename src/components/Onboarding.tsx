@@ -260,95 +260,59 @@ export default function Onboarding({ onComplete }: Props) {
         Use the global hotkey to transcribe from anywhere.
       </p>
 
-      {/* Hotkey rows — inset neumorphic */}
+      {/* Global hotkey — single pill */}
       <div style={{
-        width: "100%", borderRadius: 14, marginBottom: 16,
-        background: "var(--surface)",
-        boxShadow: "var(--nm-pressed-sm)",
-        overflow: "hidden",
+        width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "14px 18px", borderRadius: 14, marginBottom: 12,
+        background: "var(--surface)", boxShadow: "var(--nm-pressed-sm)",
       }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px" }}>
-          <div>
-            <span style={{ fontSize: 13, color: "var(--t3)", fontFamily: "'DM Sans', sans-serif" }}>Dictation</span>
-            <span style={{ fontSize: 11, color: "var(--t4)", fontFamily: "'DM Sans', sans-serif", display: "block" }}>Toggle recording</span>
-          </div>
-          <span style={{
-            fontFamily: "'DM Mono', monospace", fontSize: 13, color: "var(--t1)",
-            padding: "5px 12px", borderRadius: 8,
-            background: "var(--bg)",
-            boxShadow: "var(--nm-raised-sm)",
-          }}>
-            {platform === "windows" ? "Alt+Shift+V" : "⌘ Shift V"}
-          </span>
-        </div>
-
-        <div style={{ height: 1, background: "color-mix(in srgb, var(--t1) 6%, transparent)", margin: "0 18px" }} />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 18px" }}>
-          <div>
-            <span style={{ fontSize: 13, color: "var(--t3)", fontFamily: "'DM Sans', sans-serif" }}>Smart Dictation</span>
-            <span style={{ fontSize: 11, color: "var(--t4)", fontFamily: "'DM Sans', sans-serif", display: "block" }}>Record + AI polish before paste</span>
-          </div>
-          <span style={{
-            fontFamily: "'DM Mono', monospace", fontSize: 12, color: "var(--t1)",
-            padding: "4px 10px", borderRadius: 7,
-            background: "var(--bg)", boxShadow: "var(--nm-raised-sm)",
-          }}>
-            {platform === "windows" ? "Alt+Shift+B" : "⌘ Shift B"}
-          </span>
-        </div>
-
-        <div style={{ height: 1, background: "color-mix(in srgb, var(--t1) 6%, transparent)", margin: "0 18px" }} />
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 18px" }}>
-          <div>
-            <span style={{ fontSize: 13, color: "var(--t3)", fontFamily: "'DM Sans', sans-serif" }}>Polish Selected Text</span>
-            <span style={{ fontSize: 11, color: "var(--t4)", fontFamily: "'DM Sans', sans-serif", display: "block" }}>AI polishes text you've already written</span>
-          </div>
-          <span style={{
-            fontFamily: "'DM Mono', monospace", fontSize: 12, color: "var(--t1)",
-            padding: "4px 10px", borderRadius: 7,
-            background: "var(--bg)", boxShadow: "var(--nm-raised-sm)",
-          }}>
-            {platform === "windows" ? "Alt+Shift+P" : "⌘ Shift P"}
-          </span>
-        </div>
-
-        {platform !== "windows" && (
-          <>
-            <div style={{ height: 1, background: "color-mix(in srgb, var(--t1) 6%, transparent)", margin: "0 18px" }} />
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 18px" }}>
-              <div>
-                <span style={{ fontSize: 13, color: "var(--t3)", fontFamily: "'DM Sans', sans-serif" }}>Push-to-Talk</span>
-                <span style={{ fontSize: 11, color: "var(--t4)", fontFamily: "'DM Sans', sans-serif", display: "block" }}>Hold to record, release to transcribe</span>
-              </div>
-              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                {["Fn"].map(k => (
-                  <span key={k} style={{
-                    fontFamily: "'DM Mono', monospace", fontSize: 12, color: "var(--t1)",
-                    padding: "4px 10px", borderRadius: 7,
-                    background: "var(--bg)", boxShadow: "var(--nm-raised-sm)",
-                  }}>{k}</span>
-                ))}
-              </div>
-            </div>
-            <div style={{ height: 1, background: "color-mix(in srgb, var(--t1) 6%, transparent)", margin: "0 18px" }} />
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 18px" }}>
-              <div>
-                <span style={{ fontSize: 13, color: "var(--t3)", fontFamily: "'DM Sans', sans-serif" }}>Smart Dictation PTT</span>
-                <span style={{ fontSize: 11, color: "var(--t4)", fontFamily: "'DM Sans', sans-serif", display: "block" }}>AI polishes your speech before pasting</span>
-              </div>
-              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                {["Fn", "⌃ Ctrl"].map(k => (
-                  <span key={k} style={{
-                    fontFamily: "'DM Mono', monospace", fontSize: 12, color: "var(--t1)",
-                    padding: "4px 10px", borderRadius: 7,
-                    background: "var(--bg)", boxShadow: "var(--nm-raised-sm)",
-                  }}>{k}</span>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
+        <span style={{ fontSize: 13, color: "var(--t3)", fontFamily: "'DM Sans', sans-serif" }}>Global Hotkey</span>
+        <span style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 13, color: "var(--t1)",
+          padding: "5px 12px", borderRadius: 8,
+          background: "var(--bg)", boxShadow: "var(--nm-raised-sm)",
+        }}>
+          {platform === "windows" ? "Alt+Shift+V" : "⌘ Shift V"}
+        </span>
       </div>
+
+      {/* PTT shortcuts — macOS only, two rows */}
+      {platform !== "windows" && (
+        <div style={{
+          width: "100%", borderRadius: 14, marginBottom: 12,
+          background: "var(--surface)", boxShadow: "var(--nm-pressed-sm)",
+          overflow: "hidden",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 18px" }}>
+            <div>
+              <span style={{ fontSize: 13, color: "var(--t3)", fontFamily: "'DM Sans', sans-serif" }}>Push-to-Talk</span>
+              <span style={{ fontSize: 11, color: "var(--t4)", fontFamily: "'DM Sans', sans-serif", display: "block" }}>Hold to record, release to transcribe</span>
+            </div>
+            <span style={{
+              fontFamily: "'DM Mono', monospace", fontSize: 12, color: "var(--t1)",
+              padding: "4px 10px", borderRadius: 7,
+              background: "var(--bg)", boxShadow: "var(--nm-raised-sm)",
+            }}>Fn</span>
+          </div>
+          <div style={{ height: 1, background: "color-mix(in srgb, var(--t1) 6%, transparent)", margin: "0 18px" }} />
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 18px" }}>
+            <div>
+              <span style={{ fontSize: 13, color: "var(--t3)", fontFamily: "'DM Sans', sans-serif" }}>Smart Dictation PTT</span>
+              <span style={{ fontSize: 11, color: "var(--t4)", fontFamily: "'DM Sans', sans-serif", display: "block" }}>AI polishes your speech before pasting</span>
+            </div>
+            <div style={{ display: "flex", gap: 4 }}>
+              {["Fn", "⌃ Ctrl"].map(k => (
+                <span key={k} style={{
+                  fontFamily: "'DM Mono', monospace", fontSize: 12, color: "var(--t1)",
+                  padding: "4px 10px", borderRadius: 7,
+                  background: "var(--bg)", boxShadow: "var(--nm-raised-sm)",
+                }}>{k}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
 
       <p style={{ fontSize: 12, color: "var(--t4)", marginBottom: 6, fontFamily: "'DM Sans', sans-serif" }}>
         Explore AI Models to download larger, more accurate models.
