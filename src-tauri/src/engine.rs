@@ -6,14 +6,15 @@ pub enum TranscriptionEngine {
     #[cfg(target_os = "macos")]
     Apple(crate::macos::speech_analyzer::SpeechAnalyzerEngine),
     Whisper(WhisperEngine),
+    #[cfg(target_os = "macos")]
+    Moonshine(crate::moonshine::engine::MoonshineEngine),
 }
 
 impl TranscriptionEngine {
     /// Returns the best available engine for this platform.
-    /// `engine_preference` is "auto" | "apple" | "whisper".
-    /// Propagates `WhisperEngine::new` failure so the caller can emit
-    /// `transcription-error` to the frontend rather than panicking.
-    pub fn select(model_path: &Path, engine_preference: &str) -> anyhow::Result<Self> {
+    /// `engine_preference` is "auto" | "apple" | "whisper" | "moonshine".
+    /// Falls back to Whisper if the preferred engine is unavailable.
+    pub fn select(model_path: &Path, engine_preference: &str, settings: &crate::settings::Settings) -> anyhow::Result<Self> {
         #[cfg(target_os = "macos")]
         {
             use crate::macos::speech_analyzer::SpeechAnalyzerEngine;
@@ -31,7 +32,30 @@ impl TranscriptionEngine {
                         return Ok(TranscriptionEngine::Apple(SpeechAnalyzerEngine));
                     }
                 }
-                _ => {} // "whisper" — fall through to Whisper
+                _ => {} // "whisper" / "moonshine" — handled below
+            }
+
+            if engine_preference == "moonshine" {
+                let variant = &settings.moonshine_model;
+                let model_dir = crate::moonshine::models::moonshine_model_dir(variant);
+                if !model_dir.exists() {
+                    tracing::warn!(
+                        "Moonshine model '{}' not downloaded — falling back to Whisper. Download it in Settings → AI Models.",
+                        variant
+                    );
+                } else {
+                    let arch = crate::moonshine::models::moonshine_model_arch(variant)
+                        .unwrap_or(crate::moonshine::ffi::MOONSHINE_MODEL_ARCH_TINY_STREAMING);
+                    match crate::moonshine::engine::MoonshineEngine::new(&model_dir, arch) {
+                        Ok(engine) => {
+                            tracing::info!("Using Moonshine engine ({})", variant);
+                            return Ok(TranscriptionEngine::Moonshine(engine));
+                        }
+                        Err(e) => {
+                            tracing::warn!("Moonshine engine failed to load: {e}, falling back to Whisper");
+                        }
+                    }
+                }
             }
         }
         tracing::info!("Using Whisper engine");
@@ -55,6 +79,10 @@ impl TranscriptionEngine {
             TranscriptionEngine::Whisper(engine) => {
                 engine.transcribe(audio, language, translate_to_english, initial_prompt, word_replacements)
             }
+            #[cfg(target_os = "macos")]
+            TranscriptionEngine::Moonshine(engine) => {
+                engine.transcribe(audio, language, translate_to_english, initial_prompt, word_replacements)
+            }
         }
     }
 
@@ -63,6 +91,8 @@ impl TranscriptionEngine {
             #[cfg(target_os = "macos")]
             TranscriptionEngine::Apple(_) => "apple",
             TranscriptionEngine::Whisper(_) => "whisper",
+            #[cfg(target_os = "macos")]
+            TranscriptionEngine::Moonshine(_) => "moonshine",
         }
     }
 }

@@ -115,10 +115,13 @@ pub struct Settings {
     /// VAD engine: "silero" (neural ONNX) | "rms" (energy threshold fallback).
     #[serde(default = "default_vad_engine")]
     pub vad_engine: String,
-    /// Transcription engine preference: "auto" | "apple" | "whisper".
-    /// Defaults to "whisper" for reliability; "auto" selects Apple Speech on macOS if available.
+    /// Transcription engine preference: "auto" | "apple" | "whisper" | "moonshine".
+    /// macOS default: "moonshine". Windows default: "whisper".
     #[serde(default = "default_transcription_engine")]
     pub transcription_engine: String,
+    /// Active Moonshine model variant: "tiny-streaming-en" | "medium-streaming-en".
+    #[serde(default = "default_moonshine_model")]
+    pub moonshine_model: String,
     /// Allow anonymous usage analytics via Aptabase. Default: true.
     #[serde(default = "default_true")]
     pub analytics_enabled: bool,
@@ -158,8 +161,14 @@ fn default_ptt_key() -> String { "custom".to_string() }
 fn default_true() -> bool { true }
 fn default_sound_volume() -> f32 { 0.2 }
 fn default_llm_model_name() -> String { "qwen2.5-0.5b-instruct-q4_k_m.gguf".to_string() }
-fn default_vad_engine() -> String { "rms".to_string() }
-fn default_transcription_engine() -> String { "whisper".to_string() }
+fn default_vad_engine() -> String { "silero".to_string() }
+fn default_transcription_engine() -> String {
+    #[cfg(target_os = "macos")]
+    { "moonshine".to_string() }
+    #[cfg(not(target_os = "macos"))]
+    { "whisper".to_string() }
+}
+fn default_moonshine_model() -> String { "tiny-streaming-en".to_string() }
 fn default_theme() -> String { "dark".to_string() }
 
 fn default_log_level() -> String {
@@ -212,6 +221,7 @@ impl Default for Settings {
             apply_polish_to_regular: false,
             vad_engine: default_vad_engine(),
             transcription_engine: default_transcription_engine(),
+            moonshine_model: default_moonshine_model(),
             analytics_enabled: true,
             crash_reporting_enabled: true,
             live_text_streaming: false,
@@ -353,8 +363,8 @@ mod tests {
     }
 
     #[test]
-    fn default_vad_engine_is_rms() {
-        assert_eq!(Settings::default().vad_engine, "rms");
+    fn default_vad_engine_is_silero() {
+        assert_eq!(Settings::default().vad_engine, "silero");
     }
 
     #[test]
