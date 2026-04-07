@@ -71,8 +71,31 @@ fn spawn_ptt_for_key(
     let app_release = app.clone();
     let app_smart_press = app.clone();
     let app_smart_release = app.clone();
+    let state_prewarm = shared_state.clone();
     let state_press = shared_state.clone();
     let state_smart_press = shared_state.clone();
+
+    // Fires immediately on Fn keydown (before 50ms debounce).
+    // Pre-warms the audio stream so the mic indicator tracks physical key hold time.
+    let on_fn_down = move || {
+        let already_open = state_prewarm.lock().unwrap_or_else(|e| e.into_inner()).capture.is_some();
+        if already_open { return; }
+        let state_for_thread = state_prewarm.clone();
+        std::thread::spawn(move || {
+            let settings = crate::settings::load_settings_sync();
+            let mut s = state_for_thread.lock().unwrap_or_else(|e| e.into_inner());
+            if s.capture.is_none() {
+                let capture = crate::audio::capture::AudioCapture::new(settings.vad_sensitivity, "silero");
+                match capture.start(settings.audio_input_device) {
+                    Ok(()) => {
+                        tracing::debug!("audio stream pre-warmed on Fn keydown");
+                        s.capture = Some(capture);
+                    }
+                    Err(e) => tracing::warn!("audio pre-warm failed: {e}"),
+                }
+            }
+        });
+    };
 
     let on_normal_press = move || {
         let is_recording = state_press.lock().unwrap_or_else(|e| e.into_inner()).capture.as_ref().map(|c| c.is_recording()).unwrap_or(false);
@@ -96,8 +119,8 @@ fn spawn_ptt_for_key(
         let _ = app_smart_release.emit("hotkey-stop-recording", ());
     };
 
-    tracing::info!("PTT tap spawned for key: Fn (with Fn+Space → smart dictation)");
-    Some(crate::fn_key::spawn_fn_key_tap(on_normal_press, on_normal_release, on_smart_press, on_smart_release))
+    tracing::info!("PTT tap spawned for key: Fn (with Fn+Ctrl → smart dictation)");
+    Some(crate::fn_key::spawn_fn_key_tap(on_fn_down, on_normal_press, on_normal_release, on_smart_press, on_smart_release))
 }
 
 /// Build the tray menu reflecting current settings (mic checkmark + style checkmark).

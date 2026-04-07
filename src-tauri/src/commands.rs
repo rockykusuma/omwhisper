@@ -358,12 +358,15 @@ pub async fn start_transcription(
 
 #[tauri::command]
 pub async fn stop_transcription(state: tauri::State<'_, SharedState>) -> Result<(), String> {
-    {
+    // End the recording and immediately take the capture out of state.
+    // This closes the audio stream promptly so macOS clears the orange mic indicator
+    // the moment the user releases the Fn key — no 30-second wait.
+    let capture_to_shutdown = {
         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
         s.usage_running.store(false, Ordering::SeqCst);
         if let Some(capture) = s.capture.as_ref() {
             if capture.is_recording() {
-                // Normal stop: flush VAD, send sentinel. Stream stays alive for next session.
+                // Flush VAD buffer and send the stop sentinel to the transcription thread.
                 capture.end_recording();
             } else {
                 // Key released before begin_recording was called (during settings load).
@@ -372,7 +375,9 @@ pub async fn stop_transcription(state: tauri::State<'_, SharedState>) -> Result<
         } else {
             s.start_cancelled = true;
         }
-    } // MutexGuard dropped here before the await below
+        // Remove capture from state immediately so macOS sees the stream as closed.
+        s.capture.take()
+    }; // MutexGuard dropped here before the await below
 
     let duration_ms = {
         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -389,22 +394,17 @@ pub async fn stop_transcription(state: tauri::State<'_, SharedState>) -> Result<
         "duration_ms": duration_ms,
     }));
 
-    // Shut down the audio stream after 30s of inactivity so macOS stops showing
-    // the orange mic indicator. If another recording starts before the timeout,
-    // the stream will still be alive (no latency hit).
-    let state_for_timeout = state.inner().clone();
-    tokio::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
-        let mut s = state_for_timeout.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(cap) = &s.capture {
-            if !cap.is_recording() {
-                if let Some(cap) = s.capture.take() {
-                    cap.shutdown();
-                    tracing::debug!("audio stream shut down after 30s idle — mic indicator cleared");
-                }
-            }
-        }
-    });
+    // Shut down the cpal stream in a background thread — USB devices (e.g. Jabra) can
+    // take seconds to release CoreAudio, so we don't block the stop path.
+    // State already has capture=None so macOS clears the mic indicator immediately.
+    if let Some(cap) = capture_to_shutdown {
+        tokio::spawn(async move {
+            tokio::task::spawn_blocking(move || {
+                cap.shutdown();
+                tracing::debug!("audio stream shut down — mic indicator cleared");
+            }).await.ok();
+        });
+    }
 
     Ok(())
 }

@@ -117,6 +117,9 @@ struct FnCtrlTapState {
     /// Current mode: IDLE, DEBOUNCING, NORMAL_PTT, or SMART_DICTATION.
     /// Shared with debounce threads via Arc.
     mode: Arc<AtomicU8>,
+    /// Fires immediately on Fn keydown, before the 50ms debounce window.
+    /// Used to pre-warm the audio stream so the mic indicator appears only while the key is held.
+    on_fn_down: Arc<dyn Fn() + Send + Sync>,
     on_normal_press: Arc<dyn Fn() + Send + Sync>,
     on_normal_release: Arc<dyn Fn() + Send + Sync>,
     on_smart_press: Arc<dyn Fn() + Send + Sync>,
@@ -162,6 +165,11 @@ unsafe extern "C" fn fn_ctrl_tap_callback(
 
             // ── Fn state changed ─────────────────────────────────────────────
             if fn_now && !was_fn_down {
+                // Fire pre-warm callback immediately (before debounce) so the audio
+                // stream opens the moment the user presses Fn. This keeps the macOS
+                // orange mic indicator tightly coupled to physical key hold time.
+                (state.on_fn_down)();
+
                 if ctrl_now {
                     // Ctrl was already held — immediate smart dictation chord
                     if state.mode.compare_exchange(
@@ -242,6 +250,9 @@ unsafe extern "C" fn fn_ctrl_tap_callback(
                 let was_down = state.fn_down.swap(is_down, Ordering::SeqCst);
 
                 if is_down && !was_down {
+                    // Pre-warm on Globe keydown too (same as Fn).
+                    (state.on_fn_down)();
+
                     let ctrl_held = state.ctrl_down.load(Ordering::SeqCst);
                     if ctrl_held {
                         if state.mode.compare_exchange(
@@ -296,12 +307,15 @@ unsafe extern "C" fn fn_ctrl_tap_callback(
 
 /// Spawns a CGEventTap for the Fn/Globe key with Fn+Left Ctrl chord detection.
 ///
+/// - `on_fn_down` — fires immediately on every Fn/Globe keydown, before the debounce window.
+///   Use this to pre-warm the audio stream so the mic indicator is tightly coupled to key hold time.
 /// - `on_normal_press` / `on_normal_release` — fired for plain Fn key PTT (normal dictation).
 /// - `on_smart_press` / `on_smart_release` — fired for Fn+Left Ctrl chord (smart dictation PTT).
 ///
 /// A 50ms debounce window after Fn press handles the case where Fn is pressed first.
 /// If Ctrl is already held when Fn goes down, smart dictation activates immediately.
 pub fn spawn_fn_key_tap(
+    on_fn_down: impl Fn() + Send + Sync + 'static,
     on_normal_press: impl Fn() + Send + Sync + 'static,
     on_normal_release: impl Fn() + Send + Sync + 'static,
     on_smart_press: impl Fn() + Send + Sync + 'static,
@@ -333,6 +347,7 @@ pub fn spawn_fn_key_tap(
             ctrl_down: AtomicBool::new(false),
             ever_fired,
             mode: Arc::new(AtomicU8::new(MODE_IDLE)),
+            on_fn_down: Arc::new(on_fn_down),
             on_normal_press: Arc::new(on_normal_press),
             on_normal_release: Arc::new(on_normal_release),
             on_smart_press: Arc::new(on_smart_press),
