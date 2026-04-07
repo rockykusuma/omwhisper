@@ -152,6 +152,7 @@ function App() {
       if (isRecordingRef.current) { stopRecording(); return; }
       const settings = await invoke<{ ai_backend: string }>("get_settings").catch(() => ({ ai_backend: "disabled" }));
       if (settings.ai_backend === "disabled") {
+        invoke("show_main_window").catch(() => {});
         setMicError("Smart Dictation needs AI setup. Open AI Models → Smart Dictation.");
         setTimeout(() => setMicError(null), 5000);
         return;
@@ -164,6 +165,7 @@ function App() {
         await invoke("polish_selected_text");
       } catch (err) {
         const msg = typeof err === "string" ? err : "Polish failed";
+        invoke("show_main_window").catch(() => {});
         setMicError(msg);
         setTimeout(() => setMicError(null), 5000);
       }

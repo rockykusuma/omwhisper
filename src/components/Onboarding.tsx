@@ -268,7 +268,10 @@ export default function Onboarding({ onComplete }: Props) {
         overflow: "hidden",
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px" }}>
-          <span style={{ fontSize: 13, color: "var(--t3)", fontFamily: "'DM Sans', sans-serif" }}>Global Hotkey</span>
+          <div>
+            <span style={{ fontSize: 13, color: "var(--t3)", fontFamily: "'DM Sans', sans-serif" }}>Dictation</span>
+            <span style={{ fontSize: 11, color: "var(--t4)", fontFamily: "'DM Sans', sans-serif", display: "block" }}>Toggle recording</span>
+          </div>
           <span style={{
             fontFamily: "'DM Mono', monospace", fontSize: 13, color: "var(--t1)",
             padding: "5px 12px", borderRadius: 8,
@@ -276,6 +279,36 @@ export default function Onboarding({ onComplete }: Props) {
             boxShadow: "var(--nm-raised-sm)",
           }}>
             {platform === "windows" ? "Alt+Shift+V" : "⌘ Shift V"}
+          </span>
+        </div>
+
+        <div style={{ height: 1, background: "color-mix(in srgb, var(--t1) 6%, transparent)", margin: "0 18px" }} />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 18px" }}>
+          <div>
+            <span style={{ fontSize: 13, color: "var(--t3)", fontFamily: "'DM Sans', sans-serif" }}>Smart Dictation</span>
+            <span style={{ fontSize: 11, color: "var(--t4)", fontFamily: "'DM Sans', sans-serif", display: "block" }}>Record + AI polish before paste</span>
+          </div>
+          <span style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 12, color: "var(--t1)",
+            padding: "4px 10px", borderRadius: 7,
+            background: "var(--bg)", boxShadow: "var(--nm-raised-sm)",
+          }}>
+            {platform === "windows" ? "Alt+Shift+B" : "⌘ Shift B"}
+          </span>
+        </div>
+
+        <div style={{ height: 1, background: "color-mix(in srgb, var(--t1) 6%, transparent)", margin: "0 18px" }} />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 18px" }}>
+          <div>
+            <span style={{ fontSize: 13, color: "var(--t3)", fontFamily: "'DM Sans', sans-serif" }}>Polish Selected Text</span>
+            <span style={{ fontSize: 11, color: "var(--t4)", fontFamily: "'DM Sans', sans-serif", display: "block" }}>AI polishes text you've already written</span>
+          </div>
+          <span style={{
+            fontFamily: "'DM Mono', monospace", fontSize: 12, color: "var(--t1)",
+            padding: "4px 10px", borderRadius: 7,
+            background: "var(--bg)", boxShadow: "var(--nm-raised-sm)",
+          }}>
+            {platform === "windows" ? "Alt+Shift+P" : "⌘ Shift P"}
           </span>
         </div>
 
