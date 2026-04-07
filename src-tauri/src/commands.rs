@@ -22,7 +22,7 @@ pub struct TranscriptionState {
     pub is_starting: Arc<AtomicBool>,
     /// Timestamp when the current recording started (for duration_ms in analytics).
     pub recording_start_time: Option<std::time::Instant>,
-    /// Name of the currently active transcription engine ("whisper" or "apple").
+    /// Name of the currently active transcription engine ("whisper" or "moonshine").
     pub active_engine: &'static str,
 }
 
@@ -84,8 +84,7 @@ pub async fn transcribe_file(path: String, model_path: String) -> Result<Vec<Seg
 
     tokio::task::spawn_blocking(move || {
         let resolved = resolve_model_path(&model_path);
-        // File transcription always uses Whisper — Apple's Speech framework does not support
-        // file-mode (buffer-based) transcription.
+        // File transcription always uses Whisper.
         let engine = WhisperEngine::new(&resolved).map_err(|e| e.to_string())?;
         let audio = load_wav_as_f32(Path::new(&path)).map_err(|e| e.to_string())?;
         let prompt = if initial_prompt.is_empty() { None } else { Some(initial_prompt.as_str()) };
@@ -135,7 +134,7 @@ pub async fn start_transcription(
     let sound_enabled = settings.sound_enabled;
     let sound_volume = settings.sound_volume;
     let translate_to_english = settings.translate_to_english;
-    // Force Whisper when translate is enabled — Apple Speech has no translation capability.
+    // Force Whisper when translation is enabled — Moonshine does not support translation.
     let engine_preference = if translate_to_english && settings.language != "en" {
         "whisper".to_string()
     } else {
@@ -1797,48 +1796,10 @@ pub async fn send_feedback(
 
 // ─── Transcription Engine ─────────────────────────────────────────────────────
 
-/// Returns the name of the currently active transcription engine ("whisper" or "apple").
+/// Returns the name of the currently active transcription engine ("whisper" or "moonshine").
 #[tauri::command]
 pub fn get_transcription_engine(state: tauri::State<'_, SharedState>) -> &'static str {
     state.lock().unwrap_or_else(|e| e.into_inner()).active_engine
-}
-
-/// Returns whether Apple Speech is available on this device.
-/// Always false on non-macOS and in dev mode (no .app bundle).
-#[tauri::command]
-pub fn is_apple_speech_available() -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        return crate::macos::speech_analyzer::SpeechAnalyzerEngine::is_available();
-    }
-    #[cfg(not(target_os = "macos"))]
-    false
-}
-
-/// Returns the Speech Recognition authorization status: "authorized" | "not_determined" | "denied".
-/// On non-macOS always returns "denied".
-#[tauri::command]
-pub fn get_apple_speech_auth_status() -> &'static str {
-    #[cfg(target_os = "macos")]
-    {
-        return crate::macos::speech_analyzer::apple_speech_auth_status();
-    }
-    #[cfg(not(target_os = "macos"))]
-    "denied"
-}
-
-/// Shows the system Speech Recognition permission dialog (if not yet determined).
-/// Blocks until the user responds. Returns true if granted.
-#[tauri::command]
-pub async fn request_speech_recognition_permission() -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        return tauri::async_runtime::spawn_blocking(
-            crate::macos::speech_analyzer::request_speech_recognition_permission
-        ).await.unwrap_or(false);
-    }
-    #[cfg(not(target_os = "macos"))]
-    false
 }
 
 #[tauri::command]

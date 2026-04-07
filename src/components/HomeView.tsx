@@ -258,11 +258,9 @@ export default function HomeView({
 
       {/* ── Engine badge ─────────────────────────────────────────────── */}
       <div className="flex justify-center pt-1 pb-0">
-        {engineName === "apple" ? (
-          <span className="text-[10px] font-medium text-blue-400/70">⚡ Apple Speech</span>
-        ) : (
-          <span className="text-[10px] font-medium" style={{ color: "var(--t4)" }}>◎ Whisper</span>
-        )}
+        <span className="text-[10px] font-medium" style={{ color: "var(--t4)" }}>
+          {engineName === "moonshine" ? "◎ Moonshine" : "◎ Whisper"}
+        </span>
       </div>
 
       {/* ── Record / Stop button ────────────────────────────────────────── */}

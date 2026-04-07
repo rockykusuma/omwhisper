@@ -115,7 +115,7 @@ pub struct Settings {
     /// VAD engine: "silero" (neural ONNX) | "rms" (energy threshold fallback).
     #[serde(default = "default_vad_engine")]
     pub vad_engine: String,
-    /// Transcription engine preference: "auto" | "apple" | "whisper" | "moonshine".
+    /// Transcription engine preference: "whisper" | "moonshine".
     /// macOS default: "moonshine". Windows default: "whisper".
     #[serde(default = "default_transcription_engine")]
     pub transcription_engine: String,

@@ -20,8 +20,7 @@ A fast, privacy-first voice transcription app for **macOS** and **Windows**. Pow
 - **Menu bar** — Lives quietly in your menu bar, out of the way
 - **Auto-paste** — Transcription is pasted directly into the focused app
 - **Smart Dictation** — Voice → Whisper → LLM polish → Paste (`Cmd+Shift+B`)
-- **Apple Speech** — Use macOS built-in speech engine as an alternative to Whisper
-- **Push-to-Talk** — Hold a key to record, release to stop (macOS)
+- **Push-to-Talk** — Hold Fn to record, release to stop (macOS)
 - **Silero VAD** — Neural voice activity detection filters silence before Whisper inference
 - **Live Text Streaming** — See partial transcription in the overlay as you speak
 - **Custom Vocabulary** — Bias Whisper toward domain-specific words
@@ -50,8 +49,8 @@ A fast, privacy-first voice transcription app for **macOS** and **Windows**. Pow
 | Auto-paste | ✅ Accessibility API | ✅ SendInput |
 | Silero VAD (neural) | ✅ | ✅ |
 | Live Text Streaming | ✅ | ✅ |
-| Apple Speech engine | ✅ | ❌ |
-| Push-to-Talk | ✅ CGEventTap | ❌ Toggle only |
+| Moonshine engine | ✅ | ❌ |
+| Push-to-Talk | ✅ CGEventTap (Fn key) | ❌ Toggle only |
 | Smart Dictation (AI) | ✅ Ollama + Cloud + Built-in LLM | ✅ Ollama + Cloud |
 | Built-in on-device LLM | ✅ llama.cpp Metal | ❌ |
 | Installer | `.dmg` / `.app` | `.exe` (NSIS) |
@@ -106,9 +105,11 @@ bash scripts/build-release.sh
 
 ---
 
-## Whisper Models
+## Transcription Models
 
-The app ships with `tiny.en` bundled. Additional models can be downloaded in-app via **AI Models**:
+**macOS:** Moonshine is the default engine — ultra-fast English transcription via a dedicated neural model. Download in-app via **AI Models → Moonshine**.
+
+**Whisper** models are available for all languages and translation. The app ships with `tiny.en` bundled; larger models can be downloaded in-app via **AI Models**:
 
 | Model | Size | Speed | Quality |
 |-------|------|-------|---------|
@@ -147,7 +148,7 @@ Six built-in polish styles: Professional, Casual, Concise, Translate, Email, Mee
 | Styling | Tailwind CSS v4 |
 | State | Zustand |
 | Backend | Rust |
-| Transcription | whisper-rs 0.14 (whisper.cpp) |
+| Transcription | whisper-rs 0.14 (whisper.cpp) · Moonshine (macOS) |
 | Audio capture | cpal 0.15 |
 | AI polish | Ollama / OpenAI / Groq / llama-cpp-2 |
 | History | SQLite (rusqlite) |
