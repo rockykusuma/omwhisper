@@ -25,6 +25,9 @@ function App() {
   const [activeView, setActiveView] = useState<View>("home");
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab | undefined>(undefined);
   const [activeModel, setActiveModel] = useState("tiny.en");
+  const [activeMoonshineModel, setActiveMoonshineModel] = useState("tiny-streaming-en");
+  const [transcriptionEngine, setTranscriptionEngine] = useState("whisper");
+  const [platform, setPlatform] = useState("macos");
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateNotes, setUpdateNotes] = useState("");
@@ -63,6 +66,19 @@ function App() {
     setActiveView(view as View);
     setSettingsInitialTab(tab as SettingsTab | undefined);
   };
+
+  // Re-sync engine + model selections when navigating to Models view,
+  // so changes made in Settings are reflected immediately.
+  useEffect(() => {
+    if (activeView !== "models") return;
+    invoke<{ transcription_engine?: string; active_model?: string; moonshine_model?: string }>("get_settings")
+      .then((s) => {
+        if (s.transcription_engine) setTranscriptionEngine(s.transcription_engine);
+        if (s.active_model) setActiveModel(s.active_model);
+        if (s.moonshine_model) setActiveMoonshineModel(s.moonshine_model);
+      })
+      .catch(() => {});
+  }, [activeView]);
 
   // ── Centralised start / stop ────────────────────────────────────────────
   const startRecording = useCallback(async (smartDictation = false) => {
@@ -113,9 +129,14 @@ function App() {
     invoke<boolean>("is_first_launch").then(setShowOnboarding);
     invoke<boolean>("is_running_from_dmg").then(setRunningFromDmg).catch(() => {});
     invoke<string>("get_app_version").then(setAppVersion).catch(() => {});
-    invoke<{ active_model: string }>("get_settings")
-      .then((s) => { if (s.active_model) setActiveModel(s.active_model); })
+    invoke<{ active_model: string; moonshine_model?: string; transcription_engine?: string }>("get_settings")
+      .then((s) => {
+        if (s.active_model) setActiveModel(s.active_model);
+        if (s.moonshine_model) setActiveMoonshineModel(s.moonshine_model);
+        if (s.transcription_engine) setTranscriptionEngine(s.transcription_engine);
+      })
       .catch(() => {});
+    invoke<string>("get_platform").then(setPlatform).catch(() => {});
     invoke<{ is_downloaded: boolean }[]>("get_models")
       .then(models => { if (!models.some(m => m.is_downloaded)) setNoModelBanner(true); })
       .catch(() => {});
@@ -451,12 +472,24 @@ function App() {
                 activeModel={activeModel}
                 onModelChange={async (name) => {
                   setActiveModel(name);
+                  setTranscriptionEngine("whisper");
                   try {
                     const s = await invoke<Record<string, unknown>>("get_settings");
-                    await invoke("update_settings", { newSettings: { ...s, active_model: name } });
+                    await invoke("update_settings", { newSettings: { ...s, active_model: name, transcription_engine: "whisper" } });
                   } catch {}
                 }}
-                initialTab={settingsInitialTab as "whisper" | "smart-dictation" | undefined}
+                activeMoonshineModel={activeMoonshineModel}
+                onMoonshineModelChange={async (name) => {
+                  setActiveMoonshineModel(name);
+                  setTranscriptionEngine("moonshine");
+                  try {
+                    const s = await invoke<Record<string, unknown>>("get_settings");
+                    await invoke("update_settings", { newSettings: { ...s, moonshine_model: name, transcription_engine: "moonshine" } });
+                  } catch {}
+                }}
+                transcriptionEngine={transcriptionEngine}
+                platform={platform}
+                initialTab={settingsInitialTab as "models" | "smart-dictation" | undefined}
               />
             )}
             <div className={activeView === "settings" ? "h-full" : "hidden"}>

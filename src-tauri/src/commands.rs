@@ -42,9 +42,9 @@ impl TranscriptionState {
 pub type SharedState = Arc<Mutex<TranscriptionState>>;
 
 /// Cached transcription engine — avoids reloading the Whisper model (~500ms) on every session.
-/// Stores the engine alongside the model path it was loaded for so the cache is automatically
-/// invalidated when the user switches models.
-pub type WhisperEngineCache = Arc<Mutex<Option<(crate::engine::TranscriptionEngine, std::path::PathBuf)>>>;
+/// Stores the engine alongside the model path and engine name so the cache is automatically
+/// invalidated when the user switches models OR switches engine type (e.g. Whisper ↔ Moonshine).
+pub type WhisperEngineCache = Arc<Mutex<Option<(crate::engine::TranscriptionEngine, std::path::PathBuf, String)>>>;
 
 /// Tracks active model download cancellation tokens keyed by model name.
 pub type DownloadCancelTokens = Arc<Mutex<std::collections::HashMap<String, Arc<AtomicBool>>>>;
@@ -108,13 +108,13 @@ pub async fn start_transcription(
     engine_cache: tauri::State<'_, WhisperEngineCache>,
     app: AppHandle,
 ) -> Result<(), String> {
-    // Guard against overlapping sessions (rapid hotkey taps during startup delay).
+    // Guard against overlapping sessions (rapid hotkey taps).
     let is_starting = state.lock().unwrap_or_else(|e| e.into_inner()).is_starting.clone();
     if is_starting.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_err() {
-        return Err("cancelled".to_string()); // already starting, treat as silent no-op
+        return Err("cancelled".to_string());
     }
-    // Also reject if a capture session is already active.
-    if state.lock().unwrap_or_else(|e| e.into_inner()).capture.is_some() {
+    // Reject if already actively recording.
+    if state.lock().unwrap_or_else(|e| e.into_inner()).capture.as_ref().map(|c| c.is_recording()).unwrap_or(false) {
         is_starting.store(false, Ordering::SeqCst);
         return Err("cancelled".to_string());
     }
@@ -143,18 +143,29 @@ pub async fn start_transcription(
 
     let is_ptt = settings.recording_mode == "push_to_talk";
 
-    // In PTT mode, skip chime + delay entirely for instant recording start.
-    // In toggle mode, play chime and wait for echo to clear.
+    // The audio stream is pre-started at app launch and stays open between sessions.
+    // If it failed at launch (e.g. no mic at startup), fall back to starting it now.
+    if state.lock().unwrap_or_else(|e| e.into_inner()).capture.is_none() {
+        let capture = AudioCapture::new(settings.vad_sensitivity, "silero");
+        if let Err(e) = capture.start(settings.audio_input_device.clone()) {
+            is_starting.store(false, Ordering::SeqCst);
+            return Err(e.to_string());
+        }
+        state.lock().unwrap_or_else(|e| e.into_inner()).capture = Some(capture);
+    }
+    is_starting.store(false, Ordering::SeqCst);
+
+    // Toggle mode: play chime and wait for room echo to clear before recording.
+    // PTT mode: stream is already open — no warmup needed, recording starts instantly.
     if sound_enabled && !is_ptt {
         crate::sounds::play(crate::sounds::Sound::Start, sound_volume);
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 
-    // PTT: if the key was released during the sound delay (toggle mode) or
-    // before capture started, abort silently.
+    // If the PTT key was released during the warmup/chime, stop_transcription will have
+    // called shutdown() on the capture and set start_cancelled. Abort cleanly.
     if state.lock().unwrap_or_else(|e| e.into_inner()).start_cancelled {
         state.lock().unwrap_or_else(|e| e.into_inner()).start_cancelled = false;
-        is_starting.store(false, Ordering::SeqCst);
         return Err("cancelled".to_string());
     }
 
@@ -166,36 +177,34 @@ pub async fn start_transcription(
         }));
     }
 
-    // Build capture object and start the audio pipeline.
-    // AudioCapture::new signature is (vad_sensitivity, vad_engine) — sensitivity first, engine second.
-    let capture = AudioCapture::new(settings.vad_sensitivity, &settings.vad_engine);
-    let (speech_rx, level_rx) = capture.start(settings.audio_input_device.clone(), settings.live_text_streaming).map_err(|e| {
-        is_starting.store(false, Ordering::SeqCst);
-        e.to_string()
-    })?;
+    // Begin active recording — resets VAD, creates fresh channels, flips recording gate.
+    let (speech_rx, level_rx) = {
+        let s = state.lock().unwrap_or_else(|e| e.into_inner());
+        match s.capture.as_ref() {
+            Some(capture) => capture.begin_recording(settings.live_text_streaming).map_err(|e| e.to_string())?,
+            None => return Err("audio pipeline lost".to_string()),
+        }
+    };
 
-    // Store the capture handle so stop_transcription can reach it, then clear the starting guard.
     {
         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-        s.capture = Some(capture);
         s.recording_start_time = Some(std::time::Instant::now());
         s.usage_running.store(true, Ordering::SeqCst);
-    };
-    is_starting.store(false, Ordering::SeqCst);
+    }
 
     let model_path = resolve_model_path(&model);
 
     // Try to reuse a cached engine (avoids ~500ms model reload on every session).
-    // Cache is invalidated automatically when the model path changes.
+    // Cache is invalidated when the model path OR engine type changes.
     let cached = {
         let mut guard = engine_cache.lock().unwrap_or_else(|e| e.into_inner());
         match guard.take() {
-            Some((eng, path)) if path == model_path => {
-                tracing::debug!("whisper: reusing cached engine for {:?}", model_path);
+            Some((eng, path, cached_engine)) if path == model_path && cached_engine == engine_preference => {
+                tracing::debug!("engine: reusing cached {} engine for {:?}", cached_engine, model_path);
                 Some(eng)
             }
-            Some((eng, _)) => {
-                tracing::debug!("whisper: model changed, dropping cached engine");
+            Some((eng, _, old_engine)) => {
+                tracing::debug!("engine: invalidating cache (engine or model changed, was: {})", old_engine);
                 drop(eng); // explicit drop makes intent clear
                 None
             }
@@ -206,7 +215,7 @@ pub async fn start_transcription(
     // Load a fresh engine only when the cache missed.
     let engine = match cached {
         Some(e) => e,
-        None => match crate::engine::TranscriptionEngine::select(&model_path, &engine_preference) {
+        None => match crate::engine::TranscriptionEngine::select(&model_path, &engine_preference, &settings) {
             Ok(e) => e,
             Err(err) => {
                 eprintln!("failed to select transcription engine: {err}");
@@ -231,6 +240,7 @@ pub async fn start_transcription(
     // Clone the cache Arc so the transcription thread can return the engine when done.
     let engine_cache_for_thread = Arc::clone(&engine_cache);
     let model_path_for_thread = model_path.clone();
+    let engine_preference_for_thread = engine_preference.clone();
 
     // Spawn a dedicated thread to load the model and consume speech utterances.
     // TranscriptionEngine is Send (see engine.rs unsafe impl Send).
@@ -298,8 +308,8 @@ pub async fn start_transcription(
         // or timed-out engine is dropped (engine_slot is None in those cases).
         if let Some(eng) = engine_slot {
             let mut guard = engine_cache_for_thread.lock().unwrap_or_else(|e| e.into_inner());
-            *guard = Some((eng, model_path_for_thread));
-            tracing::debug!("whisper: engine returned to cache");
+            *guard = Some((eng, model_path_for_thread, engine_preference_for_thread));
+            tracing::debug!("engine: engine returned to cache");
         }
 
         // All audio chunks have been processed — signal the frontend to paste/save
@@ -314,10 +324,15 @@ pub async fn stop_transcription(state: tauri::State<'_, SharedState>) -> Result<
     {
         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
         s.usage_running.store(false, Ordering::SeqCst);
-        if let Some(capture) = s.capture.take() {
-            capture.stop();
+        if let Some(capture) = s.capture.as_ref() {
+            if capture.is_recording() {
+                // Normal stop: flush VAD, send sentinel. Stream stays alive for next session.
+                capture.end_recording();
+            } else {
+                // Key released before begin_recording was called (during settings load).
+                s.start_cancelled = true;
+            }
         } else {
-            // Key released before capture started (during sound delay) — signal start to abort.
             s.start_cancelled = true;
         }
     } // MutexGuard dropped here before the await below
@@ -451,7 +466,7 @@ pub async fn delete_model(
     // a use-after-free where the next recording would try to use a missing file.
     {
         let mut guard = engine_cache.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some((_, ref path)) = *guard {
+        if let Some((_, ref path, _)) = *guard {
             let deleted_path = resolve_model_path(&name);
             if *path == deleted_path {
                 tracing::debug!("whisper: invalidating engine cache for deleted model {:?}", name);
@@ -606,8 +621,22 @@ fn previous_app() -> &'static Mutex<Option<String>> {
     PREVIOUS_APP.get_or_init(|| Mutex::new(None))
 }
 
+#[allow(dead_code)]
 pub fn get_previous_app() -> &'static Mutex<Option<String>> {
     previous_app()
+}
+
+/// Capture the current frontmost app and store it as the paste target.
+/// Skips storing if OmWhisper is currently frontmost — preserves the last real target
+/// so paste still works when the user has Settings or the main window open on another monitor.
+pub fn store_focused_app() {
+    let app_name = crate::paste::get_frontmost_app();
+    let is_self = app_name.as_deref()
+        .map(|n| n.to_lowercase().contains("omwhisper"))
+        .unwrap_or(false);
+    if !is_self {
+        *previous_app().lock().unwrap_or_else(|e| e.into_inner()) = app_name;
+    }
 }
 
 #[tauri::command]
@@ -699,7 +728,9 @@ pub async fn get_settings() -> Result<Settings, String> {
 }
 
 #[tauri::command]
-pub async fn update_settings(app: tauri::AppHandle, new_settings: Settings) -> Result<(), String> {
+pub async fn update_settings(app: tauri::AppHandle, new_settings: Settings, state: tauri::State<'_, SharedState>) -> Result<(), String> {
+    let old_settings = crate::settings::load_settings().await;
+
     // Sync autostart when auto_launch changes.
     {
         use tauri_plugin_autostart::ManagerExt;
@@ -711,6 +742,25 @@ pub async fn update_settings(app: tauri::AppHandle, new_settings: Settings) -> R
         }
     }
     settings::save_settings(&new_settings).await.map_err(|e| e.to_string())?;
+
+    // If audio device or VAD sensitivity changed, rebuild the persistent capture stream.
+    if old_settings.audio_input_device != new_settings.audio_input_device
+        || (old_settings.vad_sensitivity - new_settings.vad_sensitivity).abs() > f32::EPSILON
+    {
+        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(capture) = s.capture.take() {
+            capture.shutdown();
+        }
+        let new_capture = AudioCapture::new(new_settings.vad_sensitivity, "silero");
+        match new_capture.start(new_settings.audio_input_device.clone()) {
+            Ok(()) => {
+                s.capture = Some(new_capture);
+                tracing::info!("audio stream restarted after device/sensitivity change");
+            }
+            Err(e) => tracing::error!("failed to restart audio pipeline: {e}"),
+        }
+    }
+
     let _ = app.emit("settings-changed", ());
     Ok(())
 }
@@ -749,46 +799,90 @@ pub async fn complete_onboarding() -> Result<(), String> {
 }
 
 /// On macOS, return the monitor that currently contains the mouse cursor.
-/// CoreGraphics is already linked via paste.rs so no new dependency is needed.
-/// The CG logical coordinate space matches Tauri's (physical / scale_factor)
-/// so the bounding-box test is straightforward.
+///
+/// Uses CGGetDisplaysWithPoint to identify the CGDirectDisplayID under the cursor,
+/// then matches it to a Tauri monitor by comparing origins in CG logical coordinates.
+/// This avoids the coordinate-system mismatch that occurs when naively dividing
+/// Tauri physical positions by each monitor's own scale_factor: CG logical coordinates
+/// always use the PRIMARY display's scale as the global reference, so secondary monitors
+/// with a different scale_factor would never be found by a per-monitor division.
 #[cfg(target_os = "macos")]
 fn monitor_for_cursor(app: &tauri::AppHandle) -> Option<tauri::Monitor> {
-    use std::os::raw::c_void;
+    use std::os::raw::{c_uint, c_void};
 
     #[repr(C)]
     #[derive(Copy, Clone)]
     struct CGPoint { x: f64, y: f64 }
 
+    #[repr(C)]
+    #[derive(Copy, Clone)]
+    struct CGSize { width: f64, height: f64 }
+
+    #[repr(C)]
+    #[derive(Copy, Clone)]
+    struct CGRect { origin: CGPoint, size: CGSize }
+
+    type CGDirectDisplayID = u32;
+
     #[link(name = "CoreGraphics", kind = "framework")]
     extern "C" {
         fn CGEventCreate(source: *mut c_void) -> *mut c_void;
         fn CGEventGetLocation(event: *mut c_void) -> CGPoint;
+        /// Finds all displays that contain the given point (CG logical coords).
+        /// Returns kCGErrorSuccess (0) on success.
+        fn CGGetDisplaysWithPoint(
+            point: CGPoint,
+            max_displays: c_uint,
+            displays: *mut CGDirectDisplayID,
+            display_count: *mut c_uint,
+        ) -> i32;
+        /// Returns the bounding box of a display in CG logical coordinates.
+        fn CGDisplayBounds(display: CGDirectDisplayID) -> CGRect;
+        fn CGMainDisplayID() -> CGDirectDisplayID;
     }
     #[link(name = "CoreFoundation", kind = "framework")]
     extern "C" {
         fn CFRelease(cf: *mut c_void);
     }
 
-    let cursor = unsafe {
+    // Step 1: get cursor position and the CG display ID it's on.
+    let (cursor, cg_id) = unsafe {
         let event = CGEventCreate(std::ptr::null_mut());
-        if event.is_null() { return None; }
+        if event.is_null() { return app.primary_monitor().ok().flatten(); }
         let pos = CGEventGetLocation(event);
         CFRelease(event);
-        pos
-    };
 
-    // On macOS: CG logical coords == Tauri (physical / scale_factor)
-    // because winit derives physical positions from NSScreen.frame * backing_scale.
+        let mut displays = [0u32; 4];
+        let mut count = 0u32;
+        let err = CGGetDisplaysWithPoint(pos, 4, displays.as_mut_ptr(), &mut count);
+        let id = if err == 0 && count > 0 { displays[0] } else { CGMainDisplayID() };
+        tracing::info!("monitor_for_cursor: cursor=({:.0},{:.0}) CGGetDisplaysWithPoint err={} count={} id={}", pos.x, pos.y, err, count, id);
+        (pos, id)
+    };
+    let _ = cursor;
+
+    // Step 2: get that display's bounds in CG logical coordinates.
+    let target = unsafe { CGDisplayBounds(cg_id) };
+    tracing::info!("monitor_for_cursor: target CG bounds origin=({:.0},{:.0}) size=({:.0}x{:.0})",
+        target.origin.x, target.origin.y, target.size.width, target.size.height);
+
+    // Divide each monitor's physical position by its OWN scale to get CG logical origin.
     let monitors = app.available_monitors().ok()?;
-    monitors.into_iter().find(|m| {
+    let result = monitors.into_iter().min_by_key(|m| {
         let scale = m.scale_factor();
         let lx = m.position().x as f64 / scale;
         let ly = m.position().y as f64 / scale;
-        let lw = m.size().width  as f64 / scale;
-        let lh = m.size().height as f64 / scale;
-        cursor.x >= lx && cursor.x < lx + lw && cursor.y >= ly && cursor.y < ly + lh
-    }).or_else(|| app.primary_monitor().ok().flatten())
+        tracing::info!("monitor_for_cursor: candidate {:?} phys=({},{}) scale={} → logical=({:.0},{:.0})",
+            m.name(), m.position().x, m.position().y, scale, lx, ly);
+        let dx = lx - target.origin.x;
+        let dy = ly - target.origin.y;
+        (dx * dx + dy * dy) as i64
+    }).or_else(|| app.primary_monitor().ok().flatten());
+
+    if let Some(ref m) = result {
+        tracing::info!("monitor_for_cursor: selected {:?}", m.name());
+    }
+    result
 }
 
 #[tauri::command]
@@ -808,43 +902,35 @@ pub async fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
             let screen = monitor.size();    // physical pixels
             let origin = monitor.position(); // physical top-left of this monitor
 
-            // Overlay logical dimensions — must match the overlay window config in tauri.conf.json.
+            // All calculations in LOGICAL pixels (points) to avoid DPI conversion issues
+            // when the overlay window is currently on a different screen than the target.
+            // Dividing physical values by the monitor's OWN scale gives CG logical coords.
             const OVERLAY_W: f64 = 340.0;
             const OVERLAY_H: f64 = 220.0;
 
-            // Force the window to apply its configured size before reading it back.
-            // outer_size() returns (0,0) before the window has ever been rendered;
-            // set_size() ensures the dimensions are committed so the read is reliable.
+            let sw = screen.width  as f64 / scale;
+            let sh = screen.height as f64 / scale;
+            let ox = origin.x as f64 / scale;
+            let oy = origin.y as f64 / scale;
+
             let _ = win.set_size(tauri::LogicalSize::<f64> { width: OVERLAY_W, height: OVERLAY_H });
-            let actual = win.outer_size().unwrap_or(tauri::PhysicalSize {
-                width:  (OVERLAY_W * scale) as u32,
-                height: (OVERLAY_H * scale) as u32,
-            });
-            let win_w = actual.width as i32;
-            let win_h = actual.height as i32;
 
-            // Logical-pixel margins → physical
-            // top: just below the macOS menu bar (~24 logical px)
-            // bottom: above the macOS Dock (~70 logical px tall by default)
-            // side: small inset from screen edge
-            let top_margin    = (28.0 * scale) as i32;
-            let bottom_margin = (84.0 * scale) as i32;
-            let side_margin   = (16.0 * scale) as i32;
-
-            let sw = screen.width as i32;
-            let sh = screen.height as i32;
-            let ox = origin.x;
-            let oy = origin.y;
+            // Margins in logical pixels
+            let top_margin:    f64 = 28.0;
+            let bottom_margin: f64 = 84.0;
+            let side_margin:   f64 = 16.0;
 
             let (x, y) = match settings.overlay_placement.as_str() {
                 "top-left"      => (ox + side_margin, oy + top_margin),
-                "top-right"     => (ox + sw - win_w - side_margin, oy + top_margin),
-                "bottom-center" => (ox + (sw - win_w) / 2, oy + sh - win_h - bottom_margin),
-                "bottom-left"   => (ox + side_margin, oy + sh - win_h - bottom_margin),
-                "bottom-right"  => (ox + sw - win_w - side_margin, oy + sh - win_h - bottom_margin),
-                _               => (ox + (sw - win_w) / 2, oy + top_margin), // top-center default
+                "top-right"     => (ox + sw - OVERLAY_W - side_margin, oy + top_margin),
+                "bottom-center" => (ox + (sw - OVERLAY_W) / 2.0, oy + sh - OVERLAY_H - bottom_margin),
+                "bottom-left"   => (ox + side_margin, oy + sh - OVERLAY_H - bottom_margin),
+                "bottom-right"  => (ox + sw - OVERLAY_W - side_margin, oy + sh - OVERLAY_H - bottom_margin),
+                _               => (ox + (sw - OVERLAY_W) / 2.0, oy + top_margin), // top-center default
             };
-            let _ = win.set_position(tauri::PhysicalPosition { x, y });
+            tracing::info!("show_overlay: monitor={:?} scale={} ox={:.0} oy={:.0} sw={:.0} sh={:.0} → pos=({:.0},{:.0})",
+                monitor.name(), scale, ox, oy, sw, sh, x, y);
+            let _ = win.set_position(tauri::LogicalPosition::<f64> { x, y });
         }
         let _ = app.emit("recording-state", true);
         win.show().map_err(|e| e.to_string())?;
@@ -1014,12 +1100,14 @@ pub async fn get_debug_info() -> String {
          macOS:          {macos_version}\n\
          Hardware:       {hw_model} / {chip}\n\
          \n\
+         Active Engine:  {}\n\
          Active Model:   {}\n\
          Downloaded:     {}\n\
          \n\
          License:        {license_status}\n\
          Usage Today:    {}m {}s\n\
          Log Level:      {}\n",
+        settings.transcription_engine,
         settings.active_model,
         if downloaded.is_empty() { "none".to_string() } else { downloaded.join(", ") },
         seconds_used / 60,
@@ -1703,6 +1791,90 @@ pub async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
     app.restart();
+}
+
+// ── Moonshine model management commands (macOS only) ─────────────────────────
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn get_moonshine_models() -> Result<Vec<crate::moonshine::models::MoonshineVariantInfo>, String> {
+    Ok(crate::moonshine::models::list_moonshine_models())
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn download_moonshine_model(
+    variant: String,
+    app: tauri::AppHandle,
+    cancel_tokens: tauri::State<'_, DownloadCancelTokens>,
+) -> Result<(), String> {
+    let cancel = Arc::new(AtomicBool::new(false));
+    let key = format!("moonshine:{variant}");
+    {
+        let mut map = cancel_tokens.lock().unwrap();
+        map.insert(key.clone(), Arc::clone(&cancel));
+    }
+
+    let app_clone = app.clone();
+    let variant_clone = variant.clone();
+    let total = crate::moonshine::models::list_moonshine_models()
+        .into_iter()
+        .find(|m| m.name == variant)
+        .map(|m| m.total_size_bytes)
+        .unwrap_or(1);
+
+    let result = crate::moonshine::models::download_moonshine_model(
+        &variant,
+        move |done, _total| {
+            let _ = app_clone.emit(
+                "download-progress",
+                serde_json::json!({
+                    "name": format!("moonshine:{}", variant_clone),
+                    "downloaded": done,
+                    "total": total,
+                }),
+            );
+        },
+        cancel,
+    )
+    .await;
+
+    cancel_tokens.lock().unwrap().remove(&key);
+
+    match result {
+        Ok(_) => {
+            let _ = app.emit(
+                "download-progress",
+                serde_json::json!({
+                    "name": format!("moonshine:{}", variant),
+                    "downloaded": total,
+                    "total": total,
+                    "done": true,
+                }),
+            );
+            Ok(())
+        }
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn cancel_moonshine_model_download(
+    variant: String,
+    cancel_tokens: tauri::State<'_, DownloadCancelTokens>,
+) -> Result<(), String> {
+    let map = cancel_tokens.lock().unwrap();
+    if let Some(flag) = map.get(&format!("moonshine:{variant}")) {
+        flag.store(true, Ordering::Relaxed);
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn delete_moonshine_model(variant: String) -> Result<(), String> {
+    crate::moonshine::models::delete_moonshine_model(&variant).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

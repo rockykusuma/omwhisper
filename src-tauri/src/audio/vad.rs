@@ -172,6 +172,15 @@ impl Vad {
         }
     }
 
+    /// Reset all VAD state without flushing (called at begin_recording).
+    /// Discards any stale audio from before the hotkey was pressed.
+    pub fn reset(&mut self) {
+        self.speech_buffer.clear();
+        self.leftover.clear();
+        self.silence_samples = 0;
+        self.reset_state();
+    }
+
     /// Force-flush any buffered speech (called on recording stop).
     ///
     /// Resets all state: speech_buffer, leftover, silence_samples, and LSTM state.
