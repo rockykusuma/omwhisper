@@ -107,8 +107,13 @@ export default function HomeView({
 
   // ── Data loaders ──
   const loadSettings = useCallback(async () => {
-    const s = await invoke<{ audio_input_device: string | null; apply_polish_to_regular: boolean; ai_backend: string }>("get_settings").catch(() => null);
-    setMicName(s?.audio_input_device || "Default Microphone");
+    const [s, availableDevices] = await Promise.all([
+      invoke<{ audio_input_device: string | null; apply_polish_to_regular: boolean; ai_backend: string }>("get_settings").catch(() => null),
+      invoke<string[]>("get_audio_devices").catch(() => [] as string[]),
+    ]);
+    const savedDevice = s?.audio_input_device;
+    const deviceConnected = savedDevice ? availableDevices.includes(savedDevice) : false;
+    setMicName(deviceConnected ? savedDevice! : "Default Microphone");
     setApplyPolishToRegular(s?.apply_polish_to_regular ?? false);
 
     // Check smart dictation readiness
@@ -253,11 +258,9 @@ export default function HomeView({
 
       {/* ── Engine badge ─────────────────────────────────────────────── */}
       <div className="flex justify-center pt-1 pb-0">
-        {engineName === "apple" ? (
-          <span className="text-[10px] font-medium text-blue-400/70">⚡ Apple Speech</span>
-        ) : (
-          <span className="text-[10px] font-medium" style={{ color: "var(--t4)" }}>◎ Whisper</span>
-        )}
+        <span className="text-[10px] font-medium" style={{ color: "var(--t4)" }}>
+          {engineName === "moonshine" ? "◎ Moonshine" : "◎ Whisper"}
+        </span>
       </div>
 
       {/* ── Record / Stop button ────────────────────────────────────────── */}

@@ -94,6 +94,36 @@ fn main() {
     #[cfg(target_os = "macos")]
     compile_swift_shim();
 
+    #[cfg(target_os = "macos")]
+    link_moonshine();
+
     // Tauri's own build step
     tauri_build::build();
+}
+
+/// Link the pre-built Moonshine shared library and its OnnxRuntime dependency.
+///
+/// Both dylibs live in src-tauri/Frameworks/ (gitignored).
+/// Run scripts/setup-moonshine-sdk.sh once to populate that directory.
+/// In the release .app bundle, tauri.conf.json `bundle.macOS.frameworks` places
+/// them in Contents/Frameworks/ with @rpath automatically wired.
+#[cfg(target_os = "macos")]
+fn link_moonshine() {
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let frameworks = format!("{manifest_dir}/Frameworks");
+
+    if !std::path::Path::new(&format!("{frameworks}/libmoonshine.dylib")).exists() {
+        panic!(
+            "\n\nlibmoonshine.dylib not found in {frameworks}/\n\
+             Run: bash scripts/setup-moonshine-sdk.sh\n\n"
+        );
+    }
+
+    // Both dylibs are in the same Frameworks/ directory.
+    println!("cargo:rustc-link-search=native={frameworks}");
+    println!("cargo:rustc-link-lib=dylib=moonshine");
+    println!("cargo:rustc-link-lib=dylib=onnxruntime.1.23.2");
+
+    println!("cargo:rerun-if-changed={frameworks}/libmoonshine.dylib");
+    println!("cargo:rerun-if-changed={frameworks}/libonnxruntime.1.23.2.dylib");
 }

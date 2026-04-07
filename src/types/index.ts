@@ -67,6 +67,7 @@ export interface AppSettings {
   apply_polish_to_regular: boolean;
   vad_engine: string;
   transcription_engine: string;
+  moonshine_model: string;
   analytics_enabled: boolean;
   crash_reporting_enabled: boolean;
   live_text_streaming: boolean;

@@ -115,10 +115,13 @@ pub struct Settings {
     /// VAD engine: "silero" (neural ONNX) | "rms" (energy threshold fallback).
     #[serde(default = "default_vad_engine")]
     pub vad_engine: String,
-    /// Transcription engine preference: "auto" | "apple" | "whisper".
-    /// Defaults to "whisper" for reliability; "auto" selects Apple Speech on macOS if available.
+    /// Transcription engine preference: "whisper" | "moonshine".
+    /// macOS default: "moonshine". Windows default: "whisper".
     #[serde(default = "default_transcription_engine")]
     pub transcription_engine: String,
+    /// Active Moonshine model variant: "tiny-streaming-en" | "medium-streaming-en".
+    #[serde(default = "default_moonshine_model")]
+    pub moonshine_model: String,
     /// Allow anonymous usage analytics via Aptabase. Default: true.
     #[serde(default = "default_true")]
     pub analytics_enabled: bool,
@@ -133,7 +136,7 @@ pub struct Settings {
 }
 
 fn default_clipboard_restore_delay_ms() -> u64 { 2000 }
-fn default_recording_mode() -> String { "toggle".to_string() }
+fn default_recording_mode() -> String { "push_to_talk".to_string() }
 fn default_overlay_placement() -> String { "top-center".to_string() }
 fn default_overlay_style() -> String { "micro".to_string() }
 fn default_ai_backend() -> String { "disabled".to_string() }
@@ -158,8 +161,14 @@ fn default_ptt_key() -> String { "custom".to_string() }
 fn default_true() -> bool { true }
 fn default_sound_volume() -> f32 { 0.2 }
 fn default_llm_model_name() -> String { "qwen2.5-0.5b-instruct-q4_k_m.gguf".to_string() }
-fn default_vad_engine() -> String { "rms".to_string() }
-fn default_transcription_engine() -> String { "whisper".to_string() }
+fn default_vad_engine() -> String { "silero".to_string() }
+fn default_transcription_engine() -> String {
+    #[cfg(target_os = "macos")]
+    { "moonshine".to_string() }
+    #[cfg(not(target_os = "macos"))]
+    { "whisper".to_string() }
+}
+fn default_moonshine_model() -> String { "tiny-streaming-en".to_string() }
 fn default_theme() -> String { "dark".to_string() }
 
 fn default_log_level() -> String {
@@ -186,7 +195,7 @@ impl Default for Settings {
             sound_volume: 0.2,
             restore_clipboard: true,
             clipboard_restore_delay_ms: 2000,
-            recording_mode: "toggle".to_string(),
+            recording_mode: "push_to_talk".to_string(),
             auto_delete_after_days: None,
             ai_backend: "disabled".to_string(),
             ai_ollama_model: "llama3.2".to_string(),
@@ -212,6 +221,7 @@ impl Default for Settings {
             apply_polish_to_regular: false,
             vad_engine: default_vad_engine(),
             transcription_engine: default_transcription_engine(),
+            moonshine_model: default_moonshine_model(),
             analytics_enabled: true,
             crash_reporting_enabled: true,
             live_text_streaming: false,
@@ -348,13 +358,13 @@ mod tests {
     }
 
     #[test]
-    fn default_recording_mode_is_toggle() {
-        assert_eq!(Settings::default().recording_mode, "toggle");
+    fn default_recording_mode_is_push_to_talk() {
+        assert_eq!(Settings::default().recording_mode, "push_to_talk");
     }
 
     #[test]
-    fn default_vad_engine_is_rms() {
-        assert_eq!(Settings::default().vad_engine, "rms");
+    fn default_vad_engine_is_silero() {
+        assert_eq!(Settings::default().vad_engine, "silero");
     }
 
     #[test]
@@ -468,7 +478,7 @@ mod tests {
         let s: Settings = serde_json::from_str(json).unwrap();
         assert_eq!(s.hotkey, "CmdOrCtrl+Shift+Z");
         // Fields with #[serde(default)] should use defaults
-        assert_eq!(s.recording_mode, "toggle");
+        assert_eq!(s.recording_mode, "push_to_talk");
         assert_eq!(s.ai_backend, "disabled");
         assert_eq!(s.overlay_placement, "top-center");
         assert_eq!(s.vad_engine, "rms");

@@ -6,13 +6,21 @@
 // Strategy:
 //   - kCGSessionEventTap + kCGEventTapOptionListenOnly: requires Accessibility only (no Input
 //     Monitoring). Passive observer — cannot suppress events, which is fine for PTT.
-//   - Listens for both kCGEventFlagsChanged (Fn-as-modifier) AND kCGEventKeyDown/Up (Globe
+//   - Listens for both kCGEventFlagsChanged (Fn/Ctrl modifier) AND kCGEventKeyDown/Up (Globe
 //     standalone press on Apple Silicon), since the Globe key generates different event types
 //     depending on macOS version and how it's configured.
+//
+// Chord detection (Fn+Left Ctrl → Smart Dictation):
+//   Both Fn and Left Ctrl are modifier keys, so both fire kCGEventFlagsChanged.
+//   The state machine handles both press orderings:
+//     - Fn first, then Ctrl within 50ms → SMART_DICTATION
+//     - Ctrl first, then Fn              → SMART_DICTATION immediately
+//     - Fn alone (50ms pass without Ctrl) → NORMAL_PTT
+//   Releasing either modifier while in SMART_DICTATION fires on_smart_release.
 #![allow(non_upper_case_globals, non_snake_case)]
 
 use std::os::raw::{c_int, c_void};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// Wrapper around CFRunLoopRef that is Send+Sync.
@@ -39,11 +47,11 @@ impl PttTapHandle {
 }
 
 // CGEventTapLocation
-const kCGSessionEventTap: c_int = 1;    // session level — requires Accessibility only
+const kCGSessionEventTap: c_int = 1;
 // CGEventTapPlacement
 const kCGHeadInsertEventTap: c_int = 0;
 // CGEventTapOptions
-const kCGEventTapOptionListenOnly: c_int = 1; // passive: observe only, no Input Monitoring needed
+const kCGEventTapOptionListenOnly: c_int = 1;
 // CGEventType values
 const kCGEventKeyDown: u32 = 10;
 const kCGEventKeyUp: u32 = 11;
@@ -51,13 +59,20 @@ const kCGEventFlagsChanged: u32 = 12;
 // System disables the tap
 const kCGEventTapDisabledByTimeout: u32 = 0xFFFFFFFE;
 const kCGEventTapDisabledByUserInput: u32 = 0xFFFFFFFF;
-// CGEventFlags — Fn key as modifier
-const kCGEventFlagMaskSecondaryFn: u64 = 0x00800000;
+// CGEventFlags
+const kCGEventFlagMaskSecondaryFn: u64 = 0x00800000; // Fn/Globe modifier
+const kCGEventFlagMaskControl: u64 = 0x00040000;     // Left Ctrl modifier
 // CGEventField: kCGKeyboardEventKeycode
 const kCGKeyboardEventKeycode: u32 = 8;
 // Globe/Fn key keycodes (vary by hardware/macOS version)
-const KEYCODE_FN_INTEL: i64 = 63;   // kVK_Function on Intel Macs
-const KEYCODE_GLOBE: i64 = 179;     // Globe key on Apple Silicon
+const KEYCODE_FN_INTEL: i64 = 63;  // kVK_Function on Intel Macs
+const KEYCODE_GLOBE: i64 = 179;    // Globe key on Apple Silicon
+
+// Chord detection mode state machine
+const MODE_IDLE: u8 = 0;
+const MODE_DEBOUNCING: u8 = 1;      // Fn pressed, waiting 50ms for Left Ctrl
+const MODE_NORMAL_PTT: u8 = 2;      // 50ms elapsed without Ctrl — normal dictation
+const MODE_SMART_DICTATION: u8 = 3; // Fn+Ctrl chord detected — smart dictation
 
 type CGEventRef = *const c_void;
 type CFMachPortRef = *mut c_void;
@@ -93,16 +108,25 @@ extern "C" {
     static kCFRunLoopCommonModes: *const c_void;
 }
 
-// ─── Fn/Globe key ──────────────────────────────────────────────────────────
+// ─── Fn/Globe key with Fn+Left Ctrl chord detection ─────────────────────────
 
-struct FnTapState {
+struct FnCtrlTapState {
     fn_down: AtomicBool,
+    ctrl_down: AtomicBool,
     ever_fired: Arc<AtomicBool>,
-    on_press: Box<dyn Fn() + Send + Sync>,
-    on_release: Box<dyn Fn() + Send + Sync>,
+    /// Current mode: IDLE, DEBOUNCING, NORMAL_PTT, or SMART_DICTATION.
+    /// Shared with debounce threads via Arc.
+    mode: Arc<AtomicU8>,
+    /// Fires immediately on Fn keydown, before the 50ms debounce window.
+    /// Used to pre-warm the audio stream so the mic indicator appears only while the key is held.
+    on_fn_down: Arc<dyn Fn() + Send + Sync>,
+    on_normal_press: Arc<dyn Fn() + Send + Sync>,
+    on_normal_release: Arc<dyn Fn() + Send + Sync>,
+    on_smart_press: Arc<dyn Fn() + Send + Sync>,
+    on_smart_release: Arc<dyn Fn() + Send + Sync>,
 }
 
-unsafe extern "C" fn fn_tap_callback(
+unsafe extern "C" fn fn_ctrl_tap_callback(
     proxy: *const c_void,
     event_type: u32,
     event: CGEventRef,
@@ -126,52 +150,179 @@ unsafe extern "C" fn fn_tap_callback(
         return event;
     }
 
-    let state = &*(user_info as *const FnTapState);
+    let state = &*(user_info as *const FnCtrlTapState);
     state.ever_fired.store(true, Ordering::Relaxed);
 
     match event_type {
-        // Path 1: Fn used as modifier — detected via flags bit (Intel and Apple Silicon)
+        // Both Fn and Left Ctrl are modifier keys — both fire kCGEventFlagsChanged.
         kCGEventFlagsChanged => {
             let flags = CGEventGetFlags(event);
-            let fn_now = (flags & kCGEventFlagMaskSecondaryFn) != 0;
-            let was_down = state.fn_down.swap(fn_now, Ordering::SeqCst);
-            if fn_now && !was_down {
-                tracing::info!("fn-key tap: Fn pressed (flags)");
-                (state.on_press)();
-            } else if !fn_now && was_down {
-                tracing::info!("fn-key tap: Fn released (flags)");
-                (state.on_release)();
+            let fn_now   = (flags & kCGEventFlagMaskSecondaryFn) != 0;
+            let ctrl_now = (flags & kCGEventFlagMaskControl) != 0;
+
+            let was_fn_down   = state.fn_down.swap(fn_now, Ordering::SeqCst);
+            let was_ctrl_down = state.ctrl_down.swap(ctrl_now, Ordering::SeqCst);
+
+            // ── Fn state changed ─────────────────────────────────────────────
+            if fn_now && !was_fn_down {
+                // Fire pre-warm callback immediately (before debounce) so the audio
+                // stream opens the moment the user presses Fn. This keeps the macOS
+                // orange mic indicator tightly coupled to physical key hold time.
+                (state.on_fn_down)();
+
+                if ctrl_now {
+                    // Ctrl was already held — immediate smart dictation chord
+                    if state.mode.compare_exchange(
+                        MODE_IDLE, MODE_SMART_DICTATION,
+                        Ordering::SeqCst, Ordering::SeqCst,
+                    ).is_ok() {
+                        tracing::info!("fn-key tap: Fn+Ctrl chord (Ctrl first) — smart dictation press");
+                        (state.on_smart_press)();
+                    }
+                } else {
+                    // Start 50ms debounce window waiting for Ctrl
+                    tracing::info!("fn-key tap: Fn pressed — debouncing for Fn+Ctrl chord");
+                    state.mode.store(MODE_DEBOUNCING, Ordering::SeqCst);
+                    let mode = state.mode.clone();
+                    let on_normal_press = state.on_normal_press.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(50));
+                        if mode.compare_exchange(
+                            MODE_DEBOUNCING, MODE_NORMAL_PTT,
+                            Ordering::SeqCst, Ordering::SeqCst,
+                        ).is_ok() {
+                            tracing::info!("fn-key tap: 50ms elapsed, no Ctrl — normal PTT press");
+                            on_normal_press();
+                        }
+                    });
+                }
+            } else if !fn_now && was_fn_down {
+                // Fn released — dispatch based on current mode
+                let prev_mode = state.mode.swap(MODE_IDLE, Ordering::SeqCst);
+                match prev_mode {
+                    MODE_NORMAL_PTT => {
+                        tracing::info!("fn-key tap: Fn released (normal PTT)");
+                        (state.on_normal_release)();
+                    }
+                    MODE_SMART_DICTATION => {
+                        tracing::info!("fn-key tap: Fn released (smart dictation)");
+                        (state.on_smart_release)();
+                    }
+                    MODE_DEBOUNCING => {
+                        // Quick tap <50ms, Ctrl never came — treat as normal PTT tap.
+                        // Debounce thread will see IDLE and skip on_normal_press.
+                        tracing::info!("fn-key tap: quick Fn tap (<50ms) — normal PTT press+release");
+                        (state.on_normal_press)();
+                        (state.on_normal_release)();
+                    }
+                    _ => {}
+                }
             }
-        }
-        // Path 2: Globe key standalone press — generates KeyDown/Up on Apple Silicon
-        kCGEventKeyDown | kCGEventKeyUp => {
-            let keycode = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
-            if keycode == KEYCODE_FN_INTEL || keycode == KEYCODE_GLOBE {
-                let is_down = event_type == kCGEventKeyDown;
-                let was_down = state.fn_down.swap(is_down, Ordering::SeqCst);
-                if is_down && !was_down {
-                    tracing::info!("fn-key tap: Globe/Fn pressed (keydown, keycode={})", keycode);
-                    (state.on_press)();
-                } else if !is_down && was_down {
-                    tracing::info!("fn-key tap: Globe/Fn released (keyup, keycode={})", keycode);
-                    (state.on_release)();
+
+            // ── Ctrl state changed ───────────────────────────────────────────
+            if ctrl_now && !was_ctrl_down && fn_now {
+                // Ctrl pressed while Fn already held — transition DEBOUNCING → SMART_DICTATION
+                if state.mode.compare_exchange(
+                    MODE_DEBOUNCING, MODE_SMART_DICTATION,
+                    Ordering::SeqCst, Ordering::SeqCst,
+                ).is_ok() {
+                    tracing::info!("fn-key tap: Fn+Ctrl chord (Fn first) — smart dictation press");
+                    (state.on_smart_press)();
+                }
+            } else if !ctrl_now && was_ctrl_down {
+                // Ctrl released — end smart dictation (Fn may still be held)
+                if state.mode.compare_exchange(
+                    MODE_SMART_DICTATION, MODE_IDLE,
+                    Ordering::SeqCst, Ordering::SeqCst,
+                ).is_ok() {
+                    tracing::info!("fn-key tap: Ctrl released — smart dictation release");
+                    (state.on_smart_release)();
                 }
             }
         }
+
+        // ── Globe key standalone (Apple Silicon KeyDown/Up) ──────────────────
+        kCGEventKeyDown | kCGEventKeyUp => {
+            let keycode = CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
+
+            if keycode == KEYCODE_FN_INTEL || keycode == KEYCODE_GLOBE {
+                let is_down = event_type == kCGEventKeyDown;
+                let was_down = state.fn_down.swap(is_down, Ordering::SeqCst);
+
+                if is_down && !was_down {
+                    // Pre-warm on Globe keydown too (same as Fn).
+                    (state.on_fn_down)();
+
+                    let ctrl_held = state.ctrl_down.load(Ordering::SeqCst);
+                    if ctrl_held {
+                        if state.mode.compare_exchange(
+                            MODE_IDLE, MODE_SMART_DICTATION,
+                            Ordering::SeqCst, Ordering::SeqCst,
+                        ).is_ok() {
+                            tracing::info!("fn-key tap: Globe+Ctrl chord — smart dictation press");
+                            (state.on_smart_press)();
+                        }
+                    } else {
+                        tracing::info!("fn-key tap: Globe pressed (keydown, keycode={}) — debouncing", keycode);
+                        state.mode.store(MODE_DEBOUNCING, Ordering::SeqCst);
+                        let mode = state.mode.clone();
+                        let on_normal_press = state.on_normal_press.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_millis(50));
+                            if mode.compare_exchange(
+                                MODE_DEBOUNCING, MODE_NORMAL_PTT,
+                                Ordering::SeqCst, Ordering::SeqCst,
+                            ).is_ok() {
+                                on_normal_press();
+                            }
+                        });
+                    }
+                } else if !is_down && was_down {
+                    let prev_mode = state.mode.swap(MODE_IDLE, Ordering::SeqCst);
+                    match prev_mode {
+                        MODE_NORMAL_PTT => {
+                            tracing::info!("fn-key tap: Globe released (normal PTT)");
+                            (state.on_normal_release)();
+                        }
+                        MODE_SMART_DICTATION => {
+                            tracing::info!("fn-key tap: Globe released (smart dictation)");
+                            (state.on_smart_release)();
+                        }
+                        MODE_DEBOUNCING => {
+                            tracing::info!("fn-key tap: Globe quick tap — normal PTT press+release");
+                            (state.on_normal_press)();
+                            (state.on_normal_release)();
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
         _ => {}
     }
 
     event
 }
 
-/// Spawns a CGEventTap for the Fn/Globe key.
+/// Spawns a CGEventTap for the Fn/Globe key with Fn+Left Ctrl chord detection.
+///
+/// - `on_fn_down` — fires immediately on every Fn/Globe keydown, before the debounce window.
+///   Use this to pre-warm the audio stream so the mic indicator is tightly coupled to key hold time.
+/// - `on_normal_press` / `on_normal_release` — fired for plain Fn key PTT (normal dictation).
+/// - `on_smart_press` / `on_smart_release` — fired for Fn+Left Ctrl chord (smart dictation PTT).
+///
+/// A 50ms debounce window after Fn press handles the case where Fn is pressed first.
+/// If Ctrl is already held when Fn goes down, smart dictation activates immediately.
 pub fn spawn_fn_key_tap(
-    on_press: impl Fn() + Send + Sync + 'static,
-    on_release: impl Fn() + Send + Sync + 'static,
+    on_fn_down: impl Fn() + Send + Sync + 'static,
+    on_normal_press: impl Fn() + Send + Sync + 'static,
+    on_normal_release: impl Fn() + Send + Sync + 'static,
+    on_smart_press: impl Fn() + Send + Sync + 'static,
+    on_smart_release: impl Fn() + Send + Sync + 'static,
 ) -> PttTapHandle {
     let ever_fired = Arc::new(AtomicBool::new(false));
 
-    // Watchdog: if no events arrive within 8s, Accessibility permission is likely missing.
     let ever_fired_watch = ever_fired.clone();
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_secs(8));
@@ -183,19 +334,24 @@ pub fn spawn_fn_key_tap(
         }
     });
 
-    // Event mask: FlagsChanged (Fn modifier) + KeyDown/Up (Globe standalone)
+    // FlagsChanged covers both Fn and Ctrl. KeyDown/Up covers Globe standalone.
     let event_mask = (1u64 << kCGEventFlagsChanged)
         | (1u64 << kCGEventKeyDown)
         | (1u64 << kCGEventKeyUp);
 
     spawn_tap(
         event_mask,
-        fn_tap_callback,
-        move || Box::into_raw(Box::new(FnTapState {
+        fn_ctrl_tap_callback,
+        move || Box::into_raw(Box::new(FnCtrlTapState {
             fn_down: AtomicBool::new(false),
+            ctrl_down: AtomicBool::new(false),
             ever_fired,
-            on_press: Box::new(on_press),
-            on_release: Box::new(on_release),
+            mode: Arc::new(AtomicU8::new(MODE_IDLE)),
+            on_fn_down: Arc::new(on_fn_down),
+            on_normal_press: Arc::new(on_normal_press),
+            on_normal_release: Arc::new(on_normal_release),
+            on_smart_press: Arc::new(on_smart_press),
+            on_smart_release: Arc::new(on_smart_release),
         })) as *mut c_void,
         "fn",
     )
@@ -223,7 +379,7 @@ where
         let tap = CGEventTapCreate(
             kCGSessionEventTap,
             kCGHeadInsertEventTap,
-            kCGEventTapOptionListenOnly, // passive — Accessibility only, no Input Monitoring
+            kCGEventTapOptionListenOnly,
             event_mask,
             callback,
             state_ptr,

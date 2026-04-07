@@ -257,32 +257,49 @@ export default function Onboarding({ onComplete }: Props) {
       </h2>
       <p style={{ fontSize: 13, color: "var(--t3)", lineHeight: 1.5, marginBottom: 22, fontFamily: "'DM Sans', sans-serif" }}>
         {platform === "windows" ? "OmWhisper lives in your system tray." : "OmWhisper lives in your menu bar."}{" "}
-        Use the global hotkey to transcribe from anywhere.
+        {platform !== "windows" ? "Hold Fn to record, release to transcribe." : "Press Alt+Shift+V to start recording."}
       </p>
 
-      {/* Hotkey row — inset neumorphic */}
-      <div style={{
-        width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "14px 18px", borderRadius: 14, marginBottom: 16,
-        background: "var(--surface)",
-        boxShadow: "var(--nm-pressed-sm)",
-      }}>
-        <span style={{ fontSize: 13, color: "var(--t3)", fontFamily: "'DM Sans', sans-serif" }}>Global Hotkey</span>
-        <span style={{
-          fontFamily: "'DM Mono', monospace", fontSize: 13, color: "var(--t1)",
-          padding: "5px 12px", borderRadius: 8,
-          background: "var(--bg)",
-          boxShadow: "var(--nm-raised-sm)",
+      {/* PTT shortcuts — macOS only, two rows */}
+      {platform !== "windows" && (
+        <div style={{
+          width: "100%", borderRadius: 14, marginBottom: 12,
+          background: "var(--surface)", boxShadow: "var(--nm-pressed-sm)",
+          overflow: "hidden",
         }}>
-          {platform === "windows" ? "Alt+Shift+V" : "⌘ Shift V"}
-        </span>
-      </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 18px" }}>
+            <div>
+              <span style={{ fontSize: 13, color: "var(--t3)", fontFamily: "'DM Sans', sans-serif" }}>Push-to-Talk</span>
+              <span style={{ fontSize: 11, color: "var(--t4)", fontFamily: "'DM Sans', sans-serif", display: "block" }}>Hold to record, release to transcribe</span>
+            </div>
+            <span style={{
+              fontFamily: "'DM Mono', monospace", fontSize: 12, color: "var(--t1)",
+              padding: "4px 10px", borderRadius: 7,
+              background: "var(--bg)", boxShadow: "var(--nm-raised-sm)",
+            }}>Fn</span>
+          </div>
+          <div style={{ height: 1, background: "color-mix(in srgb, var(--t1) 6%, transparent)", margin: "0 18px" }} />
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 18px" }}>
+            <div>
+              <span style={{ fontSize: 13, color: "var(--t3)", fontFamily: "'DM Sans', sans-serif" }}>Smart Dictation PTT</span>
+              <span style={{ fontSize: 11, color: "var(--t4)", fontFamily: "'DM Sans', sans-serif", display: "block" }}>AI polishes your speech before pasting</span>
+            </div>
+            <div style={{ display: "flex", gap: 4 }}>
+              {["Fn", "⌃ Ctrl"].map(k => (
+                <span key={k} style={{
+                  fontFamily: "'DM Mono', monospace", fontSize: 12, color: "var(--t1)",
+                  padding: "4px 10px", borderRadius: 7,
+                  background: "var(--bg)", boxShadow: "var(--nm-raised-sm)",
+                }}>{k}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
-      <p style={{ fontSize: 12, color: "var(--t4)", marginBottom: 6, fontFamily: "'DM Sans', sans-serif" }}>
-        tiny.en is ready · Explore AI Models to upgrade anytime
-      </p>
-      <p style={{ fontSize: 11, color: "var(--t4)", marginBottom: 26, fontFamily: "'DM Sans', sans-serif" }}>
-        If the hotkey conflicts with another app, change it in Settings → Shortcuts.
+
+      <p style={{ fontSize: 12, color: "var(--t4)", marginBottom: 26, fontFamily: "'DM Sans', sans-serif" }}>
+        Explore AI Models to download larger, more accurate models.
       </p>
 
       <button

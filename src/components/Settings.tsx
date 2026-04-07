@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
-  Sliders, Mic, FileText, Info, ShieldCheck, ShieldAlert, Keyboard, Brain, Activity, Zap, Sparkles, Cpu, ExternalLink
+  Sliders, Mic, FileText, Info, ShieldCheck, ShieldAlert, Keyboard, Sparkles, Cpu, ExternalLink
 } from "lucide-react";
 import { applyThemePreference, type ThemePreference } from "../hooks/useTheme";
 import { logger } from "../utils/logger";
@@ -190,13 +190,8 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
   const [accessibilityGranted, setAccessibilityGranted] = useState<boolean | null>(null);
   const [micAuthStatus, setMicAuthStatus] = useState<"authorized" | "not_determined" | "denied" | null>(null);
   const [platform, setPlatform] = useState<string>("macos");
-  const [appleAvailable, setAppleAvailable] = useState<boolean>(true);
-  const [appleSpeechAuthStatus, setAppleSpeechAuthStatus] = useState<"authorized" | "not_determined" | "denied">("denied");
-
   useEffect(() => {
     invoke<string>("get_platform").then(setPlatform).catch(() => {});
-    invoke<boolean>("is_apple_speech_available").then(setAppleAvailable).catch(() => {});
-    invoke<string>("get_apple_speech_auth_status").then((s) => setAppleSpeechAuthStatus(s as typeof appleSpeechAuthStatus)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -514,48 +509,6 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                   ))}
                 </select>
               </SettingRow>
-              <div className="py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
-                <p className="text-sm mb-1" style={{ color: "var(--t1)" }}>VAD Engine</p>
-                <p className="text-xs mb-3" style={{ color: "var(--t2)" }}>Algorithm used to detect when you're speaking</p>
-                <div className="flex gap-2">
-                  {([
-                    { id: "silero", Icon: Brain,    label: "Silero",  sub: "Neural AI · more accurate" },
-                    { id: "rms",    Icon: Activity, label: "RMS",     sub: "Energy-based · lighter" },
-                  ] as const).map(({ id, Icon, label, sub }) => {
-                    const active = settings.vad_engine === id;
-                    return (
-                      <button
-                        key={id}
-                        onClick={() => update({ vad_engine: id })}
-                        aria-pressed={active}
-                        className="flex-1 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all duration-150 cursor-pointer"
-                        style={{
-                          background: "var(--bg)",
-                          boxShadow: active ? "var(--nm-pressed-sm)" : "var(--nm-raised-sm)",
-                          border: active
-                            ? "1px solid color-mix(in srgb, var(--accent) 45%, transparent)"
-                            : "1px solid transparent",
-                        }}
-                      >
-                        <div
-                          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                          style={{
-                            background: active ? "var(--accent-bg)" : "color-mix(in srgb, var(--t1) 6%, transparent)",
-                          }}
-                        >
-                          <Icon size={14} style={{ color: active ? "var(--accent)" : "var(--t3)" }} />
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium leading-tight" style={{ color: active ? "var(--accent)" : "var(--t1)" }}>
-                            {label}
-                          </p>
-                          <p className="text-[10px] leading-tight mt-0.5" style={{ color: "var(--t4)" }}>{sub}</p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
               <SettingRow
                 label="VAD Sensitivity"
                 description={`Voice detection threshold · ${Math.round(settings.vad_sensitivity * 100)}%`}
@@ -609,7 +562,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                       {settings.active_model}
                     </span>
                     <button
-                      onClick={() => onNavigate?.("models:whisper")}
+                      onClick={() => onNavigate?.("models")}
                       className="text-xs cursor-pointer transition-colors"
                       style={{ color: "var(--t4)" }}
                       onMouseEnter={(e) => (e.currentTarget.style.color = "var(--accent)")}
@@ -625,62 +578,34 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                     <p className="text-xs mb-3" style={{ color: "var(--t2)" }}>Choose how your voice is transcribed</p>
                     <div className="flex gap-2">
                       {([
-                        { id: "auto",    Icon: Zap,       label: "Auto",          sub: "Apple Speech if available" },
-                        { id: "apple",   Icon: Sparkles,  label: "Apple Speech",  sub: "On-device · fast" },
-                        { id: "whisper", Icon: Cpu,       label: "Whisper",       sub: "Local model · all languages" },
+                        { id: "whisper",   Icon: Cpu,      label: "Whisper",    sub: "All languages · higher accuracy" },
+                        { id: "moonshine", Icon: Sparkles, label: "Moonshine",  sub: "English · ultra-fast" },
                       ] as const).map(({ id, Icon, label, sub }) => {
-                        const isApple = id === "apple";
-                        const disabled = isApple && !appleAvailable && appleSpeechAuthStatus !== "not_determined";
-                        const active = settings.transcription_engine === id && !disabled;
-                        const canEnable = isApple && appleSpeechAuthStatus === "not_determined";
-                        const subText = isApple
-                          ? appleSpeechAuthStatus === "authorized" ? sub
-                          : appleSpeechAuthStatus === "not_determined" ? "Tap to grant permission"
-                          : "Permission denied — open System Settings"
-                          : sub;
+                        const active = settings.transcription_engine === id;
                         return (
                           <button
                             key={id}
-                            onClick={async () => {
-                              if (canEnable) {
-                                const granted = await invoke<boolean>("request_speech_recognition_permission");
-                                if (granted) {
-                                  setAppleAvailable(true);
-                                  setAppleSpeechAuthStatus("authorized");
-                                  update({ transcription_engine: "apple" });
-                                } else {
-                                  setAppleSpeechAuthStatus("denied");
-                                }
-                              } else if (!disabled) {
-                                update({ transcription_engine: id });
-                              }
-                            }}
+                            onClick={() => update({ transcription_engine: id })}
                             aria-pressed={active}
-                            aria-disabled={disabled}
-                            className={`flex-1 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all duration-150 ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+                            className="flex-1 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all duration-150 cursor-pointer"
                             style={{
                               background: "var(--bg)",
                               boxShadow: active ? "var(--nm-pressed-sm)" : "var(--nm-raised-sm)",
-                              border: active
-                                ? "1px solid color-mix(in srgb, var(--accent) 45%, transparent)"
-                                : canEnable
-                                ? "1px solid color-mix(in srgb, var(--accent) 20%, transparent)"
-                                : "1px solid transparent",
-                              opacity: disabled ? 0.4 : 1,
+                              border: active ? "1px solid color-mix(in srgb, var(--accent) 45%, transparent)" : "1px solid transparent",
                             }}
                           >
                             <div
                               className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                               style={{ background: active ? "var(--accent-bg)" : "color-mix(in srgb, var(--t1) 6%, transparent)" }}
                             >
-                              <Icon size={14} style={{ color: active ? "var(--accent)" : canEnable ? "var(--accent)" : "var(--t3)" }} />
+                              <Icon size={14} style={{ color: active ? "var(--accent)" : "var(--t3)" }} />
                             </div>
                             <div>
-                              <p className="text-xs font-medium leading-tight" style={{ color: active ? "var(--accent)" : canEnable ? "var(--accent)" : "var(--t1)" }}>
+                              <p className="text-xs font-medium leading-tight" style={{ color: active ? "var(--accent)" : "var(--t1)" }}>
                                 {label}
                               </p>
                               <p className="text-[10px] leading-tight mt-0.5" style={{ color: "var(--t4)" }}>
-                                {subText}
+                                {sub}
                               </p>
                             </div>
                           </button>
@@ -713,7 +638,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                   <div className="px-1 pb-3 space-y-1.5">
                     {settings.transcription_engine !== "whisper" && (
                       <p className="text-[11px] leading-relaxed" style={{ color: "var(--warning)" }}>
-                        ⚠ Translation requires Whisper engine. It will be used automatically when translating, even if Apple Speech is selected above.
+                        ⚠ Translation requires Whisper engine. It will be used automatically when translating, even if Moonshine is selected above.
                       </p>
                     )}
                     {settings.active_model.endsWith(".en") && (
@@ -757,14 +682,6 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
               <>
                 <h3 className="text-t3 text-[10px] uppercase tracking-widest mb-4 font-mono">Push to Talk</h3>
                 <div className="card px-5 mb-6">
-                  {platform !== "windows" && (
-                    <div className="flex items-start gap-2 py-3 border-b" style={{ borderColor: "var(--warning-border)" }}>
-                      <span className="text-[11px]" style={{ color: "var(--warning)" }}>⚠</span>
-                      <p className="text-[10px] leading-relaxed" style={{ color: "var(--warning-muted)" }}>
-                        Push to Talk is experimental — you may experience crashes or unresponsive keys. Requires Accessibility permission.
-                      </p>
-                    </div>
-                  )}
                   <SettingRow label="Push to Talk Mode" description="Hold a key to record, release when done">
                     <Toggle
                       value={settings.recording_mode === "push_to_talk"}
@@ -773,13 +690,24 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                     />
                   </SettingRow>
                   {settings.recording_mode === "push_to_talk" && (
-                    <SettingRow label="Push to Talk Key" description={platform === "windows" ? "Ctrl+Space — hold to record, release to stop" : "Hold this key to record, release to stop"}>
-                      {platform === "windows" ? (
-                        <span className="text-xs font-mono px-3 py-1.5 rounded-xl" style={{ background: "var(--bg)", color: "var(--t2)", boxShadow: "var(--nm-pressed-sm)" }}>Ctrl+Space</span>
-                      ) : (
-                        <span className="text-xs font-mono px-3 py-1.5 rounded-xl" style={{ background: "var(--bg)", color: "var(--t2)", boxShadow: "var(--nm-pressed-sm)" }}>Fn</span>
+                    <>
+                      <SettingRow label="Push to Talk Key" description={platform === "windows" ? "Ctrl+Space — hold to record, release to stop" : "Hold this key to record, release to stop"}>
+                        {platform === "windows" ? (
+                          <span className="text-xs font-mono px-3 py-1.5 rounded-xl" style={{ background: "var(--bg)", color: "var(--t2)", boxShadow: "var(--nm-pressed-sm)" }}>Ctrl+Space</span>
+                        ) : (
+                          <span className="text-xs font-mono px-3 py-1.5 rounded-xl" style={{ background: "var(--bg)", color: "var(--t2)", boxShadow: "var(--nm-pressed-sm)" }}>Fn</span>
+                        )}
+                      </SettingRow>
+                      {platform !== "windows" && (
+                        <SettingRow label="Smart Dictation PTT" description="Hold Fn+Left Ctrl to record with AI polish, release to stop">
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs font-mono px-3 py-1.5 rounded-xl" style={{ background: "var(--bg)", color: "var(--t2)", boxShadow: "var(--nm-pressed-sm)" }}>Fn</span>
+                            <span className="text-xs" style={{ color: "var(--t4)" }}>+</span>
+                            <span className="text-xs font-mono px-3 py-1.5 rounded-xl" style={{ background: "var(--bg)", color: "var(--t2)", boxShadow: "var(--nm-pressed-sm)" }}>⌃ Ctrl</span>
+                          </div>
+                        </SettingRow>
                       )}
-                    </SettingRow>
+                    </>
                   )}
                 </div>
               </>
@@ -790,6 +718,10 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
               {[
                 { action: "Dictate in any app",    keys: isWindows ? ["Alt", "Shift", "V"] : ["⌘", "⇧", "V"], note: "Toggle recording" },
                 { action: "Smart Dictation",        keys: isWindows ? ["Alt", "Shift", "B"] : ["⌘", "⇧", "B"], note: "Record + AI polish" },
+                ...(!isWindows && settings.recording_mode === "push_to_talk" ? [
+                  { action: "PTT — Normal Dictation",  keys: ["Fn"],          note: "Hold to record, release to stop" },
+                  { action: "PTT — Smart Dictation",   keys: ["Fn", "⌃ Ctrl"], note: "Hold to record with AI polish" },
+                ] : []),
               ].map(({ action, keys, note }) => (
                 <div key={action} className="flex items-center justify-between py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
                   <div>
