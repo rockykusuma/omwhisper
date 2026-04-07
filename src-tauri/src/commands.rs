@@ -3,6 +3,7 @@ use crate::whisper::{
     engine::{load_wav_as_f32, Segment, WhisperEngine},
     models::{self, ModelInfo},
 };
+use cpal::traits::{DeviceTrait, HostTrait};
 use std::path::{Path, PathBuf};
 use std::sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex};
 use tauri::{AppHandle, Emitter};
@@ -152,6 +153,42 @@ pub async fn start_transcription(
             return Err(e.to_string());
         }
         state.lock().unwrap_or_else(|e| e.into_inner()).capture = Some(capture);
+    } else if let Some(preferred) = &settings.audio_input_device {
+        // Check if the stream fell back to the system default at launch because the preferred
+        // device (e.g. a USB mic) wasn't connected yet. If the preferred device is now available,
+        // restart the stream on it transparently before beginning this recording session.
+        let opened = state.lock().unwrap_or_else(|e| e.into_inner())
+            .capture.as_ref()
+            .and_then(|c| c.opened_device.lock().unwrap_or_else(|e| e.into_inner()).clone());
+        let fell_back = opened.as_deref().map(|n| n != preferred.as_str()).unwrap_or(false);
+        if fell_back {
+            let host = cpal::default_host();
+            let preferred_available = host.devices()
+                .ok()
+                .and_then(|devs| devs
+                    .filter(|d| d.default_input_config().is_ok())
+                    .find(|d| d.name().ok().as_deref() == Some(preferred.as_str())))
+                .is_some();
+            if preferred_available {
+                tracing::info!("preferred device {:?} now available — restarting audio stream", preferred);
+                let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+                if let Some(old) = s.capture.take() {
+                    old.shutdown();
+                }
+                let new_capture = AudioCapture::new(settings.vad_sensitivity, "silero");
+                match new_capture.start(settings.audio_input_device.clone()) {
+                    Ok(()) => { s.capture = Some(new_capture); }
+                    Err(e) => {
+                        tracing::warn!("failed to restart on preferred device: {e}");
+                        // Restart on default so we still have a stream.
+                        let fallback = AudioCapture::new(settings.vad_sensitivity, "silero");
+                        if fallback.start(None).is_ok() {
+                            s.capture = Some(fallback);
+                        }
+                    }
+                }
+            }
+        }
     }
     is_starting.store(false, Ordering::SeqCst);
 
@@ -629,13 +666,20 @@ pub fn get_previous_app() -> &'static Mutex<Option<String>> {
 /// Capture the current frontmost app and store it as the paste target.
 /// Skips storing if OmWhisper is currently frontmost — preserves the last real target
 /// so paste still works when the user has Settings or the main window open on another monitor.
+/// Also skips if osascript fails (None) — never clears an already-stored target.
 pub fn store_focused_app() {
     let app_name = crate::paste::get_frontmost_app();
-    let is_self = app_name.as_deref()
-        .map(|n| n.to_lowercase().contains("omwhisper"))
-        .unwrap_or(false);
-    if !is_self {
-        *previous_app().lock().unwrap_or_else(|e| e.into_inner()) = app_name;
+    match app_name {
+        Some(name) if !name.to_lowercase().contains("omwhisper") => {
+            *previous_app().lock().unwrap_or_else(|e| e.into_inner()) = Some(name);
+        }
+        Some(_) => {
+            // OmWhisper is frontmost — preserve whatever was stored before.
+        }
+        None => {
+            // osascript failed (first launch, permission issue, etc.) — preserve stored target.
+            tracing::warn!("store_focused_app: get_frontmost_app returned None, preserving existing target");
+        }
     }
 }
 
@@ -643,12 +687,12 @@ pub fn store_focused_app() {
 pub async fn capture_focused_app() -> Result<Option<String>, String> {
     let app_name = paste::get_frontmost_app();
     // Don't overwrite previous_app if OmWhisper itself is frontmost (e.g. Settings open).
-    // Keeps the real target app so paste works after changing mic/settings.
-    let is_self = app_name.as_deref()
-        .map(|n| n.eq_ignore_ascii_case("omwhisper"))
-        .unwrap_or(false);
-    if !is_self {
-        *previous_app().lock().unwrap_or_else(|e| e.into_inner()) = app_name.clone();
+    // Also don't clear it if osascript fails (None) — preserve last known target.
+    match &app_name {
+        Some(name) if !name.to_lowercase().contains("omwhisper") => {
+            *previous_app().lock().unwrap_or_else(|e| e.into_inner()) = app_name.clone();
+        }
+        _ => {}
     }
     Ok(app_name)
 }
@@ -856,14 +900,14 @@ fn monitor_for_cursor(app: &tauri::AppHandle) -> Option<tauri::Monitor> {
         let mut count = 0u32;
         let err = CGGetDisplaysWithPoint(pos, 4, displays.as_mut_ptr(), &mut count);
         let id = if err == 0 && count > 0 { displays[0] } else { CGMainDisplayID() };
-        tracing::info!("monitor_for_cursor: cursor=({:.0},{:.0}) CGGetDisplaysWithPoint err={} count={} id={}", pos.x, pos.y, err, count, id);
+        tracing::debug!("monitor_for_cursor: cursor=({:.0},{:.0}) CGGetDisplaysWithPoint err={} count={} id={}", pos.x, pos.y, err, count, id);
         (pos, id)
     };
     let _ = cursor;
 
     // Step 2: get that display's bounds in CG logical coordinates.
     let target = unsafe { CGDisplayBounds(cg_id) };
-    tracing::info!("monitor_for_cursor: target CG bounds origin=({:.0},{:.0}) size=({:.0}x{:.0})",
+    tracing::debug!("monitor_for_cursor: target CG bounds origin=({:.0},{:.0}) size=({:.0}x{:.0})",
         target.origin.x, target.origin.y, target.size.width, target.size.height);
 
     // Divide each monitor's physical position by its OWN scale to get CG logical origin.
@@ -872,7 +916,7 @@ fn monitor_for_cursor(app: &tauri::AppHandle) -> Option<tauri::Monitor> {
         let scale = m.scale_factor();
         let lx = m.position().x as f64 / scale;
         let ly = m.position().y as f64 / scale;
-        tracing::info!("monitor_for_cursor: candidate {:?} phys=({},{}) scale={} → logical=({:.0},{:.0})",
+        tracing::debug!("monitor_for_cursor: candidate {:?} phys=({},{}) scale={} → logical=({:.0},{:.0})",
             m.name(), m.position().x, m.position().y, scale, lx, ly);
         let dx = lx - target.origin.x;
         let dy = ly - target.origin.y;
@@ -880,7 +924,7 @@ fn monitor_for_cursor(app: &tauri::AppHandle) -> Option<tauri::Monitor> {
     }).or_else(|| app.primary_monitor().ok().flatten());
 
     if let Some(ref m) = result {
-        tracing::info!("monitor_for_cursor: selected {:?}", m.name());
+        tracing::debug!("monitor_for_cursor: selected {:?}", m.name());
     }
     result
 }
@@ -928,7 +972,7 @@ pub async fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
                 "bottom-right"  => (ox + sw - OVERLAY_W - side_margin, oy + sh - OVERLAY_H - bottom_margin),
                 _               => (ox + (sw - OVERLAY_W) / 2.0, oy + top_margin), // top-center default
             };
-            tracing::info!("show_overlay: monitor={:?} scale={} ox={:.0} oy={:.0} sw={:.0} sh={:.0} → pos=({:.0},{:.0})",
+            tracing::debug!("show_overlay: monitor={:?} scale={} ox={:.0} oy={:.0} sw={:.0} sh={:.0} → pos=({:.0},{:.0})",
                 monitor.name(), scale, ox, oy, sw, sh, x, y);
             let _ = win.set_position(tauri::LogicalPosition::<f64> { x, y });
         }

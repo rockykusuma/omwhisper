@@ -18,6 +18,8 @@ pub struct AudioCapture {
     speech_tx: Arc<Mutex<Option<std::sync::mpsc::SyncSender<Vec<f32>>>>>,
     /// RMS level sender — swapped in on begin_recording(), cleared on end_recording().
     level_tx: Arc<Mutex<Option<std::sync::mpsc::Sender<f32>>>>,
+    /// Name of the device actually opened by start() (may differ from preferred when falling back).
+    pub opened_device: Arc<Mutex<Option<String>>>,
 }
 
 impl AudioCapture {
@@ -28,6 +30,7 @@ impl AudioCapture {
             vad: Arc::new(Mutex::new(Vad::new(vad_engine, vad_sensitivity, TARGET_SAMPLE_RATE))),
             speech_tx: Arc::new(Mutex::new(None)),
             level_tx: Arc::new(Mutex::new(None)),
+            opened_device: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -45,6 +48,7 @@ impl AudioCapture {
         let vad_for_thread = self.vad.clone();
         let speech_tx_shared = Arc::clone(&self.speech_tx);
         let level_tx_shared = Arc::clone(&self.level_tx);
+        let opened_device_shared = Arc::clone(&self.opened_device);
 
         std::thread::spawn(move || {
             // ── Build stream ──────────────────────────────────────────────────
@@ -80,10 +84,11 @@ impl AudioCapture {
                 }
             };
 
-            tracing::info!(
-                "audio capture: opening device {:?}",
-                device.name().unwrap_or_else(|_| "unknown".into())
-            );
+            let device_name = device.name().unwrap_or_else(|_| "unknown".into());
+            tracing::info!("audio capture: opening device {:?}", device_name);
+            // Store the actual device name before signalling success so the caller can detect
+            // whether we fell back to the system default instead of the preferred device.
+            *opened_device_shared.lock().unwrap_or_else(|e| e.into_inner()) = Some(device_name);
 
             let config = match device.default_input_config() {
                 Ok(c) => c,
