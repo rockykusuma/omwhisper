@@ -257,24 +257,8 @@ export default function Onboarding({ onComplete }: Props) {
       </h2>
       <p style={{ fontSize: 13, color: "var(--t3)", lineHeight: 1.5, marginBottom: 22, fontFamily: "'DM Sans', sans-serif" }}>
         {platform === "windows" ? "OmWhisper lives in your system tray." : "OmWhisper lives in your menu bar."}{" "}
-        Use the global hotkey to transcribe from anywhere.
+        {platform !== "windows" ? "Hold Fn to record, release to transcribe." : "Press Alt+Shift+V to start recording."}
       </p>
-
-      {/* Global hotkey — single pill */}
-      <div style={{
-        width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "14px 18px", borderRadius: 14, marginBottom: 12,
-        background: "var(--surface)", boxShadow: "var(--nm-pressed-sm)",
-      }}>
-        <span style={{ fontSize: 13, color: "var(--t3)", fontFamily: "'DM Sans', sans-serif" }}>Global Hotkey</span>
-        <span style={{
-          fontFamily: "'DM Mono', monospace", fontSize: 13, color: "var(--t1)",
-          padding: "5px 12px", borderRadius: 8,
-          background: "var(--bg)", boxShadow: "var(--nm-raised-sm)",
-        }}>
-          {platform === "windows" ? "Alt+Shift+V" : "⌘ Shift V"}
-        </span>
-      </div>
 
       {/* PTT shortcuts — macOS only, two rows */}
       {platform !== "windows" && (
@@ -314,11 +298,8 @@ export default function Onboarding({ onComplete }: Props) {
       )}
 
 
-      <p style={{ fontSize: 12, color: "var(--t4)", marginBottom: 6, fontFamily: "'DM Sans', sans-serif" }}>
+      <p style={{ fontSize: 12, color: "var(--t4)", marginBottom: 26, fontFamily: "'DM Sans', sans-serif" }}>
         Explore AI Models to download larger, more accurate models.
-      </p>
-      <p style={{ fontSize: 11, color: "var(--t4)", marginBottom: 26, fontFamily: "'DM Sans', sans-serif" }}>
-        If the hotkey conflicts with another app, change it in Settings → Shortcuts.
       </p>
 
       <button
