@@ -191,11 +191,13 @@ pub async fn start_transcription(
     }
     is_starting.store(false, Ordering::SeqCst);
 
-    // Toggle mode: play chime and wait for room echo to clear before recording.
-    // PTT mode: stream is already open — no warmup needed, recording starts instantly.
-    if sound_enabled && !is_ptt {
+    // Play start chime for both modes. Toggle mode waits 500ms for room echo to clear;
+    // PTT mode skips the wait so recording begins immediately on key press.
+    if sound_enabled {
         crate::sounds::play(crate::sounds::Sound::Start, sound_volume);
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        if !is_ptt {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
     }
 
     // If the PTT key was released during the warmup/chime, stop_transcription will have
@@ -384,7 +386,7 @@ pub async fn stop_transcription(state: tauri::State<'_, SharedState>) -> Result<
     };
 
     let settings = crate::settings::load_settings().await;
-    if settings.sound_enabled && settings.recording_mode != "push_to_talk" {
+    if settings.sound_enabled {
         crate::sounds::play(crate::sounds::Sound::Stop, settings.sound_volume);
     }
     crate::analytics::track(settings.analytics_enabled, "transcription_completed", serde_json::json!({
