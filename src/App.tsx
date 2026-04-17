@@ -86,16 +86,21 @@ function App() {
     recordingStartRef.current = Date.now();
     segmentsRef.current = [];
     hasPasted.current = false;
+    // Flip recording state + show overlay BEFORE awaiting backend calls so the user sees
+    // feedback within one frame of Fn press — PTT releases the key before start_transcription
+    // resolves, which would otherwise hide the overlay entirely.
+    setIsRecording(true);
+    setIsSmartDictation(smartDictation);
+    invoke<{ show_overlay: boolean }>("get_settings")
+      .then((s) => { if (s.show_overlay) invoke("show_overlay").catch(() => {}); })
+      .catch(() => {});
     try {
       await invoke("capture_focused_app");
       await invoke("start_transcription", { model: modelPathRef.current });
-      setIsRecording(true);
-      setIsSmartDictation(smartDictation);
-      try {
-        const settings = await invoke<{ show_overlay: boolean }>("get_settings");
-        if (settings.show_overlay) await invoke("show_overlay");
-      } catch {}
     } catch (e) {
+      setIsRecording(false);
+      setIsSmartDictation(false);
+      invoke("hide_overlay").catch(() => {});
       // "cancelled" means the PTT key was released before the mic started — silent no-op.
       if (String(e) === "cancelled") return;
       logger.error("Failed to start transcription:", e);
