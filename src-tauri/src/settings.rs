@@ -137,7 +137,7 @@ pub struct Settings {
 
 fn default_clipboard_restore_delay_ms() -> u64 { 2000 }
 fn default_recording_mode() -> String { "push_to_talk".to_string() }
-fn default_overlay_placement() -> String { "top-center".to_string() }
+fn default_overlay_placement() -> String { "bottom-center".to_string() }
 fn default_overlay_style() -> String { "micro".to_string() }
 fn default_ai_backend() -> String { "disabled".to_string() }
 fn default_ai_ollama_model() -> String { "llama3.2".to_string() }
@@ -211,7 +211,7 @@ impl Default for Settings {
             polish_text_hotkey: if cfg!(target_os = "windows") { "Alt+Shift+P".to_string() } else { "CmdOrCtrl+Shift+P".to_string() },
             push_to_talk_hotkey: if cfg!(target_os = "windows") { "Ctrl+Space".to_string() } else { "Fn".to_string() },
             ptt_key: "custom".to_string(),
-            overlay_placement: "top-center".to_string(),
+            overlay_placement: "bottom-center".to_string(),
             overlay_style: "micro".to_string(),
             theme: "dark".to_string(),
             custom_polish_styles: Vec::new(),
@@ -407,7 +407,7 @@ mod tests {
 
     #[test]
     fn default_overlay_placement() {
-        assert_eq!(Settings::default().overlay_placement, "top-center");
+        assert_eq!(Settings::default().overlay_placement, "bottom-center");
     }
 
     #[test]
@@ -480,7 +480,7 @@ mod tests {
         // Fields with #[serde(default)] should use defaults
         assert_eq!(s.recording_mode, "push_to_talk");
         assert_eq!(s.ai_backend, "disabled");
-        assert_eq!(s.overlay_placement, "top-center");
+        assert_eq!(s.overlay_placement, "bottom-center");
         assert_eq!(s.vad_engine, "rms");
         assert!(s.custom_vocabulary.is_empty());
     }

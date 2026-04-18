@@ -985,11 +985,11 @@ pub async fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
 
             let (x, y) = match settings.overlay_placement.as_str() {
                 "top-left"      => (ox + side_margin, oy + top_margin),
+                "top-center"    => (ox + (sw - OVERLAY_W) / 2.0, oy + top_margin),
                 "top-right"     => (ox + sw - OVERLAY_W - side_margin, oy + top_margin),
-                "bottom-center" => (ox + (sw - OVERLAY_W) / 2.0, oy + sh - OVERLAY_H - bottom_margin),
                 "bottom-left"   => (ox + side_margin, oy + sh - OVERLAY_H - bottom_margin),
                 "bottom-right"  => (ox + sw - OVERLAY_W - side_margin, oy + sh - OVERLAY_H - bottom_margin),
-                _               => (ox + (sw - OVERLAY_W) / 2.0, oy + top_margin), // top-center default
+                _               => (ox + (sw - OVERLAY_W) / 2.0, oy + sh - OVERLAY_H - bottom_margin), // bottom-center default
             };
             tracing::debug!("show_overlay: monitor={:?} scale={} ox={:.0} oy={:.0} sw={:.0} sh={:.0} → pos=({:.0},{:.0})",
                 monitor.name(), scale, ox, oy, sw, sh, x, y);

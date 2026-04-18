@@ -312,7 +312,7 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                 <>
                   <SettingRow label="Overlay Position" description="Where to show the recording indicator">
                     <select
-                      value={settings.overlay_placement ?? "top-center"}
+                      value={settings.overlay_placement ?? "bottom-center"}
                       onChange={(e) => update({ overlay_placement: e.target.value })}
                       className="text-xs rounded-lg px-3 py-1.5 cursor-pointer outline-none"
                       style={{ background: "var(--bg)", color: "var(--t2)", boxShadow: "var(--nm-pressed-sm)" }}
