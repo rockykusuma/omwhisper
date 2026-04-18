@@ -374,6 +374,13 @@ pub fn run() {
                 }
             }
 
+            // Apply dock visibility from settings. Menubar-only mode requires Accessory.
+            #[cfg(target_os = "macos")]
+            {
+                let s = crate::settings::load_settings_sync();
+                crate::commands::apply_dock_visibility(app.handle(), s.show_dock_icon);
+            }
+
             // Analytics: fire app_launched (tokio runtime is live inside setup)
             {
                 let s = crate::settings::load_settings_sync();

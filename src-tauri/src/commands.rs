@@ -804,6 +804,13 @@ pub async fn update_settings(app: tauri::AppHandle, new_settings: Settings, stat
             let _ = autostart.disable();
         }
     }
+
+    // Toggle dock visibility live when the setting flips.
+    #[cfg(target_os = "macos")]
+    if old_settings.show_dock_icon != new_settings.show_dock_icon {
+        apply_dock_visibility(&app, new_settings.show_dock_icon);
+    }
+
     settings::save_settings(&new_settings).await.map_err(|e| e.to_string())?;
 
     // If audio device or VAD sensitivity changed, rebuild the persistent capture stream.
@@ -1023,6 +1030,66 @@ fn set_overlay_window_level(win: &tauri::WebviewWindow) {
     unsafe {
         // NSStatusWindowLevel = 25 — above all normal app windows, below screensaver
         let _: () = msg_send![ns_window, setLevel: 25isize];
+    }
+}
+
+/// Show/hide the dock icon by flipping the macOS activation policy.
+/// `Accessory` = menubar-only (no dock, no Cmd+Tab entry).
+/// `Regular`   = normal app with dock icon.
+#[cfg(target_os = "macos")]
+pub fn apply_dock_visibility(app: &tauri::AppHandle, show: bool) {
+    let policy = if show {
+        tauri::ActivationPolicy::Regular
+    } else {
+        tauri::ActivationPolicy::Accessory
+    };
+    if let Err(e) = app.set_activation_policy(policy) {
+        tracing::warn!("failed to set activation policy: {e}");
+        return;
+    }
+    tracing::info!("dock icon {}", if show { "shown" } else { "hidden" });
+    if show {
+        set_dock_icon_image();
+    }
+    // Switching to Accessory resigns active state, pushing the main window behind whatever
+    // was previously frontmost. Re-activate so the user stays where they were.
+    use tauri::Manager;
+    if let Some(win) = app.get_webview_window("main") {
+        if win.is_visible().unwrap_or(false) {
+            let _ = win.set_focus();
+        }
+    }
+}
+
+/// Embeds the 128x128@2x icon and sets it as the dock icon. Needed in dev mode where
+/// the raw binary has no .app bundle — without this the dock shows "exec" generic icon.
+/// In release .app bundles, macOS picks up the icon from Info.plist/icon.icns automatically
+/// and this call is harmless.
+#[cfg(target_os = "macos")]
+fn set_dock_icon_image() {
+    use objc2::msg_send;
+    use objc2::runtime::AnyObject;
+
+    static ICON_BYTES: &[u8] = include_bytes!("../icons/128x128@2x.png");
+
+    unsafe {
+        let ns_app_class = objc2::runtime::AnyClass::get(std::ffi::CStr::from_bytes_with_nul_unchecked(b"NSApplication\0"));
+        let ns_image_class = objc2::runtime::AnyClass::get(std::ffi::CStr::from_bytes_with_nul_unchecked(b"NSImage\0"));
+        let ns_data_class = objc2::runtime::AnyClass::get(std::ffi::CStr::from_bytes_with_nul_unchecked(b"NSData\0"));
+        let (Some(ns_app_class), Some(ns_image_class), Some(ns_data_class)) = (ns_app_class, ns_image_class, ns_data_class) else {
+            tracing::warn!("set_dock_icon_image: failed to resolve AppKit classes");
+            return;
+        };
+
+        let ns_app: *mut AnyObject = msg_send![ns_app_class, sharedApplication];
+        let ns_data: *mut AnyObject = msg_send![ns_data_class, dataWithBytes: ICON_BYTES.as_ptr(), length: ICON_BYTES.len()];
+        let ns_image: *mut AnyObject = msg_send![ns_image_class, alloc];
+        let ns_image: *mut AnyObject = msg_send![ns_image, initWithData: ns_data];
+        if ns_image.is_null() {
+            tracing::warn!("set_dock_icon_image: NSImage init failed");
+            return;
+        }
+        let _: () = msg_send![ns_app, setApplicationIconImage: ns_image];
     }
 }
 

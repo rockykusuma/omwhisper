@@ -308,6 +308,11 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
               <SettingRow label="Show Overlay" description="Floating indicator while recording">
                 <Toggle value={settings.show_overlay} onChange={(v) => update({ show_overlay: v })} label="Show overlay" />
               </SettingRow>
+              {platform === "macos" && (
+                <SettingRow label="Show Dock Icon" description="Off = menubar-only (no dock, no Cmd+Tab entry)">
+                  <Toggle value={settings.show_dock_icon ?? false} onChange={(v) => update({ show_dock_icon: v })} label="Show dock icon" />
+                </SettingRow>
+              )}
               {settings.show_overlay && (
                 <>
                   <SettingRow label="Overlay Position" description="Where to show the recording indicator">

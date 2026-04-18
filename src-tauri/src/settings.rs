@@ -94,6 +94,9 @@ pub struct Settings {
     /// Overlay visual style: "micro" (compact bars-only pill) | "waveform" (larger bars + Listening label)
     #[serde(default = "default_overlay_style")]
     pub overlay_style: String,
+    /// When true, app shows in dock. When false (default), app is menubar-only (LSUIElement).
+    #[serde(default)]
+    pub show_dock_icon: bool,
     /// UI theme: "dark" | "light" | "system"
     #[serde(default = "default_theme")]
     pub theme: String,
@@ -213,6 +216,7 @@ impl Default for Settings {
             ptt_key: "custom".to_string(),
             overlay_placement: "bottom-center".to_string(),
             overlay_style: "micro".to_string(),
+            show_dock_icon: false,
             theme: "dark".to_string(),
             custom_polish_styles: Vec::new(),
             translate_to_english: true,

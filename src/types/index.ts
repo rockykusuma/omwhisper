@@ -61,6 +61,7 @@ export interface AppSettings {
   ptt_key: string;
   overlay_placement: string;
   overlay_style: string;
+  show_dock_icon: boolean;
   translate_to_english: boolean;
   llm_model_name: string;
   llm_nudge_shown: boolean;
