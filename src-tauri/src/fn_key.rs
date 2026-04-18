@@ -70,9 +70,14 @@ const KEYCODE_GLOBE: i64 = 179;    // Globe key on Apple Silicon
 
 // Chord detection mode state machine
 const MODE_IDLE: u8 = 0;
-const MODE_DEBOUNCING: u8 = 1;      // Fn pressed, waiting 50ms for Left Ctrl
-const MODE_NORMAL_PTT: u8 = 2;      // 50ms elapsed without Ctrl — normal dictation
+const MODE_DEBOUNCING: u8 = 1;      // Fn pressed, waiting MIN_HOLD_MS for Left Ctrl AND sustained hold
+const MODE_NORMAL_PTT: u8 = 2;      // hold threshold elapsed without Ctrl — normal dictation
 const MODE_SMART_DICTATION: u8 = 3; // Fn+Ctrl chord detected — smart dictation
+
+/// Minimum hold time before firing normal PTT press. Shorter taps are treated as
+/// accidental presses and ignored entirely (no overlay, no recording). Also doubles
+/// as the Fn+Ctrl chord detection window.
+const MIN_HOLD_MS: u64 = 200;
 
 type CGEventRef = *const c_void;
 type CFMachPortRef = *mut c_void;
@@ -180,18 +185,18 @@ unsafe extern "C" fn fn_ctrl_tap_callback(
                         (state.on_smart_press)();
                     }
                 } else {
-                    // Start 50ms debounce window waiting for Ctrl
-                    tracing::info!("fn-key tap: Fn pressed — debouncing for Fn+Ctrl chord");
+                    // Start hold-threshold window. Doubles as Fn+Ctrl chord detection.
+                    tracing::info!("fn-key tap: Fn pressed — waiting {MIN_HOLD_MS}ms for sustained hold");
                     state.mode.store(MODE_DEBOUNCING, Ordering::SeqCst);
                     let mode = state.mode.clone();
                     let on_normal_press = state.on_normal_press.clone();
                     std::thread::spawn(move || {
-                        std::thread::sleep(std::time::Duration::from_millis(50));
+                        std::thread::sleep(std::time::Duration::from_millis(MIN_HOLD_MS));
                         if mode.compare_exchange(
                             MODE_DEBOUNCING, MODE_NORMAL_PTT,
                             Ordering::SeqCst, Ordering::SeqCst,
                         ).is_ok() {
-                            tracing::info!("fn-key tap: 50ms elapsed, no Ctrl — normal PTT press");
+                            tracing::info!("fn-key tap: hold threshold elapsed, no Ctrl — normal PTT press");
                             on_normal_press();
                         }
                     });
@@ -209,11 +214,9 @@ unsafe extern "C" fn fn_ctrl_tap_callback(
                         (state.on_smart_release)();
                     }
                     MODE_DEBOUNCING => {
-                        // Quick tap <50ms, Ctrl never came — treat as normal PTT tap.
+                        // Released before hold threshold — user never intended to record. Swallow.
                         // Debounce thread will see IDLE and skip on_normal_press.
-                        tracing::info!("fn-key tap: quick Fn tap (<50ms) — normal PTT press+release");
-                        (state.on_normal_press)();
-                        (state.on_normal_release)();
+                        tracing::info!("fn-key tap: quick Fn tap — ignored (hold {MIN_HOLD_MS}ms to record)");
                     }
                     _ => {}
                 }
@@ -263,12 +266,12 @@ unsafe extern "C" fn fn_ctrl_tap_callback(
                             (state.on_smart_press)();
                         }
                     } else {
-                        tracing::info!("fn-key tap: Globe pressed (keydown, keycode={}) — debouncing", keycode);
+                        tracing::info!("fn-key tap: Globe pressed (keydown, keycode={}) — waiting {}ms", keycode, MIN_HOLD_MS);
                         state.mode.store(MODE_DEBOUNCING, Ordering::SeqCst);
                         let mode = state.mode.clone();
                         let on_normal_press = state.on_normal_press.clone();
                         std::thread::spawn(move || {
-                            std::thread::sleep(std::time::Duration::from_millis(50));
+                            std::thread::sleep(std::time::Duration::from_millis(MIN_HOLD_MS));
                             if mode.compare_exchange(
                                 MODE_DEBOUNCING, MODE_NORMAL_PTT,
                                 Ordering::SeqCst, Ordering::SeqCst,
@@ -289,9 +292,7 @@ unsafe extern "C" fn fn_ctrl_tap_callback(
                             (state.on_smart_release)();
                         }
                         MODE_DEBOUNCING => {
-                            tracing::info!("fn-key tap: Globe quick tap — normal PTT press+release");
-                            (state.on_normal_press)();
-                            (state.on_normal_release)();
+                            tracing::info!("fn-key tap: Globe quick tap — ignored (hold to record)");
                         }
                         _ => {}
                     }
