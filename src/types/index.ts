@@ -61,12 +61,14 @@ export interface AppSettings {
   ptt_key: string;
   overlay_placement: string;
   overlay_style: string;
+  show_dock_icon: boolean;
   translate_to_english: boolean;
   llm_model_name: string;
   llm_nudge_shown: boolean;
   apply_polish_to_regular: boolean;
   vad_engine: string;
   transcription_engine: string;
+  moonshine_model: string;
   analytics_enabled: boolean;
   crash_reporting_enabled: boolean;
   live_text_streaming: boolean;

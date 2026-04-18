@@ -14,6 +14,8 @@ mod engine;
 mod fn_key;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "macos")]
+mod moonshine;
 
 const SENTRY_DSN: &str = match option_env!("SENTRY_DSN") {
     Some(s) => s,
@@ -41,7 +43,7 @@ use commands::{
     SharedState, TranscriptionState, WhisperEngineCache, DownloadCancelTokens,
 };
 #[cfg(target_os = "macos")]
-use commands::{load_llm_engine, unload_llm_engine};
+use commands::{load_llm_engine, unload_llm_engine, get_moonshine_models, download_moonshine_model, cancel_moonshine_model_download, delete_moonshine_model};
 use std::sync::{Arc, Mutex};
 use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -67,21 +69,58 @@ fn spawn_ptt_for_key(
 
     let app_press = app.clone();
     let app_release = app.clone();
+    let app_smart_press = app.clone();
+    let app_smart_release = app.clone();
+    let state_prewarm = shared_state.clone();
     let state_press = shared_state.clone();
-    let on_press = move || {
-        let is_recording = state_press.lock().unwrap_or_else(|e| e.into_inner()).capture.is_some();
+    let state_smart_press = shared_state.clone();
+
+    // Fires immediately on Fn keydown (before 50ms debounce).
+    // Pre-warms the audio stream so the mic indicator tracks physical key hold time.
+    let on_fn_down = move || {
+        let already_open = state_prewarm.lock().unwrap_or_else(|e| e.into_inner()).capture.is_some();
+        if already_open { return; }
+        let state_for_thread = state_prewarm.clone();
+        std::thread::spawn(move || {
+            let settings = crate::settings::load_settings_sync();
+            let mut s = state_for_thread.lock().unwrap_or_else(|e| e.into_inner());
+            if s.capture.is_none() {
+                let capture = crate::audio::capture::AudioCapture::new(settings.vad_sensitivity, "silero");
+                match capture.start(settings.audio_input_device) {
+                    Ok(()) => {
+                        tracing::debug!("audio stream pre-warmed on Fn keydown");
+                        s.capture = Some(capture);
+                    }
+                    Err(e) => tracing::warn!("audio pre-warm failed: {e}"),
+                }
+            }
+        });
+    };
+
+    let on_normal_press = move || {
+        let is_recording = state_press.lock().unwrap_or_else(|e| e.into_inner()).capture.as_ref().map(|c| c.is_recording()).unwrap_or(false);
         if !is_recording {
-            let focused = crate::paste::get_frontmost_app();
-            *crate::commands::get_previous_app().lock().unwrap_or_else(|e| e.into_inner()) = focused;
+            crate::commands::store_focused_app();
             let _ = app_press.emit("hotkey-toggle-recording", ());
         }
     };
-    let on_release = move || {
+    let on_normal_release = move || {
         let _ = app_release.emit("hotkey-stop-recording", ());
     };
+    let on_smart_press = move || {
+        let is_recording = state_smart_press.lock().unwrap_or_else(|e| e.into_inner()).capture.as_ref().map(|c| c.is_recording()).unwrap_or(false);
+        if !is_recording {
+            crate::commands::store_focused_app();
+            state_smart_press.lock().unwrap_or_else(|e| e.into_inner()).is_smart_dictation = true;
+            let _ = app_smart_press.emit("hotkey-smart-dictation", ());
+        }
+    };
+    let on_smart_release = move || {
+        let _ = app_smart_release.emit("hotkey-stop-recording", ());
+    };
 
-    tracing::info!("PTT tap spawned for key: Fn");
-    Some(crate::fn_key::spawn_fn_key_tap(on_press, on_release))
+    tracing::info!("PTT tap spawned for key: Fn (with Fn+Ctrl → smart dictation)");
+    Some(crate::fn_key::spawn_fn_key_tap(on_fn_down, on_normal_press, on_normal_release, on_smart_press, on_smart_release))
 }
 
 /// Build the tray menu reflecting current settings (mic checkmark + style checkmark).
@@ -272,6 +311,11 @@ pub fn run() {
     let engine_cache: WhisperEngineCache = Arc::new(Mutex::new(None));
     let download_cancel_tokens: DownloadCancelTokens = Arc::new(Mutex::new(std::collections::HashMap::new()));
 
+    // Pre-start the persistent audio stream so PTT is instant (no device enumeration on hotkey press).
+    // Audio stream is started lazily on first PTT press (not at launch) to avoid
+    // holding the microphone open permanently — macOS shows the orange mic indicator
+    // whenever any process has an active audio input stream, even if it is idle.
+
     // Separate managed state for LlmEngine — must NOT be inside SharedState
     // because inference blocks the calling thread for several seconds — holding the shared mutex during inference would deadlock the shortcut handlers.
     #[cfg(target_os = "macos")]
@@ -328,6 +372,13 @@ pub fn run() {
                 } else {
                     let _ = autostart.disable();
                 }
+            }
+
+            // Apply dock visibility from settings. Menubar-only mode requires Accessory.
+            #[cfg(target_os = "macos")]
+            {
+                let s = crate::settings::load_settings_sync();
+                crate::commands::apply_dock_visibility(app.handle(), s.show_dock_icon);
             }
 
             // Analytics: fire app_launched (tokio runtime is live inside setup)
@@ -550,13 +601,12 @@ pub fn run() {
             let _ = app.global_shortcut().unregister(toggle_sc);
             if let Err(e) = app.global_shortcut().on_shortcut(toggle_sc, move |app, _shortcut, event| {
                 if event.state != ShortcutState::Pressed { return; }
-                let is_recording = state_toggle.lock().unwrap_or_else(|e| e.into_inner()).capture.is_some();
+                let is_recording = state_toggle.lock().unwrap_or_else(|e| e.into_inner()).capture.as_ref().map(|c| c.is_recording()).unwrap_or(false);
                 if is_recording {
                     let _ = app.emit("hotkey-stop-recording", ());
                 } else {
-                    let focused = crate::paste::get_frontmost_app();
-                    tracing::info!("toggle hotkey: captured frontmost app = {:?}", focused);
-                    *crate::commands::get_previous_app().lock().unwrap_or_else(|e| e.into_inner()) = focused;
+                    crate::commands::store_focused_app();
+                    tracing::info!("toggle hotkey: stored frontmost app (skipped if OmWhisper)");
                     let _ = app.emit("hotkey-toggle-recording", ());
                 }
             }) {
@@ -585,13 +635,12 @@ pub fn run() {
                     let _ = app.global_shortcut().unregister(ptt_sc);
                     let state_ptt = shared_state.clone();
                     if let Err(e) = app.global_shortcut().on_shortcut(ptt_sc, move |app, _shortcut, event| {
-                        let is_recording = state_ptt.lock().unwrap_or_else(|e| e.into_inner()).capture.is_some();
+                        let is_recording = state_ptt.lock().unwrap_or_else(|e| e.into_inner()).capture.as_ref().map(|c| c.is_recording()).unwrap_or(false);
                         match event.state {
                             ShortcutState::Pressed => {
                                 if !is_recording {
-                                    let focused = crate::paste::get_frontmost_app();
-                                    tracing::info!("ptt pressed: captured frontmost app = {:?}", focused);
-                                    *crate::commands::get_previous_app().lock().unwrap_or_else(|e| e.into_inner()) = focused;
+                                    crate::commands::store_focused_app();
+                                    tracing::info!("ptt pressed: stored frontmost app (skipped if OmWhisper)");
                                     let _ = app.emit("hotkey-toggle-recording", ());
                                 }
                             }
@@ -701,13 +750,12 @@ pub fn run() {
 
                 match event.state {
                     ShortcutState::Pressed => {
-                        let is_recording = state_for_sd.lock().unwrap_or_else(|e| e.into_inner()).capture.is_some();
+                        let is_recording = state_for_sd.lock().unwrap_or_else(|e| e.into_inner()).capture.as_ref().map(|c| c.is_recording()).unwrap_or(false);
                         if is_push_to_talk {
                             if !is_recording {
                                 // Capture focused app before showing window
-                                let focused = crate::paste::get_frontmost_app();
-                                tracing::info!("smart-dictation hotkey: captured frontmost app = {:?}", focused);
-                                *crate::commands::get_previous_app().lock().unwrap_or_else(|e| e.into_inner()) = focused;
+                                crate::commands::store_focused_app();
+                                tracing::info!("smart-dictation hotkey: stored frontmost app (skipped if OmWhisper)");
                                 state_for_sd.lock().unwrap_or_else(|e| e.into_inner()).is_smart_dictation = true;
                                 // Don't show/focus the main window — overlay handles visual feedback
                                 let _ = app.emit("hotkey-smart-dictation", ());
@@ -718,9 +766,8 @@ pub fn run() {
                                 let _ = app.emit("hotkey-stop-recording", ());
                             } else {
                                 // Capture focused app before doing anything
-                                let focused = crate::paste::get_frontmost_app();
-                                tracing::info!("smart-dictation hotkey: captured frontmost app = {:?}", focused);
-                                *crate::commands::get_previous_app().lock().unwrap_or_else(|e| e.into_inner()) = focused;
+                                crate::commands::store_focused_app();
+                                tracing::info!("smart-dictation hotkey: stored frontmost app (skipped if OmWhisper)");
                                 state_for_sd.lock().unwrap_or_else(|e| e.into_inner()).is_smart_dictation = true;
                                 // Don't show/focus the main window — overlay handles visual feedback
                                 let _ = app.emit("hotkey-smart-dictation", ());
@@ -730,7 +777,7 @@ pub fn run() {
                     ShortcutState::Released => {
                         if is_push_to_talk {
                             // Push-to-talk: delegate to frontend so isPendingPaste is set
-                            let is_recording = state_for_sd.lock().unwrap_or_else(|e| e.into_inner()).capture.is_some();
+                            let is_recording = state_for_sd.lock().unwrap_or_else(|e| e.into_inner()).capture.as_ref().map(|c| c.is_recording()).unwrap_or(false);
                             if is_recording {
                                 let _ = app.emit("hotkey-stop-recording", ());
                             }
@@ -955,12 +1002,17 @@ pub fn run() {
             styles::remove_custom_style,
             get_platform,
             get_transcription_engine,
-            commands::is_apple_speech_available,
-            commands::get_apple_speech_auth_status,
-            commands::request_speech_recognition_permission,
             commands::open_external_url,
             commands::send_feedback,
             install_update,
+            #[cfg(target_os = "macos")]
+            get_moonshine_models,
+            #[cfg(target_os = "macos")]
+            download_moonshine_model,
+            #[cfg(target_os = "macos")]
+            cancel_moonshine_model_download,
+            #[cfg(target_os = "macos")]
+            delete_moonshine_model,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

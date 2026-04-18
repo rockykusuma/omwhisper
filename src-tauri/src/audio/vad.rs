@@ -144,8 +144,28 @@ impl Vad {
     }
 
     fn load_model(model_bytes: &[u8]) -> anyhow::Result<SileroModel> {
+        // Silero v5 8kHz path inputs:
+        //   0: input  [1, 256]    f32 (one decimated 8kHz frame)
+        //   1: state  [2, 1, 128] f32 (LSTM combined h+c state)
+        //   2: sr     []          i64 (constant 8000)
+        //
+        // tract-onnx cannot resolve input types automatically for this model
+        // (error: "Translating node 'input' Source ToTypedTranslator").
+        // Explicit input facts fix the type inference before optimisation.
         let model = tract_onnx::onnx()
             .model_for_read(&mut std::io::Cursor::new(model_bytes))?
+            .with_input_fact(
+                0,
+                InferenceFact::dt_shape(DatumType::F32, [1usize, SILERO_FRAME_SIZE]),
+            )?
+            .with_input_fact(
+                1,
+                InferenceFact::dt_shape(DatumType::F32, [2usize, 1, 128]),
+            )?
+            .with_input_fact(
+                2,
+                InferenceFact::dt(DatumType::I64),
+            )?
             .into_optimized()?
             .into_runnable()?;
         Ok(model)
@@ -170,6 +190,15 @@ impl Vad {
             VadImpl::Silero { .. } => self.process_silero(samples),
             VadImpl::Rms { threshold } => self.process_rms(samples, *threshold),
         }
+    }
+
+    /// Reset all VAD state without flushing (called at begin_recording).
+    /// Discards any stale audio from before the hotkey was pressed.
+    pub fn reset(&mut self) {
+        self.speech_buffer.clear();
+        self.leftover.clear();
+        self.silence_samples = 0;
+        self.reset_state();
     }
 
     /// Force-flush any buffered speech (called on recording stop).
