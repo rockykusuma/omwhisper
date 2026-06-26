@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
-  Sliders, Mic, FileText, Info, ShieldCheck, ShieldAlert, Keyboard, Sparkles, Cpu, ExternalLink
+  Sliders, Mic, FileText, Info, ShieldCheck, ShieldAlert, Keyboard, ExternalLink
 } from "lucide-react";
 import { applyThemePreference, type ThemePreference } from "../hooks/useTheme";
 import { logger } from "../utils/logger";
@@ -578,46 +578,17 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                   </div>
                 </div>
                 {platform === "macos" && (
-                  <div className="py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
-                    <p className="text-sm mb-1" style={{ color: "var(--t1)" }}>Engine</p>
-                    <p className="text-xs mb-3" style={{ color: "var(--t2)" }}>Choose how your voice is transcribed</p>
-                    <div className="flex gap-2">
-                      {([
-                        { id: "whisper",   Icon: Cpu,      label: "Whisper",    sub: "All languages · higher accuracy" },
-                        { id: "moonshine", Icon: Sparkles, label: "Moonshine",  sub: "English · ultra-fast" },
-                      ] as const).map(({ id, Icon, label, sub }) => {
-                        const active = settings.transcription_engine === id;
-                        return (
-                          <button
-                            key={id}
-                            onClick={() => update({ transcription_engine: id })}
-                            aria-pressed={active}
-                            className="flex-1 flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left transition-all duration-150 cursor-pointer"
-                            style={{
-                              background: "var(--bg)",
-                              boxShadow: active ? "var(--nm-pressed-sm)" : "var(--nm-raised-sm)",
-                              border: active ? "1px solid color-mix(in srgb, var(--accent) 45%, transparent)" : "1px solid transparent",
-                            }}
-                          >
-                            <div
-                              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                              style={{ background: active ? "var(--accent-bg)" : "color-mix(in srgb, var(--t1) 6%, transparent)" }}
-                            >
-                              <Icon size={14} style={{ color: active ? "var(--accent)" : "var(--t3)" }} />
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium leading-tight" style={{ color: active ? "var(--accent)" : "var(--t1)" }}>
-                                {label}
-                              </p>
-                              <p className="text-[10px] leading-tight mt-0.5" style={{ color: "var(--t4)" }}>
-                                {sub}
-                              </p>
-                            </div>
-                          </button>
-                        );
-                      })}
+                  <>
+                    <div className="py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
+                      <p className="text-sm mb-1" style={{ color: "var(--t1)" }}>Engine</p>
+                      <p className="text-xs" style={{ color: "var(--t2)" }}>
+                        Chosen automatically by language — English &amp; European languages use <span style={{ color: "var(--accent)" }}>Parakeet</span> (fast, with punctuation); other languages use Whisper.
+                      </p>
                     </div>
-                  </div>
+                    <SettingRow label="Fast English mode" description="Use Moonshine for English dictation — lower latency, lower accuracy. Requires the Moonshine model.">
+                      <Toggle value={settings.fast_english_mode ?? false} onChange={(v) => update({ fast_english_mode: v })} label="Fast English mode" />
+                    </SettingRow>
+                  </>
                 )}
                 <SettingRow label="Language" description="Transcription language">
                   <select
@@ -641,11 +612,9 @@ export default function SettingsPanel({ initialTab, onNavigate }: { initialTab?:
                 </SettingRow>
                 {settings.translate_to_english && settings.language !== "en" && (
                   <div className="px-1 pb-3 space-y-1.5">
-                    {settings.transcription_engine !== "whisper" && (
-                      <p className="text-[11px] leading-relaxed" style={{ color: "var(--warning)" }}>
-                        ⚠ Translation requires Whisper engine. It will be used automatically when translating, even if Moonshine is selected above.
-                      </p>
-                    )}
+                    <p className="text-[11px] leading-relaxed" style={{ color: "var(--warning)" }}>
+                      ⚠ Translation uses the Whisper engine automatically.
+                    </p>
                     {settings.active_model.endsWith(".en") && (
                       <p className="text-[11px] leading-relaxed" style={{ color: "var(--warning)" }}>
                         ⚠ Your active model ({settings.active_model}) is English-only and cannot translate. Switch to a multilingual model (e.g. medium, small) in AI Models.
@@ -991,6 +960,12 @@ function AboutSection({ settings, update }: { settings: Settings; update: (patch
           <SettingRow label="Version">
             <span className="text-xs font-mono" style={{ color: "var(--t2)" }}>{version}</span>
           </SettingRow>
+          <div className="py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
+            <p className="text-sm mb-1" style={{ color: "var(--t1)" }}>Speech Recognition</p>
+            <p className="text-xs leading-relaxed" style={{ color: "var(--t2)" }}>
+              Powered by NVIDIA Parakeet, Whisper, and Moonshine. Parakeet TDT is licensed under CC-BY-4.0.
+            </p>
+          </div>
           <div className="py-3" style={{ borderBottom: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
             <p className="text-sm mb-1" style={{ color: "var(--t1)" }}>Model Storage</p>
             <p className="text-xs font-mono break-all" style={{ color: "var(--t2)" }}>~/Library/Application Support/com.omwhisper.app</p>

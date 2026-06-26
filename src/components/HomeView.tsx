@@ -259,7 +259,7 @@ export default function HomeView({
       {/* ── Engine badge ─────────────────────────────────────────────── */}
       <div className="flex justify-center pt-1 pb-0">
         <span className="text-[10px] font-medium" style={{ color: "var(--t4)" }}>
-          {engineName === "moonshine" ? "◎ Moonshine" : "◎ Whisper"}
+          {engineName === "parakeet" ? "◎ Parakeet" : engineName === "moonshine" ? "◎ Moonshine" : "◎ Whisper"}
         </span>
       </div>
 

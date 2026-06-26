@@ -1,6 +1,6 @@
 use crate::audio::capture::AudioCapture;
 use crate::whisper::{
-    engine::{load_wav_as_f32, Segment, WhisperEngine},
+    engine::{load_wav_as_f32, Segment},
     models::{self, ModelInfo},
 };
 use cpal::traits::{DeviceTrait, HostTrait};
@@ -9,6 +9,16 @@ use std::sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex};
 use tauri::{AppHandle, Emitter};
 
 /// Shared transcription state managed by Tauri's state system.
+///
+/// # Mutex poisoning
+/// Throughout this module (and the rest of the codebase) locks on this state are
+/// acquired with `state.lock().unwrap_or_else(|e| e.into_inner())` rather than
+/// `.unwrap()`. This is intentional: if a thread panics while holding the lock,
+/// the Mutex becomes poisoned and any subsequent `.unwrap()` would cascade the
+/// panic. Recording/paste paths need to stay available so the user can still
+/// stop a recording or shut down cleanly — the recovered guard is preferable
+/// to an unrecoverable panic. Do NOT replace this pattern with `.unwrap()`
+/// without auditing every panic site that touches this state first.
 pub struct TranscriptionState {
     pub capture: Option<AudioCapture>,
     /// Signals the usage-tracking timer thread to stop.
@@ -84,11 +94,15 @@ pub async fn transcribe_file(path: String, model_path: String) -> Result<Vec<Seg
 
     tokio::task::spawn_blocking(move || {
         let resolved = resolve_model_path(&model_path);
-        // File transcription always uses Whisper.
-        let engine = WhisperEngine::new(&resolved).map_err(|e| e.to_string())?;
+        // File transcription uses the same language-based engine selection as live dictation.
+        // (No translation here, so translate flag is false.)
+        let engine_preference =
+            crate::engine::pick_engine(&settings.language, false, settings.fast_english_mode);
+        let engine = crate::engine::TranscriptionEngine::select(&resolved, engine_preference, &settings)
+            .map_err(|e| e.to_string())?;
         let audio = load_wav_as_f32(Path::new(&path)).map_err(|e| e.to_string())?;
         let prompt = if initial_prompt.is_empty() { None } else { Some(initial_prompt.as_str()) };
-        engine.transcribe(&audio, "en", false, prompt, &replacements).map_err(|e| e.to_string())
+        engine.transcribe(&audio, &settings.language, false, prompt, &replacements).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -134,12 +148,12 @@ pub async fn start_transcription(
     let sound_enabled = settings.sound_enabled;
     let sound_volume = settings.sound_volume;
     let translate_to_english = settings.translate_to_english;
-    // Force Whisper when translation is enabled — Moonshine does not support translation.
-    let engine_preference = if translate_to_english && settings.language != "en" {
-        "whisper".to_string()
-    } else {
-        settings.transcription_engine.clone()
-    };
+    // Engine is chosen automatically by language: Parakeet for English/European,
+    // Whisper for non-European languages + translation, Moonshine when Fast English
+    // mode is on. See `engine::pick_engine`.
+    let engine_preference =
+        crate::engine::pick_engine(&settings.language, translate_to_english, settings.fast_english_mode)
+            .to_string();
 
     let is_ptt = settings.recording_mode == "push_to_talk";
 
@@ -1967,6 +1981,90 @@ pub async fn cancel_moonshine_model_download(
 #[tauri::command]
 pub async fn delete_moonshine_model(variant: String) -> Result<(), String> {
     crate::moonshine::models::delete_moonshine_model(&variant).map_err(|e| e.to_string())
+}
+
+// ── Parakeet model management commands (macOS only) ──────────────────────────
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn get_parakeet_models() -> Result<Vec<crate::parakeet::models::ParakeetModelInfo>, String> {
+    Ok(crate::parakeet::models::list_parakeet_models())
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn download_parakeet_model(
+    variant: String,
+    app: tauri::AppHandle,
+    cancel_tokens: tauri::State<'_, DownloadCancelTokens>,
+) -> Result<(), String> {
+    let cancel = Arc::new(AtomicBool::new(false));
+    let key = format!("parakeet:{variant}");
+    {
+        let mut map = cancel_tokens.lock().unwrap();
+        map.insert(key.clone(), Arc::clone(&cancel));
+    }
+
+    let app_clone = app.clone();
+    let variant_clone = variant.clone();
+    let total = crate::parakeet::models::list_parakeet_models()
+        .into_iter()
+        .find(|m| m.name == variant)
+        .map(|m| m.total_size_bytes)
+        .unwrap_or(1);
+
+    let result = crate::parakeet::models::download_parakeet_model(
+        &variant,
+        move |done, _total| {
+            let _ = app_clone.emit(
+                "download-progress",
+                serde_json::json!({
+                    "name": format!("parakeet:{}", variant_clone),
+                    "downloaded": done,
+                    "total": total,
+                }),
+            );
+        },
+        cancel,
+    )
+    .await;
+
+    cancel_tokens.lock().unwrap().remove(&key);
+
+    match result {
+        Ok(_) => {
+            let _ = app.emit(
+                "download-progress",
+                serde_json::json!({
+                    "name": format!("parakeet:{}", variant),
+                    "downloaded": total,
+                    "total": total,
+                    "done": true,
+                }),
+            );
+            Ok(())
+        }
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn cancel_parakeet_model_download(
+    variant: String,
+    cancel_tokens: tauri::State<'_, DownloadCancelTokens>,
+) -> Result<(), String> {
+    let map = cancel_tokens.lock().unwrap();
+    if let Some(flag) = map.get(&format!("parakeet:{variant}")) {
+        flag.store(true, Ordering::Relaxed);
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn delete_parakeet_model(variant: String) -> Result<(), String> {
+    crate::parakeet::models::delete_parakeet_model(&variant).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

@@ -136,6 +136,10 @@ pub struct Settings {
     /// long uninterrupted speech. Default: false.
     #[serde(default)]
     pub live_text_streaming: bool,
+    /// When true, English dictation uses Moonshine (low-latency) instead of Parakeet.
+    /// Engine is otherwise chosen automatically by language (see `engine::pick_engine`).
+    #[serde(default)]
+    pub fast_english_mode: bool,
 }
 
 fn default_clipboard_restore_delay_ms() -> u64 { 2000 }
@@ -219,7 +223,9 @@ impl Default for Settings {
             show_dock_icon: false,
             theme: "dark".to_string(),
             custom_polish_styles: Vec::new(),
-            translate_to_english: true,
+            // Default off so Parakeet (the default engine) handles English/European
+            // dictation out of the box; translation to English is opt-in.
+            translate_to_english: false,
             llm_model_name: "qwen2.5-0.5b-instruct-q4_k_m.gguf".to_string(),
             llm_nudge_shown: false,
             apply_polish_to_regular: false,
@@ -229,6 +235,7 @@ impl Default for Settings {
             analytics_enabled: true,
             crash_reporting_enabled: true,
             live_text_streaming: false,
+            fast_english_mode: false,
         }
     }
 }
@@ -337,6 +344,20 @@ mod tests {
     }
 
     #[test]
+    fn fast_english_mode_defaults_false() {
+        assert!(!Settings::default().fast_english_mode);
+    }
+
+    #[test]
+    fn fast_english_mode_absent_deserializes_false() {
+        // Serialize a default, drop the field, confirm #[serde(default)] fills it false.
+        let mut v = serde_json::to_value(Settings::default()).unwrap();
+        v.as_object_mut().unwrap().remove("fast_english_mode");
+        let s: Settings = serde_json::from_value(v).unwrap();
+        assert!(!s.fast_english_mode);
+    }
+
+    #[test]
     fn default_vad_sensitivity() {
         assert!((Settings::default().vad_sensitivity - 0.5).abs() < f32::EPSILON);
     }
@@ -438,7 +459,9 @@ mod tests {
     #[test]
     fn default_bool_flags_false() {
         let s = Settings::default();
-        assert!(s.translate_to_english);
+        // Off by default: Parakeet (default engine) transcribes English/European
+        // directly; translation to English is opt-in.
+        assert!(!s.translate_to_english);
         assert!(!s.llm_nudge_shown);
         assert!(!s.apply_polish_to_regular);
     }

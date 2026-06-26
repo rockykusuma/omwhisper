@@ -16,6 +16,8 @@ mod fn_key;
 mod macos;
 #[cfg(target_os = "macos")]
 mod moonshine;
+#[cfg(target_os = "macos")]
+mod parakeet;
 
 const SENTRY_DSN: &str = match option_env!("SENTRY_DSN") {
     Some(s) => s,
@@ -44,6 +46,8 @@ use commands::{
 };
 #[cfg(target_os = "macos")]
 use commands::{load_llm_engine, unload_llm_engine, get_moonshine_models, download_moonshine_model, cancel_moonshine_model_download, delete_moonshine_model};
+#[cfg(target_os = "macos")]
+use commands::{get_parakeet_models, download_parakeet_model, cancel_parakeet_model_download, delete_parakeet_model};
 use std::sync::{Arc, Mutex};
 use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -352,13 +356,16 @@ pub fn run() {
         .setup(move |app| {
             // Remove stale LaunchAgent plist left by the old LaunchAgent approach.
             // Now using AppleScript (Login Items) which is the correct macOS mechanism.
+            // Unload BEFORE deleting so launchctl can still see the plist.
             #[cfg(target_os = "macos")]
-            if let Some(agents_dir) = dirs::home_dir().map(|h| h.join("Library/LaunchAgents/OmWhisper.plist")) {
-                if agents_dir.exists() {
-                    let _ = std::fs::remove_file(&agents_dir);
-                    let _ = std::process::Command::new("launchctl")
-                        .args(["unload", agents_dir.to_str().unwrap_or("")])
-                        .output();
+            if let Some(agents_plist) = dirs::home_dir().map(|h| h.join("Library/LaunchAgents/OmWhisper.plist")) {
+                if agents_plist.exists() {
+                    if let Some(path_str) = agents_plist.to_str() {
+                        let _ = std::process::Command::new("launchctl")
+                            .args(["unload", path_str])
+                            .output();
+                    }
+                    let _ = std::fs::remove_file(&agents_plist);
                 }
             }
 
@@ -1013,6 +1020,14 @@ pub fn run() {
             cancel_moonshine_model_download,
             #[cfg(target_os = "macos")]
             delete_moonshine_model,
+            #[cfg(target_os = "macos")]
+            get_parakeet_models,
+            #[cfg(target_os = "macos")]
+            download_parakeet_model,
+            #[cfg(target_os = "macos")]
+            cancel_parakeet_model_download,
+            #[cfg(target_os = "macos")]
+            delete_parakeet_model,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

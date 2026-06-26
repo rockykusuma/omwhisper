@@ -147,11 +147,14 @@ impl Vad {
         // Silero v5 8kHz path inputs:
         //   0: input  [1, 256]    f32 (one decimated 8kHz frame)
         //   1: state  [2, 1, 128] f32 (LSTM combined h+c state)
-        //   2: sr     []          i64 (constant 8000)
+        //   2: sr     []          i64 (scalar, value 8000)
         //
-        // tract-onnx cannot resolve input types automatically for this model
-        // (error: "Translating node 'input' Source ToTypedTranslator").
-        // Explicit input facts fix the type inference before optimisation.
+        // tract-onnx fails on type inference for each Source node unless an
+        // explicit shape is provided — including for the scalar `sr` input,
+        // which requires an empty-dimension shape (not just a datum type).
+        // Without the scalar shape tract reports:
+        //   "Translating node #0 \"sr\" Source ToTypedTranslator".
+        let scalar_shape: [usize; 0] = [];
         let model = tract_onnx::onnx()
             .model_for_read(&mut std::io::Cursor::new(model_bytes))?
             .with_input_fact(
@@ -164,7 +167,7 @@ impl Vad {
             )?
             .with_input_fact(
                 2,
-                InferenceFact::dt(DatumType::I64),
+                InferenceFact::dt_shape(DatumType::I64, scalar_shape),
             )?
             .into_optimized()?
             .into_runnable()?;

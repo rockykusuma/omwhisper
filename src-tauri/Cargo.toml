@@ -68,3 +68,5 @@ llama-cpp-2 = { version = "0.1.138", features = ["metal"] }
 whisper-rs = { version = "0.16", features = ["metal"] }
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSWindow"] }
+# Parakeet TDT 0.6B v3 ASR (ONNX Runtime / ort backend, CPU). macOS-only for v1.
+parakeet-rs = "0.3"
