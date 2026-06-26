@@ -4,6 +4,11 @@
 //! The API uses integer handles (i32) rather than raw pointers — all calls are
 //! thread-safe per the header docs, and handle lifetime is managed by
 //! moonshine_load_transcriber_from_files / moonshine_free_transcriber.
+//!
+//! Several constants and functions are not currently wired through the engine
+//! (extra model archs, version probing). Kept as the authoritative 1:1 binding
+//! so adding a new variant later is a one-line change.
+#![allow(dead_code)]
 
 use std::os::raw::{c_char, c_float, c_int};
 
