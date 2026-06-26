@@ -189,6 +189,16 @@ interface MoonshineVariantInfo {
   is_downloaded: boolean;
 }
 
+// ── Parakeet types ────────────────────────────────────────────────────────────
+interface ParakeetVariantInfo {
+  name: string;
+  display_name: string;
+  description: string;
+  size_label: string;
+  total_size_bytes: number;
+  is_downloaded: boolean;
+}
+
 // ── Whisper section ───────────────────────────────────────────────────────────
 function WhisperSection({ activeModel, isActiveEngine, onModelChange, downloading, errors, onDownload, onCancelDownload, onDelete, defaultExpanded }: {
   activeModel: string;
@@ -396,7 +406,96 @@ function MoonshineSection({ activeMoonshineModel, isActiveEngine, onMoonshineMod
   );
 }
 
-// ── Models tab (Whisper + Moonshine combined) ─────────────────────────────────
+// ── Parakeet section ──────────────────────────────────────────────────────────
+function ParakeetSection({ downloading, errors, onDownload, onCancelDownload, onDelete, defaultExpanded }: {
+  downloading: Record<string, number>;
+  errors: Record<string, string>;
+  onDownload: (key: string) => void;
+  onCancelDownload: (key: string) => void;
+  onDelete: (variant: string) => void;
+  defaultExpanded: boolean;
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [variants, setVariants] = useState<ParakeetVariantInfo[]>([]);
+  const [diskUsage, setDiskUsage] = useState(0);
+
+  async function loadVariants() {
+    const list = await invoke<ParakeetVariantInfo[]>("get_parakeet_models").catch(() => [] as ParakeetVariantInfo[]);
+    setVariants(list);
+    const used = list.filter(v => v.is_downloaded).reduce((sum, v) => sum + v.total_size_bytes, 0);
+    setDiskUsage(used);
+  }
+
+  useEffect(() => { loadVariants(); }, []);
+
+  const prevDownloadingRef = useRef<Record<string, number>>({});
+  useEffect(() => {
+    const prev = prevDownloadingRef.current;
+    const justFinished = Object.keys(prev).some(k => !(k in downloading));
+    if (justFinished) loadVariants();
+    prevDownloadingRef.current = downloading;
+  }, [downloading]);
+
+  const downloadedCount = variants.filter(v => v.is_downloaded).length;
+  const downloadedVariants = variants.filter(v => v.is_downloaded);
+
+  return (
+    <div>
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="w-full flex items-center justify-between mb-3 group"
+        style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+      >
+        <div className="flex items-center gap-2.5">
+          <p className="text-[10px] font-mono uppercase tracking-widest" style={{ color: "var(--accent)" }}>Parakeet</p>
+          <span className="text-[9px] px-1.5 py-px rounded-full font-semibold" style={{ color: "var(--accent)", background: "color-mix(in srgb, var(--accent) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)" }}>Default Engine</span>
+          {!expanded && downloadedVariants.length > 0 && (
+            <span className="text-[10px] font-mono" style={{ color: "var(--t4)" }}>{downloadedVariants.length} downloaded</span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {expanded && <p className="text-[11px] font-mono" style={{ color: "var(--t4)" }}>{formatBytes(diskUsage)} on disk</p>}
+          <svg
+            width="14" height="14" viewBox="0 0 14 14" fill="none"
+            style={{ color: "var(--t4)", transform: expanded ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.2s ease" }}
+          >
+            <path d="M3 5L7 9L11 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="space-y-2.5">
+          {variants.map((v) => {
+            const key = `parakeet:${v.name}`;
+            return (
+              <ModelCard
+                key={v.name}
+                name={v.name}
+                displayName={v.display_name}
+                description={v.description}
+                sizeLabel={v.size_label}
+                isActive={v.is_downloaded}
+                isEnOnly={false}
+                showLangBadge={false}
+                isDownloaded={v.is_downloaded}
+                downloadedCount={downloadedCount}
+                progress={key in downloading ? downloading[key] : undefined}
+                error={errors[key]}
+                onSetActive={() => {}}
+                onDownload={() => onDownload(key)}
+                onCancelDownload={() => onCancelDownload(key)}
+                onDelete={() => onDelete(v.name)}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Models tab (Parakeet + Whisper + Moonshine combined) ──────────────────────
 function ModelsTab({ activeModel, onModelChange, activeMoonshineModel, onMoonshineModelChange, transcriptionEngine, platform }: {
   activeModel: string;
   onModelChange: (name: string) => void;
@@ -459,8 +558,38 @@ function ModelsTab({ activeModel, onModelChange, activeMoonshineModel, onMoonshi
     }
   }
 
+  async function handleParakeetDownload(key: string) {
+    const variant = key.replace("parakeet:", "");
+    setErrors((prev) => { const n = { ...prev }; delete n[key]; return n; });
+    setDownloading((prev) => ({ ...prev, [key]: 0 }));
+    await invoke("download_parakeet_model", { variant });
+  }
+
+  async function handleParakeetCancelDownload(key: string) {
+    const variant = key.replace("parakeet:", "");
+    await invoke("cancel_parakeet_model_download", { variant });
+    setDownloading((prev) => { const next = { ...prev }; delete next[key]; return next; });
+  }
+
+  async function handleParakeetDelete(variant: string) {
+    await invoke("delete_parakeet_model", { variant });
+  }
+
   return (
     <div className="space-y-8">
+      {platform === "macos" && (
+        <>
+          <ParakeetSection
+            downloading={downloading}
+            errors={errors}
+            onDownload={handleParakeetDownload}
+            onCancelDownload={handleParakeetCancelDownload}
+            onDelete={handleParakeetDelete}
+            defaultExpanded={true}
+          />
+          <div style={{ borderTop: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }} />
+        </>
+      )}
       <WhisperSection
         activeModel={activeModel}
         isActiveEngine={transcriptionEngine === "whisper"}
@@ -470,21 +599,21 @@ function ModelsTab({ activeModel, onModelChange, activeMoonshineModel, onMoonshi
         onDownload={handleWhisperDownload}
         onCancelDownload={handleWhisperCancelDownload}
         onDelete={handleWhisperDelete}
-        defaultExpanded={transcriptionEngine === "whisper"}
+        defaultExpanded={false}
       />
       {platform === "macos" && (
         <>
           <div style={{ borderTop: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }} />
           <MoonshineSection
             activeMoonshineModel={activeMoonshineModel}
-            isActiveEngine={transcriptionEngine === "moonshine"}
+            isActiveEngine={false}
             onMoonshineModelChange={onMoonshineModelChange}
             downloading={downloading}
             errors={errors}
             onDownload={handleMoonshineDownload}
             onCancelDownload={handleMoonshineCancelDownload}
             onDelete={handleMoonshineDelete}
-            defaultExpanded={transcriptionEngine === "moonshine"}
+            defaultExpanded={false}
           />
         </>
       )}
@@ -492,20 +621,44 @@ function ModelsTab({ activeModel, onModelChange, activeMoonshineModel, onMoonshi
       {/* Engine comparison guide */}
       <div style={{ borderTop: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)", paddingTop: 24 }}>
         <p className="text-[10px] font-mono uppercase tracking-widest mb-4" style={{ color: "var(--t4)" }}>Which engine should I use?</p>
-        <div className="grid grid-cols-2 gap-3">
-          {/* Whisper card */}
+        <div className="grid grid-cols-3 gap-3">
+          {/* Parakeet card (default) */}
           <div
             className="rounded-xl p-4"
             style={{
-              background: transcriptionEngine === "whisper"
-                ? "color-mix(in srgb, var(--accent) 6%, var(--bg))"
-                : "var(--bg)",
-              boxShadow: transcriptionEngine === "whisper"
-                ? "var(--nm-pressed-sm), 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent)"
-                : "var(--nm-raised-sm)",
+              background: "color-mix(in srgb, var(--accent) 6%, var(--bg))",
+              boxShadow: "var(--nm-pressed-sm), 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent)",
+              opacity: platform !== "macos" ? 0.4 : 1,
             }}
           >
-            <p className="text-xs font-semibold mb-3" style={{ color: transcriptionEngine === "whisper" ? "var(--accent)" : "var(--t1)" }}>Whisper</p>
+            <div className="flex items-center gap-1.5 mb-3">
+              <p className="text-xs font-semibold" style={{ color: "var(--accent)" }}>Parakeet</p>
+              <span className="text-[9px] px-1 py-px rounded font-mono" style={{ color: "var(--accent)", background: "color-mix(in srgb, var(--accent) 14%, transparent)" }}>Default</span>
+            </div>
+            <ul className="space-y-2">
+              {[
+                { icon: "🌍", text: "25 European languages" },
+                { icon: "✍️", text: "Punctuation & caps" },
+                { icon: "🎯", text: "Best-in-class accuracy" },
+                { icon: "⚡", text: "Fast on Apple Silicon" },
+              ].map(({ icon, text }) => (
+                <li key={text} className="flex items-start gap-2">
+                  <span className="text-[11px] leading-tight mt-px">{icon}</span>
+                  <span className="text-[11px] leading-tight" style={{ color: "var(--t2)" }}>{text}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[10px] mt-3 pt-3" style={{ color: "var(--t4)", borderTop: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
+              Best for: everyday English &amp; European dictation
+            </p>
+          </div>
+
+          {/* Whisper card */}
+          <div
+            className="rounded-xl p-4"
+            style={{ background: "var(--bg)", boxShadow: "var(--nm-raised-sm)" }}
+          >
+            <p className="text-xs font-semibold mb-3" style={{ color: "var(--t1)" }}>Whisper</p>
             <ul className="space-y-2">
               {[
                 { icon: "🌐", text: "99 languages" },
@@ -520,7 +673,7 @@ function ModelsTab({ activeModel, onModelChange, activeMoonshineModel, onMoonshi
               ))}
             </ul>
             <p className="text-[10px] mt-3 pt-3" style={{ color: "var(--t4)", borderTop: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
-              Best for: meetings, interviews, non-English content
+              Best for: non-European languages & translation
             </p>
           </div>
 
@@ -528,17 +681,13 @@ function ModelsTab({ activeModel, onModelChange, activeMoonshineModel, onMoonshi
           <div
             className="rounded-xl p-4"
             style={{
-              background: transcriptionEngine === "moonshine"
-                ? "color-mix(in srgb, var(--accent) 6%, var(--bg))"
-                : "var(--bg)",
-              boxShadow: transcriptionEngine === "moonshine"
-                ? "var(--nm-pressed-sm), 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent)"
-                : "var(--nm-raised-sm)",
+              background: "var(--bg)",
+              boxShadow: "var(--nm-raised-sm)",
               opacity: platform !== "macos" ? 0.4 : 1,
             }}
           >
             <div className="flex items-center gap-1.5 mb-3">
-              <p className="text-xs font-semibold" style={{ color: transcriptionEngine === "moonshine" ? "var(--accent)" : "var(--t1)" }}>Moonshine</p>
+              <p className="text-xs font-semibold" style={{ color: "var(--t1)" }}>Moonshine</p>
               <span className="text-[9px] px-1 py-px rounded font-mono" style={{ color: "var(--t4)", background: "color-mix(in srgb, var(--t1) 8%, transparent)" }}>macOS</span>
             </div>
             <ul className="space-y-2">
