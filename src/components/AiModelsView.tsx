@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Cpu, MemoryStick, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import type { AppSettings, BuiltInStyle, CustomStyle, OllamaStatus } from "../types";
 
 // ── Whisper tab types ─────────────────────────────────────────────────────────
@@ -14,26 +14,6 @@ interface ModelInfo {
   is_downloaded: boolean;
   is_english_only: boolean;
   category: string;
-}
-
-interface DownloadProgress {
-  name: string;
-  progress: number;
-  done: boolean;
-  error: string | null;
-}
-
-interface SystemSpec {
-  total_ram_gb: number;
-  cpu_brand: string;
-  cpu_cores: number;
-  is_apple_silicon: boolean;
-}
-
-interface ModelRecommendation {
-  recommended_model: string;
-  reason: string;
-  spec: SystemSpec;
 }
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -65,14 +45,165 @@ const MODEL_PRESETS: Record<string, string[]> = {
   custom: [],
 };
 
-// ── Whisper sub-tab ───────────────────────────────────────────────────────────
-function WhisperTab({ activeModel, onModelChange }: { activeModel: string; onModelChange: (name: string) => void }) {
+// ── Reusable model card ───────────────────────────────────────────────────────
+interface ModelCardProps {
+  name: string;
+  displayName?: string;
+  description: string;
+  sizeLabel: string;
+  isActive: boolean;
+  isRecommended?: boolean;
+  isEnOnly?: boolean;
+  showLangBadge?: boolean;
+  isDownloaded: boolean;
+  downloadedCount: number;
+  progress: number | undefined; // undefined = not downloading
+  error?: string;
+  onSetActive: () => void;
+  onDownload: () => void;
+  onCancelDownload: () => void;
+  onDelete: () => void;
+}
+
+function ModelCard({
+  name, displayName, description, sizeLabel,
+  isActive, isRecommended, isEnOnly, showLangBadge,
+  isDownloaded, downloadedCount,
+  progress, error,
+  onSetActive, onDownload, onCancelDownload, onDelete,
+}: ModelCardProps) {
+  const isDownloading = progress !== undefined;
+  return (
+    <div
+      className="rounded-2xl overflow-hidden transition-all duration-200"
+      style={{
+        background: isActive
+          ? "color-mix(in srgb, var(--accent) 8%, var(--bg))"
+          : "var(--bg)",
+        boxShadow: isActive
+          ? "var(--nm-pressed-sm), 0 0 0 1.5px color-mix(in srgb, var(--accent) 40%, transparent)"
+          : "var(--nm-raised-sm)",
+      }}
+    >
+      {/* Left accent bar for active state */}
+      <div className="flex">
+        <div
+          className="w-1 shrink-0 transition-all duration-200"
+          style={{
+            background: isActive ? "var(--accent)" : "transparent",
+            boxShadow: isActive ? "2px 0 8px color-mix(in srgb, var(--accent) 50%, transparent)" : "none",
+          }}
+        />
+        <div className="flex-1 px-5 py-4">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <span className="font-semibold text-sm" style={{ color: isActive ? "var(--accent)" : "var(--t1)" }}>{displayName ?? name}</span>
+            {showLangBadge && isEnOnly && (
+              <span className="text-[10px] px-1.5 py-px rounded font-mono" style={{ color: "var(--t4)", background: "color-mix(in srgb, var(--t1) 6%, transparent)" }}>EN</span>
+            )}
+            {showLangBadge && !isEnOnly && (
+              <span className="text-[10px] px-1.5 py-px rounded font-mono" style={{ color: "var(--t4)", background: "color-mix(in srgb, var(--t1) 6%, transparent)" }}>Multi</span>
+            )}
+            {isActive && (
+              <span
+                className="text-[10px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1"
+                style={{
+                  color: "var(--accent)",
+                  background: "color-mix(in srgb, var(--accent) 15%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--accent) 40%, transparent)",
+                }}
+              >
+                <svg width="8" height="8" viewBox="0 0 10 10" fill="none" style={{ display: "inline" }}>
+                  <path d="M1.5 5L4 7.5L8.5 2.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Active
+              </span>
+            )}
+            {isRecommended && !isActive && (
+              <span className="text-[10px] px-1.5 py-px rounded font-mono flex items-center gap-0.5" style={{ color: "var(--accent)", border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)", background: "color-mix(in srgb, var(--accent) 7%, transparent)" }}>
+                <Sparkles size={8} />Recommended
+              </span>
+            )}
+          </div>
+          <p className="text-xs leading-relaxed" style={{ color: "var(--t2)" }}>{description}</p>
+          <p className="text-[11px] mt-1 font-mono" style={{ color: "var(--t4)" }}>{sizeLabel}</p>
+        </div>
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          {isDownloaded ? (
+            <>
+              {!isActive && <button onClick={onSetActive} className="btn-primary text-xs px-3 py-1.5">Set Active</button>}
+              {!isActive && (
+                <button
+                  onClick={onDelete}
+                  disabled={downloadedCount <= 1}
+                  className="btn-ghost text-xs px-3 py-1.5"
+                  style={{ fontSize: 11, opacity: downloadedCount <= 1 ? 0.35 : 1, cursor: downloadedCount <= 1 ? "not-allowed" : "pointer" }}
+                  title={downloadedCount <= 1 ? "At least one model must remain downloaded" : "Delete model"}
+                >Delete</button>
+              )}
+            </>
+          ) : isDownloading ? (
+            <div className="flex items-center gap-2">
+              <div className="text-right min-w-[52px]">
+                <p className="text-[11px] font-mono mb-1" style={{ color: "var(--accent)" }}>{Math.round((progress ?? 0) * 100)}%</p>
+                <div className="h-1 rounded-full overflow-hidden" style={{ width: 52, background: "color-mix(in srgb, var(--t1) 8%, transparent)" }}>
+                  <div className="h-full rounded-full transition-all duration-200" style={{ width: `${(progress ?? 0) * 100}%`, background: "var(--accent)" }} />
+                </div>
+              </div>
+              <button
+                onClick={onCancelDownload}
+                className="text-[11px] px-2 py-1 rounded-lg cursor-pointer transition-all duration-150 font-medium"
+                style={{ color: "var(--t3)", background: "var(--bg)", boxShadow: "var(--nm-raised-sm)", border: "1px solid transparent" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "#f87171"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(248,113,113,0.3)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "var(--t3)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "transparent"; }}
+                title="Cancel download"
+              >Cancel</button>
+            </div>
+          ) : (
+            <button
+              onClick={onDownload}
+              className="text-xs px-3 py-1.5 rounded-lg transition-all duration-150 cursor-pointer font-medium"
+              style={{ color: "var(--t2)", background: "var(--bg)", boxShadow: "var(--nm-raised-sm)", border: isRecommended ? "1px solid color-mix(in srgb, var(--accent) 25%, transparent)" : "1px solid transparent" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "var(--accent)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "color-mix(in srgb, var(--accent) 40%, transparent)"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "var(--t2)"; (e.currentTarget as HTMLButtonElement).style.borderColor = isRecommended ? "color-mix(in srgb, var(--accent) 25%, transparent)" : "transparent"; }}
+            >Download</button>
+          )}
+        </div>
+      </div>
+      {error && <p className="text-red-400 text-xs mt-2">✗ {error}</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Moonshine types ───────────────────────────────────────────────────────────
+interface MoonshineVariantInfo {
+  name: string;
+  display_name: string;
+  description: string;
+  size_label: string;
+  total_size_bytes: number;
+  model_arch: number;
+  is_downloaded: boolean;
+}
+
+// ── Whisper section ───────────────────────────────────────────────────────────
+function WhisperSection({ activeModel, isActiveEngine, onModelChange, downloading, errors, onDownload, onCancelDownload, onDelete, defaultExpanded }: {
+  activeModel: string;
+  isActiveEngine: boolean;
+  onModelChange: (name: string) => void;
+  downloading: Record<string, number>;
+  errors: Record<string, string>;
+  onDownload: (name: string) => void;
+  onCancelDownload: (name: string) => void;
+  onDelete: (name: string) => void;
+  defaultExpanded: boolean;
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [models, setModels] = useState<ModelInfo[]>([]);
-  const [downloading, setDownloading] = useState<Record<string, number>>({});
-  const [errors, setErrors] = useState<Record<string, string>>({});
   const [diskUsage, setDiskUsage] = useState(0);
-  const [recommendation, setRecommendation] = useState<ModelRecommendation | null>(null);
-  const [specExpanded, setSpecExpanded] = useState(false);
 
   async function loadModels() {
     const [list, usage] = await Promise.all([
@@ -85,14 +216,206 @@ function WhisperTab({ activeModel, onModelChange }: { activeModel: string; onMod
 
   useEffect(() => {
     loadModels();
-    invoke<ModelRecommendation>("get_model_recommendation").then(setRecommendation).catch(() => {});
+  }, []);
 
-    const unlisten = listen<DownloadProgress>("download-progress", (event) => {
-      const { name, progress, done, error } = event.payload;
+  // Reload when a download finishes (detected by downloading map shrinking)
+  const prevDownloadingRef = useRef<Record<string, number>>({});
+  useEffect(() => {
+    const prev = prevDownloadingRef.current;
+    const justFinished = Object.keys(prev).some(k => !(k in downloading));
+    if (justFinished) loadModels();
+    prevDownloadingRef.current = downloading;
+  }, [downloading]);
+
+  const downloadedCount = models.filter(m => m.is_downloaded).length;
+
+  // Build paired model list: tiny.en/tiny, base.en/base, …, then large variants
+  const englishOnly = models.filter(m => m.category === "English Only");
+  const multilingual = models.filter(m => m.category === "Multilingual");
+  const turbo = models.filter(m => m.category === "Turbo");
+  const pairedModels: ModelInfo[] = [];
+  const usedMultilingual = new Set<string>();
+  for (const en of englishOnly) {
+    const baseName = en.name.replace(/\.en$/, "");
+    const pair = multilingual.find(m => m.name === baseName);
+    pairedModels.push(en);
+    if (pair) { pairedModels.push(pair); usedMultilingual.add(pair.name); }
+  }
+  const orderedModels = [
+    ...pairedModels,
+    ...multilingual.filter(m => !usedMultilingual.has(m.name)),
+    ...turbo,
+  ];
+
+  const downloadedModels = models.filter(m => m.is_downloaded);
+
+  return (
+    <div>
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="w-full flex items-center justify-between mb-3 group"
+        style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+      >
+        <div className="flex items-center gap-2.5">
+          <p className="text-[10px] font-mono uppercase tracking-widest" style={{ color: isActiveEngine ? "var(--accent)" : "var(--t4)" }}>Whisper</p>
+          {isActiveEngine && (
+            <span className="text-[9px] px-1.5 py-px rounded-full font-semibold" style={{ color: "var(--accent)", background: "color-mix(in srgb, var(--accent) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)" }}>Active Engine</span>
+          )}
+          {!expanded && downloadedModels.length > 0 && (
+            <span className="text-[10px] font-mono" style={{ color: "var(--t4)" }}>{downloadedModels.length} downloaded</span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {expanded && <p className="text-[11px] font-mono" style={{ color: "var(--t4)" }}>{formatBytes(diskUsage)} on disk</p>}
+          <svg
+            width="14" height="14" viewBox="0 0 14 14" fill="none"
+            style={{ color: "var(--t4)", transform: expanded ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.2s ease" }}
+          >
+            <path d="M3 5L7 9L11 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="space-y-2.5">
+          {orderedModels.map((model) => (
+            <ModelCard
+              key={model.name}
+              name={model.name}
+              description={model.description}
+              sizeLabel={model.size_label}
+              isActive={isActiveEngine && activeModel === model.name}
+              isEnOnly={model.is_english_only}
+              showLangBadge={true}
+              isDownloaded={model.is_downloaded}
+              downloadedCount={downloadedCount}
+              progress={model.name in downloading ? downloading[model.name] : undefined}
+              error={errors[model.name]}
+              onSetActive={() => onModelChange(model.name)}
+              onDownload={() => onDownload(model.name)}
+              onCancelDownload={() => onCancelDownload(model.name)}
+              onDelete={() => onDelete(model.name)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Moonshine section ─────────────────────────────────────────────────────────
+function MoonshineSection({ activeMoonshineModel, isActiveEngine, onMoonshineModelChange, downloading, errors, onDownload, onCancelDownload, onDelete, defaultExpanded }: {
+  activeMoonshineModel: string;
+  isActiveEngine: boolean;
+  onMoonshineModelChange: (name: string) => void;
+  downloading: Record<string, number>;
+  errors: Record<string, string>;
+  onDownload: (name: string) => void;
+  onCancelDownload: (name: string) => void;
+  onDelete: (name: string) => void;
+  defaultExpanded: boolean;
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [variants, setVariants] = useState<MoonshineVariantInfo[]>([]);
+  const [diskUsage, setDiskUsage] = useState(0);
+
+  async function loadVariants() {
+    const list = await invoke<MoonshineVariantInfo[]>("get_moonshine_models").catch(() => [] as MoonshineVariantInfo[]);
+    setVariants(list);
+    const used = list.filter(v => v.is_downloaded).reduce((sum, v) => sum + v.total_size_bytes, 0);
+    setDiskUsage(used);
+  }
+
+  useEffect(() => { loadVariants(); }, []);
+
+  const prevDownloadingRef = useRef<Record<string, number>>({});
+  useEffect(() => {
+    const prev = prevDownloadingRef.current;
+    const justFinished = Object.keys(prev).some(k => !(k in downloading));
+    if (justFinished) loadVariants();
+    prevDownloadingRef.current = downloading;
+  }, [downloading]);
+
+  const downloadedCount = variants.filter(v => v.is_downloaded).length;
+  const downloadedVariants = variants.filter(v => v.is_downloaded);
+
+  return (
+    <div>
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="w-full flex items-center justify-between mb-3 group"
+        style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+      >
+        <div className="flex items-center gap-2.5">
+          <p className="text-[10px] font-mono uppercase tracking-widest" style={{ color: isActiveEngine ? "var(--accent)" : "var(--t4)" }}>Moonshine</p>
+          {isActiveEngine && (
+            <span className="text-[9px] px-1.5 py-px rounded-full font-semibold" style={{ color: "var(--accent)", background: "color-mix(in srgb, var(--accent) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)" }}>Active Engine</span>
+          )}
+          {!expanded && downloadedVariants.length > 0 && (
+            <span className="text-[10px] font-mono" style={{ color: "var(--t4)" }}>{downloadedVariants.length} downloaded</span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {expanded && <p className="text-[11px] font-mono" style={{ color: "var(--t4)" }}>{formatBytes(diskUsage)} on disk</p>}
+          <svg
+            width="14" height="14" viewBox="0 0 14 14" fill="none"
+            style={{ color: "var(--t4)", transform: expanded ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.2s ease" }}
+          >
+            <path d="M3 5L7 9L11 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="space-y-2.5">
+          {variants.map((v) => {
+            const key = `moonshine:${v.name}`;
+            return (
+              <ModelCard
+                key={v.name}
+                name={v.name}
+                displayName={v.display_name}
+                description={v.description}
+                sizeLabel={v.size_label}
+                isActive={isActiveEngine && activeMoonshineModel === v.name}
+                isEnOnly={true}
+                isDownloaded={v.is_downloaded}
+                downloadedCount={downloadedCount}
+                progress={key in downloading ? downloading[key] : undefined}
+                error={errors[key]}
+                onSetActive={() => onMoonshineModelChange(v.name)}
+                onDownload={() => onDownload(key)}
+                onCancelDownload={() => onCancelDownload(key)}
+                onDelete={() => onDelete(v.name)}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Models tab (Whisper + Moonshine combined) ─────────────────────────────────
+function ModelsTab({ activeModel, onModelChange, activeMoonshineModel, onMoonshineModelChange, transcriptionEngine, platform }: {
+  activeModel: string;
+  onModelChange: (name: string) => void;
+  activeMoonshineModel: string;
+  onMoonshineModelChange: (name: string) => void;
+  transcriptionEngine: string;
+  platform: string;
+}) {
+  const [downloading, setDownloading] = useState<Record<string, number>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const unlisten = listen<{ name: string; downloaded: number; total: number; done?: boolean; error?: string }>("download-progress", (event) => {
+      const { name, downloaded, total, done, error } = event.payload;
+      const progress = total > 0 ? downloaded / total : 0;
       if (done) {
         setDownloading((prev) => { const next = { ...prev }; delete next[name]; return next; });
         if (error) setErrors((prev) => ({ ...prev, [name]: error }));
-        else loadModels();
+        else setErrors((prev) => { const next = { ...prev }; delete next[name]; return next; });
       } else {
         setDownloading((prev) => ({ ...prev, [name]: progress }));
         setErrors((prev) => { const next = { ...prev }; delete next[name]; return next; });
@@ -101,225 +424,142 @@ function WhisperTab({ activeModel, onModelChange }: { activeModel: string; onMod
     return () => { unlisten.then((f) => f()); };
   }, []);
 
-  async function handleDownload(name: string) {
+  async function handleWhisperDownload(name: string) {
     setErrors((prev) => { const n = { ...prev }; delete n[name]; return n; });
     setDownloading((prev) => ({ ...prev, [name]: 0 }));
     await invoke("download_model", { name });
   }
 
-  async function handleCancelDownload(name: string) {
+  async function handleWhisperCancelDownload(name: string) {
     await invoke("cancel_model_download", { name });
     setDownloading((prev) => { const next = { ...prev }; delete next[name]; return next; });
   }
 
-  async function handleDelete(name: string) {
-    const downloadedCount = models.filter(m => m.is_downloaded).length;
-    if (downloadedCount <= 1) return; // always keep at least one model
+  async function handleWhisperDelete(name: string) {
     await invoke("delete_model", { name });
-    if (activeModel === name) {
-      const fallback = models.find(m => m.is_downloaded && m.name !== name);
-      if (fallback) onModelChange(fallback.name);
-    }
-    loadModels();
   }
 
-  const downloadedCount = models.filter(m => m.is_downloaded).length;
+  async function handleMoonshineDownload(key: string) {
+    const variant = key.replace("moonshine:", "");
+    setErrors((prev) => { const n = { ...prev }; delete n[key]; return n; });
+    setDownloading((prev) => ({ ...prev, [key]: 0 }));
+    await invoke("download_moonshine_model", { variant });
+  }
 
-  const recModel = recommendation?.recommended_model;
+  async function handleMoonshineCancelDownload(key: string) {
+    const variant = key.replace("moonshine:", "");
+    await invoke("cancel_moonshine_model_download", { variant });
+    setDownloading((prev) => { const next = { ...prev }; delete next[key]; return next; });
+  }
+
+  async function handleMoonshineDelete(variant: string) {
+    await invoke("delete_moonshine_model", { variant });
+    if (activeMoonshineModel === variant) {
+      onMoonshineModelChange("tiny-streaming-en");
+    }
+  }
 
   return (
-    <div>
-      <div className="mb-5">
-        <h2 className="text-xl font-bold" style={{ color: "var(--t1)" }}>Models</h2>
-        <p className="text-xs mt-1 font-mono" style={{ color: "var(--t3)" }}>{formatBytes(diskUsage)} used on disk</p>
-      </div>
-
-      {recommendation && (
-        <div
-          className="rounded-2xl p-4 mb-5"
-          style={{
-            background: "color-mix(in srgb, var(--accent) 6%, var(--bg))",
-            boxShadow: "var(--nm-raised-sm), 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent)",
-          }}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Sparkles size={13} style={{ color: "var(--accent)" }} />
-              <span className="text-sm font-semibold" style={{ color: "var(--t1)" }}>Recommended for your Mac</span>
-            </div>
-            <button
-              onClick={() => setSpecExpanded(v => !v)}
-              className="cursor-pointer transition-colors mt-0.5"
-              style={{ color: "var(--t3)" }}
-              title="Show system info"
-            >
-              {specExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            </button>
-          </div>
-          <p className="text-xs mt-2 leading-relaxed" style={{ color: "var(--t2)" }}>
-            {recModel && recModel === activeModel
-              ? "You're already on the recommended model."
-              : recommendation.reason}
-          </p>
-          {recModel && recModel !== activeModel && (
-            <button
-              onClick={() => {
-                const m = models.find(m => m.name === recModel);
-                if (m?.is_downloaded) onModelChange(recModel);
-                else if (m && !(recModel in downloading)) handleDownload(recModel);
-              }}
-              className="mt-3 btn-primary text-xs px-3 py-1.5"
-            >
-              {models.find(m => m.name === recModel)?.is_downloaded ? `Switch to ${recModel}` : `Download & use ${recModel}`}
-            </button>
-          )}
-          {specExpanded && (
-            <div
-              className="mt-3 pt-3 grid grid-cols-2 gap-y-1.5"
-              style={{ borderTop: "1px solid color-mix(in srgb, var(--accent) 15%, transparent)" }}
-            >
-              <div className="flex items-center gap-1.5">
-                <Cpu size={11} style={{ color: "var(--t3)" }} />
-                <span className="text-xs" style={{ color: "var(--t3)" }}>
-                  {recommendation.spec.is_apple_silicon ? "Apple Silicon" : "Intel"} · {recommendation.spec.cpu_cores} cores
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <MemoryStick size={11} style={{ color: "var(--t3)" }} />
-                <span className="text-xs" style={{ color: "var(--t3)" }}>{recommendation.spec.total_ram_gb.toFixed(1)} GB RAM</span>
-              </div>
-              <div className="col-span-2 mt-0.5">
-                <span className="text-[11px] font-mono" style={{ color: "var(--t4)" }}>{recommendation.spec.cpu_brand}</span>
-              </div>
-            </div>
-          )}
-        </div>
+    <div className="space-y-8">
+      <WhisperSection
+        activeModel={activeModel}
+        isActiveEngine={transcriptionEngine === "whisper"}
+        onModelChange={onModelChange}
+        downloading={downloading}
+        errors={errors}
+        onDownload={handleWhisperDownload}
+        onCancelDownload={handleWhisperCancelDownload}
+        onDelete={handleWhisperDelete}
+        defaultExpanded={transcriptionEngine === "whisper"}
+      />
+      {platform === "macos" && (
+        <>
+          <div style={{ borderTop: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }} />
+          <MoonshineSection
+            activeMoonshineModel={activeMoonshineModel}
+            isActiveEngine={transcriptionEngine === "moonshine"}
+            onMoonshineModelChange={onMoonshineModelChange}
+            downloading={downloading}
+            errors={errors}
+            onDownload={handleMoonshineDownload}
+            onCancelDownload={handleMoonshineCancelDownload}
+            onDelete={handleMoonshineDelete}
+            defaultExpanded={transcriptionEngine === "moonshine"}
+          />
+        </>
       )}
 
-      {["English Only", "Multilingual", "Turbo"].map((cat) => {
-        const group = models.filter((m) => m.category === cat);
-        if (group.length === 0) return null;
-        return (
-          <div key={cat} className="mb-5">
-            <p className="text-[10px] font-mono uppercase tracking-widest mb-2 px-1" style={{ color: "var(--t4)" }}>{cat}</p>
-            <div className="space-y-2.5">
-              {group.map((model) => {
-                const isActive = activeModel === model.name;
-                const isRecommended = model.name === recModel;
-                const isDownloading = model.name in downloading;
-                const progress = downloading[model.name] ?? 0;
-                const error = errors[model.name];
-                return (
-                  <div
-                    key={model.name}
-                    className="rounded-2xl px-5 py-4 transition-all duration-200"
-                    style={{
-                      background: isActive ? "color-mix(in srgb, var(--accent) 5%, var(--bg))" : "var(--bg)",
-                      boxShadow: isActive
-                        ? "var(--nm-pressed-sm), 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent)"
-                        : "var(--nm-raised-sm)",
-                    }}
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                          {isActive && (
-                            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "var(--accent)", boxShadow: "0 0 5px var(--accent-glow)" }} />
-                          )}
-                          <span className="font-semibold text-sm" style={{ color: "var(--t1)" }}>{model.name}</span>
-                          {model.is_english_only && (
-                            <span className="text-[10px] px-1.5 py-px rounded font-mono" style={{ color: "var(--t4)", background: "color-mix(in srgb, var(--t1) 6%, transparent)" }}>EN</span>
-                          )}
-                          {isActive && (
-                            <span className="text-[10px] px-1.5 py-px rounded font-mono" style={{ color: "var(--accent)", border: "1px solid color-mix(in srgb, var(--accent) 35%, transparent)", background: "transparent" }}>Active</span>
-                          )}
-                          {isRecommended && (
-                            <span className="text-[10px] px-1.5 py-px rounded font-mono flex items-center gap-0.5" style={{ color: "var(--accent)", border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)", background: "color-mix(in srgb, var(--accent) 7%, transparent)" }}>
-                              <Sparkles size={8} />Recommended
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs leading-relaxed" style={{ color: "var(--t2)" }}>{model.description}</p>
-                        <p className="text-[11px] mt-1 font-mono" style={{ color: "var(--t4)" }}>{model.size_label}</p>
-                      </div>
-                      <div className="flex flex-col items-end gap-1.5 shrink-0">
-                        {model.is_downloaded ? (
-                          <>
-                            {!isActive && (
-                              <button onClick={() => onModelChange(model.name)} className="btn-primary text-xs px-3 py-1.5">Set Active</button>
-                            )}
-                            {!isActive && (
-                              <button
-                                onClick={() => handleDelete(model.name)}
-                                disabled={downloadedCount <= 1}
-                                className="btn-ghost text-xs px-3 py-1.5"
-                                style={{ fontSize: 11, opacity: downloadedCount <= 1 ? 0.35 : 1, cursor: downloadedCount <= 1 ? "not-allowed" : "pointer" }}
-                                title={downloadedCount <= 1 ? "At least one model must remain downloaded" : "Delete model"}
-                              >Delete</button>
-                            )}
-                          </>
-                        ) : isDownloading ? (
-                          <div className="flex items-center gap-2">
-                            <div className="text-right min-w-[52px]">
-                              <p className="text-[11px] font-mono mb-1" style={{ color: "var(--accent)" }}>{Math.round(progress * 100)}%</p>
-                              <div className="h-1 rounded-full overflow-hidden" style={{ width: 52, background: "color-mix(in srgb, var(--t1) 8%, transparent)" }}>
-                                <div className="h-full rounded-full transition-all duration-200" style={{ width: `${progress * 100}%`, background: "var(--accent)" }} />
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => handleCancelDownload(model.name)}
-                              className="text-[11px] px-2 py-1 rounded-lg cursor-pointer transition-all duration-150 font-medium"
-                              style={{
-                                color: "var(--t3)",
-                                background: "var(--bg)",
-                                boxShadow: "var(--nm-raised-sm)",
-                                border: "1px solid transparent",
-                              }}
-                              onMouseEnter={e => {
-                                (e.currentTarget as HTMLButtonElement).style.color = "#f87171";
-                                (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(248,113,113,0.3)";
-                              }}
-                              onMouseLeave={e => {
-                                (e.currentTarget as HTMLButtonElement).style.color = "var(--t3)";
-                                (e.currentTarget as HTMLButtonElement).style.borderColor = "transparent";
-                              }}
-                              title="Cancel download"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => handleDownload(model.name)}
-                            className="text-xs px-3 py-1.5 rounded-lg transition-all duration-150 cursor-pointer font-medium"
-                            style={{
-                              color: "var(--t2)",
-                              background: "var(--bg)",
-                              boxShadow: "var(--nm-raised-sm)",
-                              border: isRecommended ? "1px solid color-mix(in srgb, var(--accent) 25%, transparent)" : "1px solid transparent",
-                            }}
-                            onMouseEnter={e => {
-                              (e.currentTarget as HTMLButtonElement).style.color = "var(--accent)";
-                              (e.currentTarget as HTMLButtonElement).style.borderColor = "color-mix(in srgb, var(--accent) 40%, transparent)";
-                            }}
-                            onMouseLeave={e => {
-                              (e.currentTarget as HTMLButtonElement).style.color = "var(--t2)";
-                              (e.currentTarget as HTMLButtonElement).style.borderColor = isRecommended ? "color-mix(in srgb, var(--accent) 25%, transparent)" : "transparent";
-                            }}
-                          >
-                            Download
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    {error && <p className="text-red-400 text-xs mt-2">✗ {error}</p>}
-                  </div>
-                );
-              })}
-            </div>
+      {/* Engine comparison guide */}
+      <div style={{ borderTop: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)", paddingTop: 24 }}>
+        <p className="text-[10px] font-mono uppercase tracking-widest mb-4" style={{ color: "var(--t4)" }}>Which engine should I use?</p>
+        <div className="grid grid-cols-2 gap-3">
+          {/* Whisper card */}
+          <div
+            className="rounded-xl p-4"
+            style={{
+              background: transcriptionEngine === "whisper"
+                ? "color-mix(in srgb, var(--accent) 6%, var(--bg))"
+                : "var(--bg)",
+              boxShadow: transcriptionEngine === "whisper"
+                ? "var(--nm-pressed-sm), 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent)"
+                : "var(--nm-raised-sm)",
+            }}
+          >
+            <p className="text-xs font-semibold mb-3" style={{ color: transcriptionEngine === "whisper" ? "var(--accent)" : "var(--t1)" }}>Whisper</p>
+            <ul className="space-y-2">
+              {[
+                { icon: "🌐", text: "99 languages" },
+                { icon: "🎯", text: "Higher accuracy" },
+                { icon: "📝", text: "Complex vocabulary" },
+                { icon: "⚡", text: "GPU-accelerated on Mac" },
+              ].map(({ icon, text }) => (
+                <li key={text} className="flex items-start gap-2">
+                  <span className="text-[11px] leading-tight mt-px">{icon}</span>
+                  <span className="text-[11px] leading-tight" style={{ color: "var(--t2)" }}>{text}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[10px] mt-3 pt-3" style={{ color: "var(--t4)", borderTop: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
+              Best for: meetings, interviews, non-English content
+            </p>
           </div>
-        );
-      })}
+
+          {/* Moonshine card */}
+          <div
+            className="rounded-xl p-4"
+            style={{
+              background: transcriptionEngine === "moonshine"
+                ? "color-mix(in srgb, var(--accent) 6%, var(--bg))"
+                : "var(--bg)",
+              boxShadow: transcriptionEngine === "moonshine"
+                ? "var(--nm-pressed-sm), 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent)"
+                : "var(--nm-raised-sm)",
+              opacity: platform !== "macos" ? 0.4 : 1,
+            }}
+          >
+            <div className="flex items-center gap-1.5 mb-3">
+              <p className="text-xs font-semibold" style={{ color: transcriptionEngine === "moonshine" ? "var(--accent)" : "var(--t1)" }}>Moonshine</p>
+              <span className="text-[9px] px-1 py-px rounded font-mono" style={{ color: "var(--t4)", background: "color-mix(in srgb, var(--t1) 8%, transparent)" }}>macOS</span>
+            </div>
+            <ul className="space-y-2">
+              {[
+                { icon: "🚀", text: "5× faster than Whisper" },
+                { icon: "⏱️", text: "Ultra-low latency" },
+                { icon: "🎙️", text: "Built-in voice detection" },
+                { icon: "🇬🇧", text: "English only" },
+              ].map(({ icon, text }) => (
+                <li key={text} className="flex items-start gap-2">
+                  <span className="text-[11px] leading-tight mt-px">{icon}</span>
+                  <span className="text-[11px] leading-tight" style={{ color: "var(--t2)" }}>{text}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[10px] mt-3 pt-3" style={{ color: "var(--t4)", borderTop: "1px solid color-mix(in srgb, var(--t1) 6%, transparent)" }}>
+              Best for: live dictation, quick notes, real-time use
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -931,12 +1171,16 @@ function SmartDictationTab() {
 interface AiModelsViewProps {
   activeModel: string;
   onModelChange: (name: string) => void;
-  initialTab?: "whisper" | "smart-dictation";
+  activeMoonshineModel: string;
+  onMoonshineModelChange: (name: string) => void;
+  transcriptionEngine?: string;
+  initialTab?: "models" | "smart-dictation";
+  platform?: string;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function AiModelsView({ activeModel, onModelChange, initialTab }: AiModelsViewProps) {
-  const [activeTab, setActiveTab] = useState<"whisper" | "smart-dictation">(initialTab ?? "whisper");
+export default function AiModelsView({ activeModel, onModelChange, activeMoonshineModel, onMoonshineModelChange, transcriptionEngine = "whisper", initialTab, platform = "macos" }: AiModelsViewProps) {
+  const [activeTab, setActiveTab] = useState<"models" | "smart-dictation">(initialTab ?? "models");
 
   return (
     <div className="w-full max-w-2xl mx-auto px-8 py-6">
@@ -945,7 +1189,7 @@ export default function AiModelsView({ activeModel, onModelChange, initialTab }:
         className="flex gap-1 mb-6 p-1 rounded-xl"
         style={{ background: "var(--bg)", boxShadow: "var(--nm-pressed-sm)" }}
       >
-        {(["whisper", "smart-dictation"] as const).map((tab) => (
+        {(["models", "smart-dictation"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -956,12 +1200,21 @@ export default function AiModelsView({ activeModel, onModelChange, initialTab }:
               boxShadow: activeTab === tab ? "var(--nm-raised-sm)" : "none",
             }}
           >
-            {tab === "whisper" ? "Whisper" : "Smart Dictation"}
+            {tab === "models" ? "Models" : "Smart Dictation"}
           </button>
         ))}
       </div>
 
-      {activeTab === "whisper" && <WhisperTab activeModel={activeModel} onModelChange={onModelChange} />}
+      {activeTab === "models" && (
+        <ModelsTab
+          activeModel={activeModel}
+          onModelChange={onModelChange}
+          activeMoonshineModel={activeMoonshineModel}
+          onMoonshineModelChange={onMoonshineModelChange}
+          transcriptionEngine={transcriptionEngine}
+          platform={platform}
+        />
+      )}
       {activeTab === "smart-dictation" && <SmartDictationTab />}
     </div>
   );

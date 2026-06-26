@@ -69,6 +69,10 @@
       "minimumSystemVersion": "13.0",
       "infoPlist": "Info.plist",
       "entitlements": "Entitlements.plist",
+      "frameworks": [
+        "Frameworks/libmoonshine.dylib",
+        "Frameworks/libonnxruntime.1.23.2.dylib"
+      ],
       "dmg": {
         "windowSize": { "width": 660, "height": 400 },
         "appPosition": { "x": 180, "y": 170 },
