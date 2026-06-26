@@ -98,6 +98,8 @@ pub fn list_moonshine_models() -> Vec<MoonshineVariantInfo> {
 }
 
 /// Total disk usage of all downloaded Moonshine models in bytes.
+/// Kept for the planned Storage pane "Models (Moonshine)" row, not yet wired up.
+#[allow(dead_code)]
 pub fn moonshine_disk_usage() -> u64 {
     VARIANTS
         .iter()
